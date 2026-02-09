@@ -5,6 +5,7 @@ import { ClinicForm } from "./_components/ClinicForm";
 import { ClinicStatusBadge } from "./_components/ClinicStatusBadge"; // Import Badge
 import { Button } from "@/components/ui/button";
 import { Lock, StopCircle, Phone } from "lucide-react";
+import { getClinicDate } from "@/lib/date";
 
 // Force dynamic since we lookup by slug
 export const dynamic = "force-dynamic";
@@ -32,8 +33,7 @@ export default async function ClinicLandingPage({ params }: PageProps) {
 
     // Fetch Today's Session Status
     const supabase = createClient();
-    const d = new Date();
-    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const today = getClinicDate();
     const { data: session } = await supabase.from('sessions').select('status').eq('clinic_id', clinic.id).eq('date', today).single();
 
 

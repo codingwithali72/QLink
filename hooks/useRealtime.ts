@@ -5,10 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { Session, Token, DBSession, DBToken } from "@/types/firestore";
 import { useOfflineSync } from "./useOfflineSync";
 
-const getTodayString = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+import { getClinicDate } from "@/lib/date";
+
+const getTodayString = () => getClinicDate();
 
 export function useClinicRealtime(clinicSlug: string) {
     const [session, setSession] = useState<Session | null>(null);

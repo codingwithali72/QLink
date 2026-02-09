@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { TokenItem } from "./_components/TokenItem";
+import { getClinicDate } from "@/lib/date";
 // import { Token } from "@/types/firestore";
 
 // Format Helper
@@ -37,8 +38,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const [searchTerm, setSearchTerm] = useState("");
 
     // History State
-    const d = new Date();
-    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    // const d = new Date();
+    // const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const todayStr = getClinicDate();
     const [selectedDate, setSelectedDate] = useState(todayStr);
     const [historyTokens, setHistoryTokens] = useState<any[]>([]); // eslint-disable-line @typescript-eslint/no-explicit-any
     const [historyLoading, setHistoryLoading] = useState(false);
