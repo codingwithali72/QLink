@@ -60,7 +60,22 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     const token = tokens.find(t => t.id === params.tokenId);
 
     if (!token || !session) {
-        return <div className="p-8 text-center">Ticket not found or session expired.</div>;
+        return (
+            <div className="p-8 text-center space-y-4">
+                <div className="text-xl font-bold text-red-600">Ticket not found or session expired.</div>
+                <div className="text-xs text-slate-400 font-mono text-left bg-slate-100 p-4 rounded overflow-auto">
+                    <p>DEBUG INFO:</p>
+                    <p>Slug: {params.clinicSlug}</p>
+                    <p>TokenID: {params.tokenId}</p>
+                    <p>Session Found: {session ? "YES" : "NO"}</p>
+                    <p>Session Date: {session?.date || "N/A"}</p>
+                    <p>Tokens Count: {tokens.length}</p>
+                    <p>Token Found: {token ? "YES" : "NO"}</p>
+                    <p>Loading: {loading ? "YES" : "NO"}</p>
+                    <p>Connected: {isConnected ? "YES" : "NO"}</p>
+                </div>
+            </div>
+        );
     }
 
     const handleCancel = async () => {
