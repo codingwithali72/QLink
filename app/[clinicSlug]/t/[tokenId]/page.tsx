@@ -2,6 +2,7 @@
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
 import { cancelToken } from "@/app/actions/queue";
+import { getReviewUrl } from "@/lib/clinic-config";
 import { Button } from "@/components/ui/button";
 import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw, Star } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -210,7 +211,10 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                                         if (star >= 4) {
                                                             // Direct Redirect Logic
                                                             setTimeout(() => {
-                                                                window.location.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(params.clinicSlug + " clinic")}`;
+                                                                const url = getReviewUrl(params.clinicSlug);
+                                                                setTimeout(() => {
+                                                                    window.location.href = url;
+                                                                }, 300); // Small delay to visualize click
                                                             }, 300); // Small delay to visualize click
                                                         }
                                                     }}
