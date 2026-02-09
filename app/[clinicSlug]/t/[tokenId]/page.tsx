@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function TicketPage({ params }: { params: { clinicSlug: string; tokenId: string } }) {
-    const { session, tokens, loading, isConnected } = useClinicRealtime(params.clinicSlug);
+    const { session, tokens, loading, isConnected, isSynced } = useClinicRealtime(params.clinicSlug);
     // const router = useRouter(); // DISABLED
     const [actionLoading, setActionLoading] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
@@ -49,33 +49,23 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         return () => clearInterval(interval);
     }, []);
 
-    if (loading) {
+    // LOADING STATE: 
+    // Show loader if:
+    // 1. Initial Loading is true
+    // 2. Token is missing BUT we haven't synced with server yet (Stale data cache issue)
+    const token = tokens.find(t => t.id === params.tokenId);
+
+    if (loading || (!token && !isSynced)) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <Loader2 className="w-10 h-10 animate-spin text-slate-400" />
+                {!loading && !token && <p className="absolute mt-16 text-xs text-slate-400">Verifying ticket...</p>}
             </div>
         );
     }
 
-    const token = tokens.find(t => t.id === params.tokenId);
-
     if (!token || !session) {
-        return (
-            <div className="p-8 text-center space-y-4">
-                <div className="text-xl font-bold text-red-600">Ticket not found or session expired.</div>
-                <div className="text-xs text-slate-400 font-mono text-left bg-slate-100 p-4 rounded overflow-auto">
-                    <p>DEBUG INFO:</p>
-                    <p>Slug: {params.clinicSlug}</p>
-                    <p>TokenID: {params.tokenId}</p>
-                    <p>Session Found: {session ? "YES" : "NO"}</p>
-                    <p>Session Date: {session?.date || "N/A"}</p>
-                    <p>Tokens Count: {tokens.length}</p>
-                    <p>Token Found: {token ? "YES" : "NO"}</p>
-                    <p>Loading: {loading ? "YES" : "NO"}</p>
-                    <p>Connected: {isConnected ? "YES" : "NO"}</p>
-                </div>
-            </div>
-        );
+        return <div className="p-8 text-center">Ticket not found or session expired.</div>;
     }
 
     const handleCancel = async () => {

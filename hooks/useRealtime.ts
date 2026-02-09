@@ -17,6 +17,8 @@ export function useClinicRealtime(clinicSlug: string) {
     const [isConnected, setIsConnected] = useState(false);
     const [clinicId, setClinicId] = useState<string | null>(null);
 
+    const [isSynced, setIsSynced] = useState(false); // Track if we have fetched from network
+
     const supabase = createClient();
     const pollingInterval = useRef<NodeJS.Timeout | null>(null);
     const fetchTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -83,6 +85,7 @@ export function useClinicRealtime(clinicSlug: string) {
 
             setLastUpdated(new Date());
             setLoading(false);
+            setIsSynced(true); // Mark as synced with server
         } catch (error) {
             console.error("Fetch Error:", error);
         }
@@ -157,6 +160,7 @@ export function useClinicRealtime(clinicSlug: string) {
         loading,
         lastUpdated,
         isConnected, // This is Realtime connection status
+        isSynced,    // This indicates if we have fetched fresh data from server
         refresh: fetchData
     };
 }
