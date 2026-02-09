@@ -68,16 +68,18 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         }
     }, [loading, isSynced, token, session]);
 
-    if (loading || (!token && !isSynced) || (!token && !showError)) {
+    const missingData = !token || !session;
+
+    if (loading || (missingData && !isSynced) || (missingData && !showError)) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <Loader2 className="w-10 h-10 animate-spin text-slate-400" />
-                {!loading && !token && <p className="absolute mt-16 text-xs text-slate-400">Verifying ticket...</p>}
+                {!loading && missingData && <p className="absolute mt-16 text-xs text-slate-400">Verifying ticket...</p>}
             </div>
         );
     }
 
-    if (!token || !session) {
+    if (missingData) {
         return <div className="p-8 text-center">Ticket not found or session expired.</div>;
     }
 
