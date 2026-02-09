@@ -2,7 +2,6 @@
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
 import { RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 export function ClinicStatusBadge({ clinicSlug }: { clinicSlug: string }) {
     // We only need the hook for connection status and re-renders

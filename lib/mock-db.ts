@@ -20,11 +20,13 @@ export const initDemoData = (slug: string) => {
 
     if (!Store.sessions[sessionKey]) {
         Store.sessions[sessionKey] = {
+            id: sessionKey,
+            clinicId: slug,
             date: today,
             currentTokenNumber: 1,
             lastTokenNumber: 5, // Start with some pre-filled
             status: "OPEN",
-            updatedAt: { seconds: Date.now() / 1000, nanoseconds: 0 }
+            updatedAt: new Date().toISOString()
         } as Session;
 
         // Create some dummy tokens
@@ -36,7 +38,8 @@ export const initDemoData = (slug: string) => {
                 customerName: `Demo Visitor ${i}`,
                 customerPhone: "555-0000",
                 status: "WAITING",
-                createdAt: { seconds: Date.now() / 1000, nanoseconds: 0 },
+                isPriority: false,
+                createdAt: new Date().toISOString(),
                 sessionId: today,
                 clinicId: slug
             } as Token;
@@ -72,10 +75,11 @@ export const createMockToken = (slug: string, phone: string, name: string) => {
         customerName: name || "Demo User",
         customerPhone: phone,
         status: "WAITING",
-        createdAt: { seconds: Date.now() / 1000, nanoseconds: 0 },
+        isPriority: false,
+        createdAt: new Date().toISOString(),
         sessionId: today,
         clinicId: slug
-    };
+    } as Token;
 
     Store.tokens[tId] = newToken;
     return newToken;

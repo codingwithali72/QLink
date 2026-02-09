@@ -18,19 +18,17 @@ export const createClient = () => {
                         // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         const { maxAge, expires, ...sessionOptions } = options;
                         cookieStore.set({ name, value, ...sessionOptions });
-                    } catch (error) {
+                    } catch {
                         // The `set` method was called from a Server Component.
-                        // This can be ignored if you have middleware refreshing
-                        // user sessions.
+                        // ...
                     }
                 },
                 remove(name: string, options: CookieOptions) {
                     try {
                         cookieStore.set({ name, value: '', ...options })
-                    } catch (error) {
+                    } catch {
                         // The `delete` method was called from a Server Component.
-                        // This can be ignored if you have middleware refreshing
-                        // user sessions.
+                        // ...
                     }
                 },
             },

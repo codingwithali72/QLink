@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { TokenItem } from "./_components/TokenItem";
-import { Token } from "@/types/firestore";
+// import { Token } from "@/types/firestore";
 
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
@@ -40,7 +40,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const d = new Date();
     const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const [selectedDate, setSelectedDate] = useState(todayStr);
-    const [historyTokens, setHistoryTokens] = useState<any[]>([]);
+    const [historyTokens, setHistoryTokens] = useState<any[]>([]); // eslint-disable-line @typescript-eslint/no-explicit-any
     const [historyLoading, setHistoryLoading] = useState(false);
 
     // Fetch History when Date Changes
@@ -58,7 +58,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     const displayedTokens = selectedDate === todayStr ? tokens : historyTokens;
 
-    const performAction = async (actionFn: () => Promise<any>) => {
+    const performAction = async (actionFn: () => Promise<any>) => { // eslint-disable-line @typescript-eslint/no-explicit-any
         if (actionLoading) return;
         setActionLoading(true);
         try {

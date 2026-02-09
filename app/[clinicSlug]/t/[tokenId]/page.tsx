@@ -3,7 +3,7 @@
 import { useClinicRealtime } from "@/hooks/useRealtime";
 import { cancelToken } from "@/app/actions/queue";
 import { Button } from "@/components/ui/button";
-import { Loader2, Share2, XCircle, AlertTriangle, Siren, Clock, RefreshCw, Star } from "lucide-react";
+import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw, Star } from "lucide-react";
 import { useState, useEffect } from "react";
 // import { useRouter } from "next/navigation";  // DISABLED
 
@@ -11,7 +11,7 @@ import { useState, useEffect } from "react";
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function TicketPage({ params }: { params: { clinicSlug: string; tokenId: string } }) {
-    const { session, tokens, loading, lastUpdated, isConnected } = useClinicRealtime(params.clinicSlug);
+    const { session, tokens, loading, isConnected } = useClinicRealtime(params.clinicSlug);
     // const router = useRouter(); // DISABLED
     const [actionLoading, setActionLoading] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
@@ -78,12 +78,12 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                     text: `Track my queue position at ${params.clinicSlug}`,
                     url: window.location.href,
                 });
-            } catch (err) { console.error(err); }
+            } catch { console.error("Share failed"); }
         } else {
             try {
                 await navigator.clipboard.writeText(window.location.href);
                 alert("Link copied to clipboard!");
-            } catch (err) { alert("Copy failed"); }
+            } catch { alert("Copy failed"); }
         }
     };
 

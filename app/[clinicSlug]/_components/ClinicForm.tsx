@@ -6,9 +6,8 @@ import { createToken } from "@/app/actions/queue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, RefreshCw, Lock, StopCircle, Phone } from "lucide-react";
+import { Loader2, Lock, StopCircle, Phone } from "lucide-react";
 import { useClinicRealtime } from "@/hooks/useRealtime";
-import { cn } from "@/lib/utils";
 
 export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
     // const router = useRouter(); // DISABLED
@@ -32,6 +31,17 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
             }
         }
     }, [session, sessionLoading]);
+
+    // Offline Banner Grace Period
+    const [showOfflineError, setShowOfflineError] = useState(false);
+    useEffect(() => {
+        if (!isConnected && !loading && !sessionLoading) {
+            const timer = setTimeout(() => setShowOfflineError(true), 3000);
+            return () => clearTimeout(timer);
+        } else {
+            setShowOfflineError(false);
+        }
+    }, [isConnected, loading, sessionLoading]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -83,15 +93,7 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
         );
     }
 
-    const [showOfflineError, setShowOfflineError] = useState(false);
-    useEffect(() => {
-        if (!isConnected && !sessionLoading) {
-            const timer = setTimeout(() => setShowOfflineError(true), 3000);
-            return () => clearTimeout(timer);
-        } else {
-            setShowOfflineError(false);
-        }
-    }, [isConnected, sessionLoading]);
+
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4 relative pt-2">
