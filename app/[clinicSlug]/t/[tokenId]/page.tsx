@@ -57,20 +57,25 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
 
     const [showError, setShowError] = useState(false);
 
-    // Grace period for error
-    useEffect(() => {
-        if (!loading && isSynced && !token && !session) {
-            // If data is loaded but missing, wait 2 seconds before showing error
-            const timer = setTimeout(() => setShowError(true), 2000);
-            return () => clearTimeout(timer);
-        } else if (token || session) {
-            setShowError(false);
-        }
-    }, [loading, isSynced, token, session]);
+    // Grace period for error (REMOVED DUPLICATE)
 
     const missingData = !token || !session;
 
-    if (loading || (missingData && !isSynced) || (missingData && !showError)) {
+    // Grace period for error
+    useEffect(() => {
+        if (!loading && isSynced && missingData) {
+            // If data is loaded but missing, wait 2 seconds before showing error
+            const timer = setTimeout(() => setShowError(true), 2000);
+            return () => clearTimeout(timer);
+        } else if (!missingData) {
+            setShowError(false);
+        }
+    }, [loading, isSynced, missingData]);
+
+    // Guard: Show Loader if:
+    // 1. App is Loading
+    // 2. Data is missing AND (Not synced OR Error timeout hasn't fired yet)
+    if (loading || (missingData && (!isSynced || !showError))) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <Loader2 className="w-10 h-10 animate-spin text-slate-400" />
