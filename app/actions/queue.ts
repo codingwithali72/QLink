@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { sendSMS } from "@/lib/sms";
 
@@ -14,7 +15,7 @@ const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}
 
 export async function createToken(clinicSlug: string, phone: string, name: string = "", isPriority: boolean = false) {
     if (!clinicSlug) return { error: "Missing clinic slug" };
-    const supabase = createClient();
+    const supabase = createAdminClient();
     const today = getTodayString();
 
     try {
