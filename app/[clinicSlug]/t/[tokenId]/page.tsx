@@ -210,7 +210,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                                         if (star >= 4) {
                                                             // Direct Redirect Logic
                                                             setTimeout(() => {
-                                                                window.location.href = `https://www.google.com/search?q=${params.clinicSlug}+review`;
+                                                                window.location.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(params.clinicSlug + " clinic")}`;
                                                             }, 300); // Small delay to visualize click
                                                         }
                                                     }}

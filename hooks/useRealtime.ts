@@ -95,7 +95,7 @@ export function useClinicRealtime(clinicSlug: string) {
         fetchTimeout.current = setTimeout(() => {
             console.log("Realtime triggers fetch...");
             fetchData();
-        }, 500); // 500ms debounce
+        }, 100); // 100ms debounce (Snappier)
     }, [fetchData]);
 
     // Setup Polling & Realtime
@@ -105,9 +105,8 @@ export function useClinicRealtime(clinicSlug: string) {
         // Initial Fetch
         fetchData();
 
-        // POLL EVERY 20 SECONDS (Reduced from 3s)
-        // We rely on Realtime for speed, Polling is just backup
-        pollingInterval.current = setInterval(fetchData, 20000);
+        // POLL EVERY 5 SECONDS (More aggressive for better UX)
+        pollingInterval.current = setInterval(fetchData, 5000);
 
         // Realtime Subscription
         const channel = supabase.channel(`clinic:${clinicId}`)
