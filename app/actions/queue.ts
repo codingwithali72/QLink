@@ -173,13 +173,17 @@ export async function recallToken(clinicSlug: string, tokenId: string) {
 
 export async function submitFeedback(clinicSlug: string, tokenId: string, rating: number, feedback: string) {
     try {
-        const supabase = createClient();
-        const { error } = await supabase.from('tokens')
+        const supabase = createAdminClient();
+        const { error, count } = await supabase.from('tokens')
             .update({ rating, feedback })
-            .eq('id', tokenId);
+            .eq('id', tokenId)
+            .select()
+            .single();
 
         if (error) throw error;
+        // Count check is just for debugging; admin client will work if ID exists.
 
+        revalidatePath(`/${clinicSlug}`);
         return { success: true };
     } catch (e) {
         return { error: (e as Error).message };
