@@ -426,7 +426,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                         <th className="px-4 py-2 font-semibold">Tkn</th>
                                                         <th className="px-4 py-2 font-semibold">Name</th>
                                                         <th className="px-4 py-2 font-semibold">Phone</th>
-                                                        <th className="px-4 py-2 font-semibold text-blue-600 dark:text-blue-400">Rating ⭐</th>
+                                                        <th className="px-4 py-2 font-semibold text-blue-600 dark:text-blue-400">Feedback</th>
                                                         <th className="px-4 py-2 font-semibold text-right">Status</th>
                                                     </tr>
                                                 </thead>
@@ -448,21 +448,20 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                                     {t.customerPhone || "-"}
                                                                 </td>
                                                                 <td className="px-4 py-3">
-                                                                    {t.rating > 0 ? (
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className="flex items-center text-xs font-bold text-slate-700 dark:text-slate-300">
-                                                                                <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 mr-1" />
-                                                                                {t.rating}
-                                                                            </div>
-                                                                            {t.feedback && (
-                                                                                <div className="relative group">
-                                                                                    <MessageSquare className="w-4 h-4 text-blue-500 cursor-help" />
-                                                                                    {/* Simple Tooltip */}
-                                                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                                                                                        {t.feedback}
-                                                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900"></div>
-                                                                                    </div>
+                                                                    {t.rating > 0 || t.feedback ? (
+                                                                        <div className="flex flex-col gap-1 max-w-[200px]">
+                                                                            {t.rating > 0 && (
+                                                                                <div className="flex items-center text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                                                    <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 mr-1" />
+                                                                                    {t.rating}
                                                                                 </div>
+                                                                            )}
+                                                                            {t.feedback ? (
+                                                                                <span className="text-xs text-slate-500 dark:text-slate-400 italic truncate block" title={t.feedback}>
+                                                                                    "{t.feedback}"
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-[10px] text-slate-300 dark:text-slate-600 italic">No message</span>
                                                                             )}
                                                                         </div>
                                                                     ) : (
