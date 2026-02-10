@@ -258,13 +258,14 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
 
                                         {/* Feedback Form for Low Ratings */}
                                         {rating > 0 && rating < 4 && (
-                                            <div className="mt-4 space-y-3 animate-in fade-in slide-in-from-bottom-2">
-                                                <p className="text-sm text-slate-600 font-medium">We're sorry to hear that. How can we improve?</p>
+                                            <div className="mt-4 space-y-3">
+                                                <p className="text-sm text-slate-900 font-bold">Please add feedback:</p>
                                                 <textarea
                                                     value={feedback}
                                                     onChange={(e) => setFeedback(e.target.value)}
-                                                    placeholder="Tell us what you didn't like..."
-                                                    className="w-full p-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+                                                    placeholder="Add feedback..."
+                                                    autoFocus
+                                                    className="w-full p-3 rounded-xl border-2 border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
                                                 />
                                                 <Button
                                                     onClick={async () => {

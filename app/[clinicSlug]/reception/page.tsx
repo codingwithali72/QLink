@@ -426,7 +426,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                         <th className="px-4 py-2 font-semibold">Tkn</th>
                                                         <th className="px-4 py-2 font-semibold">Name</th>
                                                         <th className="px-4 py-2 font-semibold">Phone</th>
-                                                        <th className="px-4 py-2 font-semibold">Rating</th>
+                                                        <th className="px-4 py-2 font-semibold">Phone</th>
+                                                        <th className="px-4 py-2 font-semibold text-blue-600 dark:text-blue-400">Rating ⭐</th>
+                                                        <th className="px-4 py-2 font-semibold text-right">Status</th>
                                                         <th className="px-4 py-2 font-semibold text-right">Status</th>
                                                     </tr>
                                                 </thead>
