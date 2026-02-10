@@ -498,6 +498,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         <div className="text-center">
                             <p className="text-xs text-slate-400 dark:text-slate-600 font-medium">
                                 Total Served ({selectedDate === todayStr ? "Today" : selectedDate}): <span className="text-slate-900 dark:text-slate-300 font-bold">{totalServedCount}</span>
+                                <span className="ml-2 opacity-50">v1.1.0</span>
                             </p>
                         </div>
                     </div>
