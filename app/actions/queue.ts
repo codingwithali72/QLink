@@ -174,7 +174,7 @@ export async function recallToken(clinicSlug: string, tokenId: string) {
 export async function submitFeedback(clinicSlug: string, tokenId: string, rating: number, feedback: string) {
     try {
         const supabase = createAdminClient();
-        const { error, count } = await supabase.from('tokens')
+        const { error } = await supabase.from('tokens')
             .update({ rating, feedback })
             .eq('id', tokenId)
             .select()
