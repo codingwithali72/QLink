@@ -238,7 +238,9 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                                         if (star >= 4) {
                                                             setReviewSubmitted(true);
                                                             // Submit high rating to DB silently
-                                                            submitFeedback(params.clinicSlug, params.tokenId, star, "");
+                                                            submitFeedback(params.clinicSlug, params.tokenId, star, "").then(res => {
+                                                                if (res.error) console.error("Rating Error:", res.error);
+                                                            });
 
                                                             // Direct Redirect Logic
                                                             setTimeout(() => {
@@ -270,9 +272,13 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                                 <Button
                                                     onClick={async () => {
                                                         setFeedbackSending(true);
-                                                        await submitFeedback(params.clinicSlug, params.tokenId, rating, feedback);
-                                                        setReviewSubmitted(true);
+                                                        const res = await submitFeedback(params.clinicSlug, params.tokenId, rating, feedback);
                                                         setFeedbackSending(false);
+                                                        if (res.error) {
+                                                            alert("Error saving feedback: " + res.error + "\n\n(Hint: Did you run the database migration?)");
+                                                        } else {
+                                                            setReviewSubmitted(true);
+                                                        }
                                                     }}
                                                     disabled={feedbackSending}
                                                     className="w-full rounded-xl font-bold"
