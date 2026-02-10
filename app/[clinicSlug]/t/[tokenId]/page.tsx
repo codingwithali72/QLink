@@ -1,7 +1,7 @@
 "use client";
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
-import { cancelToken } from "@/app/actions/queue";
+import { cancelToken, submitFeedback } from "@/app/actions/queue";
 import { getReviewUrl } from "@/lib/clinic-config";
 import { Button } from "@/components/ui/button";
 import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw, Star } from "lucide-react";
@@ -18,6 +18,8 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     const [isOffline, setIsOffline] = useState(false);
     const [rating, setRating] = useState(0);
     const [reviewSubmitted, setReviewSubmitted] = useState(false);
+    const [feedback, setFeedback] = useState("");
+    const [feedbackSending, setFeedbackSending] = useState(false);
 
     const [showRealtimeError, setShowRealtimeError] = useState(false);
     useEffect(() => {
@@ -232,8 +234,12 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                                     key={star}
                                                     onClick={() => {
                                                         setRating(star);
-                                                        setReviewSubmitted(true);
+                                                        // If high rating, submit immediately and redirect
                                                         if (star >= 4) {
+                                                            setReviewSubmitted(true);
+                                                            // Submit high rating to DB silently
+                                                            submitFeedback(params.clinicSlug, params.tokenId, star, "");
+
                                                             // Direct Redirect Logic
                                                             setTimeout(() => {
                                                                 const url = getReviewUrl(params.clinicSlug);
@@ -249,6 +255,31 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                                 </button>
                                             ))}
                                         </div>
+
+                                        {/* Feedback Form for Low Ratings */}
+                                        {rating > 0 && rating < 4 && (
+                                            <div className="mt-4 space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                                                <p className="text-sm text-slate-600 font-medium">We're sorry to hear that. How can we improve?</p>
+                                                <textarea
+                                                    value={feedback}
+                                                    onChange={(e) => setFeedback(e.target.value)}
+                                                    placeholder="Tell us what you didn't like..."
+                                                    className="w-full p-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+                                                />
+                                                <Button
+                                                    onClick={async () => {
+                                                        setFeedbackSending(true);
+                                                        await submitFeedback(params.clinicSlug, params.tokenId, rating, feedback);
+                                                        setReviewSubmitted(true);
+                                                        setFeedbackSending(false);
+                                                    }}
+                                                    disabled={feedbackSending}
+                                                    className="w-full rounded-xl font-bold"
+                                                >
+                                                    {feedbackSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Feedback"}
+                                                </Button>
+                                            </div>
+                                        )}
                                     </>
                                 ) : (
                                     <div className="py-2 animate-in zoom-in">
@@ -257,7 +288,10 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                                 <Loader2 className="w-4 h-4 animate-spin" /> Redirecting to Google...
                                             </p>
                                         ) : (
-                                            <p className="text-slate-600 font-medium">Thank you for your feedback!</p>
+                                            <div className="space-y-2">
+                                                <p className="text-slate-800 font-bold text-lg">Thank You!</p>
+                                                <p className="text-slate-600 text-sm">Your feedback has been sent to our team.</p>
+                                            </div>
                                         )}
                                     </div>
                                 )}

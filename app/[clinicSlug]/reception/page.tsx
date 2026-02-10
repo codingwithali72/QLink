@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, MessageSquare, Star } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -426,6 +426,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                         <th className="px-4 py-2 font-semibold">Tkn</th>
                                                         <th className="px-4 py-2 font-semibold">Name</th>
                                                         <th className="px-4 py-2 font-semibold">Phone</th>
+                                                        <th className="px-4 py-2 font-semibold">Rating</th>
                                                         <th className="px-4 py-2 font-semibold text-right">Status</th>
                                                     </tr>
                                                 </thead>
@@ -445,6 +446,28 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                                 </td>
                                                                 <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs font-mono">
                                                                     {t.customerPhone || "-"}
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    {t.rating > 0 ? (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className="flex items-center text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                                                <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 mr-1" />
+                                                                                {t.rating}
+                                                                            </div>
+                                                                            {t.feedback && (
+                                                                                <div className="relative group">
+                                                                                    <MessageSquare className="w-4 h-4 text-blue-500 cursor-help" />
+                                                                                    {/* Simple Tooltip */}
+                                                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                                                                                        {t.feedback}
+                                                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900"></div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="text-slate-300 dark:text-slate-600 text-xs">-</span>
+                                                                    )}
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right">
                                                                     <Badge variant="outline" className={cn("text-[10px] uppercase",

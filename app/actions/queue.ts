@@ -171,6 +171,21 @@ export async function recallToken(clinicSlug: string, tokenId: string) {
     }
 }
 
+export async function submitFeedback(clinicSlug: string, tokenId: string, rating: number, feedback: string) {
+    try {
+        const supabase = createClient();
+        const { error } = await supabase.from('tokens')
+            .update({ rating, feedback })
+            .eq('id', tokenId);
+
+        if (error) throw error;
+
+        return { success: true };
+    } catch (e) {
+        return { error: (e as Error).message };
+    }
+}
+
 export async function pauseQueue(clinicSlug: string) {
     try {
         const supabase = createClient();
@@ -251,6 +266,8 @@ export async function getTokensForDate(clinicSlug: string, date: string) {
                 customerPhone: t.customer_phone,
                 status: t.status,
                 isPriority: t.is_priority,
+                rating: t.rating,
+                feedback: t.feedback,
                 createdAt: t.created_at
             })) || []
         };
