@@ -19,6 +19,8 @@ export interface Token {
     customerPhone: string;
     status: TokenStatus;
     isPriority: boolean;
+    rating?: number;
+    feedback?: string;
     createdAt: string;
 }
 
@@ -42,5 +44,7 @@ export interface DBToken {
     customer_phone: string;
     status: TokenStatus;
     is_priority: boolean;
+    rating?: number;
+    feedback?: string;
     created_at: string;
 }
