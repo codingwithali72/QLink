@@ -188,6 +188,8 @@ function mapToken(t: DBToken): Token {
         customerPhone: t.customer_phone,
         status: t.status,
         isPriority: t.is_priority,
+        rating: t.rating,
+        feedback: t.feedback,
         createdAt: t.created_at
     };
 }
