@@ -126,6 +126,10 @@ export async function nextPatient(clinicSlug: string) {
             sendSMS(result.customer_phone, msg).catch(console.error);
         }
 
+        // --- NEW: APPROACHING ALERT (3rd in Line) ---
+        // Fire and forget to avoid blocking UI
+        checkAndSendApproachingSMS(clinicSlug).catch(err => console.error("Approaching SMS Error:", err));
+
         revalidatePath(`/${clinicSlug}`);
         return { success: true };
     } catch (e) {
@@ -278,4 +282,53 @@ export async function getTokensForDate(clinicSlug: string, date: string) {
     } catch (e) {
         return { error: (e as Error).message };
     }
+}
+
+// Internal Helper for Approaching SMS
+async function checkAndSendApproachingSMS(clinicSlug: string) {
+    const supabase = createAdminClient();
+    const today = getTodayString();
+
+    // 1. Get Context
+    const { data: clinic } = await supabase.from('clinics').select('id, name').eq('slug', clinicSlug).single();
+    if (!clinic) return;
+
+    const { data: session } = await supabase.from('sessions').select('id').eq('clinic_id', clinic.id).eq('date', today).single();
+    if (!session) return;
+
+    // 2. Get Waiting List (Top 3)
+    // Ordered by Priority DESC, then Token Number ASC
+    const { data: waitingTokens } = await supabase
+        .from('tokens')
+        .select('*')
+        .eq('session_id', session.id)
+        .eq('status', 'WAITING')
+        .order('is_priority', { ascending: false })
+        .order('token_number', { ascending: true })
+        .limit(3);
+
+    if (!waitingTokens || waitingTokens.length < 3) return;
+
+    // 3. Identify 3rd Person
+    const targetToken = waitingTokens[2]; // Index 2 = 3rd person
+    if (!targetToken.customer_phone || targetToken.customer_phone.length < 10) return;
+
+    // 4. Check if already sent
+    // We check message_logs for this specific token and content type
+    const APPROACHING_KEYWORD = "Approaching Alert";
+    const { data: existingLog } = await supabase
+        .from('message_logs')
+        .select('id')
+        .eq('token_id', targetToken.id)
+        .ilike('message_text', `%${APPROACHING_KEYWORD}%`) // simple check
+        .single();
+
+    if (existingLog) return; // Already sent
+
+    // 5. Send SMS
+    const formattedToken = formatToken(targetToken.token_number, targetToken.is_priority);
+    const msg = `${clinic.name}: Heads up! You are 3rd in line (${formattedToken}). Please be ready at the clinic. [${APPROACHING_KEYWORD}]`;
+
+    await sendSMS(targetToken.customer_phone, msg);
+    await logMessageToDB(clinic.id, targetToken.id, targetToken.customer_phone, msg, 'sms');
 }
