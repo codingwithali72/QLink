@@ -32,8 +32,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     }, [darkMode]);
 
     useEffect(() => {
-        console.log("v1.2.1 Loaded");
-        // alert("System Updated to v1.2.1"); // Uncomment if needed for extreme debugging
+        // console.log("System Updated"); 
     }, []);
 
     // Manual Token Form
@@ -50,20 +49,20 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const [historyTokens, setHistoryTokens] = useState<any[]>([]); // eslint-disable-line @typescript-eslint/no-explicit-any
     const [historyLoading, setHistoryLoading] = useState(false);
 
-    // Fetch History when Date Changes
+    // Fetch History/Log Data
     useEffect(() => {
-        if (selectedDate === todayStr) return; // Use realtime for today
+        if (!isLogOpen) return;
 
-        async function fetchHistory() {
+        async function fetchLog() {
             setHistoryLoading(true);
             const res = await getTokensForDate(params.clinicSlug, selectedDate);
             if (res.tokens) setHistoryTokens(res.tokens);
             setHistoryLoading(false);
         }
-        fetchHistory();
-    }, [selectedDate, params.clinicSlug, todayStr]);
+        fetchLog();
+    }, [selectedDate, params.clinicSlug, isLogOpen, todayStr]); // Fetch when log opens or date changes
 
-    const displayedTokens = selectedDate === todayStr ? tokens : historyTokens;
+    const displayedTokens = historyTokens;
 
     const performAction = async (actionFn: () => Promise<any>) => { // eslint-disable-line @typescript-eslint/no-explicit-any
         if (actionLoading) return;
@@ -103,8 +102,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     // Use displayedTokens so history shows correct count
     const totalServedCount = useMemo(() => {
+        if (selectedDate === todayStr) return tokens.filter(t => t.status === 'SERVED' || t.status === 'DONE').length;
         return displayedTokens.filter(t => t.status === 'SERVED' || t.status === 'DONE').length;
-    }, [displayedTokens]);
+    }, [tokens, displayedTokens, selectedDate, todayStr]);
 
     // Handlers
     const handleNext = () => performAction(() => nextPatient(params.clinicSlug));
@@ -431,7 +431,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                         <th className="px-4 py-2 font-semibold">Tkn</th>
                                                         <th className="px-4 py-2 font-semibold">Name</th>
                                                         <th className="px-4 py-2 font-semibold">Phone</th>
-                                                        <th className="px-4 py-2 font-semibold text-blue-600 dark:text-blue-400">Feedback</th>
+                                                        <th className="px-4 py-2 font-semibold text-blue-600 dark:text-blue-400">Rating ⭐</th>
                                                         <th className="px-4 py-2 font-semibold text-right">Status</th>
                                                     </tr>
                                                 </thead>
@@ -503,7 +503,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         <div className="text-center">
                             <p className="text-xs text-slate-400 dark:text-slate-600 font-medium">
                                 Total Served ({selectedDate === todayStr ? "Today" : selectedDate}): <span className="text-slate-900 dark:text-slate-300 font-bold">{totalServedCount}</span>
-                                <span className="ml-2 opacity-50">v1.2.1</span>
                             </p>
                         </div>
                     </div>

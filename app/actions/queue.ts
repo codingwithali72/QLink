@@ -247,7 +247,7 @@ export async function closeQueue(clinicSlug: string) {
 }
 
 export async function getTokensForDate(clinicSlug: string, date: string) {
-    const supabase = createClient();
+    const supabase = createAdminClient();
     try {
         const { data: clinic } = await supabase.from('clinics').select('id').eq('slug', clinicSlug).single();
         if (!clinic) return { error: "Clinic not found" };
@@ -270,8 +270,8 @@ export async function getTokensForDate(clinicSlug: string, date: string) {
                 customerPhone: t.customer_phone,
                 status: t.status,
                 isPriority: t.is_priority,
-                rating: t.rating,
-                feedback: t.feedback,
+                rating: t.rating || undefined,
+                feedback: t.feedback || undefined,
                 createdAt: t.created_at
             })) || []
         };
