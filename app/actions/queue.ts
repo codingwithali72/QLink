@@ -21,43 +21,25 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         const { data: clinic } = await supabase.from('clinics').select('id, name').eq('slug', clinicSlug).single();
         if (!clinic) throw new Error("Clinic not found");
 
-        let { data: session } = await supabase.from('sessions').select('*').eq('clinic_id', clinic.id).eq('date', today).single();
+        // CALL ATOMIC DB FUNCTION
+        const { data, error } = await supabase.rpc('create_token_atomic', {
+            p_clinic_slug: clinicSlug,
+            p_phone: phone,
+            p_name: name || null,
+            p_is_priority: isPriority
+        });
 
-        if (!session) {
-            const { data: newSession, error: createError } = await supabase.from('sessions').insert({
-                clinic_id: clinic.id, date: today, current_token_number: 0, last_token_number: 0, last_emergency_number: 0, status: 'OPEN'
-            }).select().single();
-            if (createError) throw createError;
-            session = newSession;
-        }
+        if (error) throw error;
 
-        if (session.status === 'CLOSED') throw new Error("Clinic is closed");
-        if (session.status === 'PAUSED') throw new Error("Queue is currently paused");
-        if (session.status === 'PAUSED') throw new Error("Queue is currently paused");
+        const result = data as any;
+        if (result.error) return { error: result.error };
 
-        // --- NEW LOGIC: SEPARATE COUNTERS ---
-        let assignedNumber = 0;
-
-        if (isPriority) {
-            const { data: sessionUpdate } = await supabase.from('sessions')
-                .update({ last_emergency_number: (session.last_emergency_number || 0) + 1 })
-                .eq('id', session.id)
-                .select().single();
-            assignedNumber = sessionUpdate.last_emergency_number;
-        } else {
-            const { data: sessionUpdate } = await supabase.from('sessions')
-                .update({ last_token_number: (session.last_token_number || 0) + 1 })
-                .eq('id', session.id)
-                .select().single();
-            assignedNumber = sessionUpdate.last_token_number;
-        }
-
-        const { data: token, error: tokenError } = await supabase.from('tokens').insert({
-            clinic_id: clinic.id, session_id: session.id, token_number: assignedNumber,
-            customer_name: name || `Guest ${assignedNumber}`, customer_phone: phone, source: 'QR', status: 'WAITING', is_priority: isPriority
-        }).select().single();
-
-        if (tokenError) throw tokenError;
+        const token = {
+            id: result.token.id,
+            token_number: result.token.token_number,
+            is_priority: result.token.is_priority,
+            // Add other fields if needed or refactor return type
+        };
 
         // NON-BLOCKING SMS
         if (phone && phone.length > 5) {
