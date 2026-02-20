@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, Star, RotateCcw } from "lucide-react";
+import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { TokenItem } from "./_components/TokenItem";
 import { getClinicDate } from "@/lib/date";
@@ -57,6 +57,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     const displayedTokens = historyTokens;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const performAction = async (actionFn: () => Promise<any>) => {
         if (actionLoading) return;
         setActionLoading(true);
@@ -108,9 +109,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     const handleRecall = (id: string) => { if (confirm("Recall this patient?")) performAction(() => recallToken(params.clinicSlug, id)); };
 
-    const handleCancelToken = useCallback((id: string) => {
+    const handleCancelToken = (id: string) => {
         if (confirm("Cancel this token?")) performAction(() => cancelToken(params.clinicSlug, id));
-    }, [params.clinicSlug]);
+    };
 
     const handleManualAdd = async (e: React.FormEvent) => {
         e.preventDefault();

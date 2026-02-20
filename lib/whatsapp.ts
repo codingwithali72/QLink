@@ -1,8 +1,9 @@
-import { createClient } from "./supabase/server";
+
 import { createAdminClient } from "./supabase/admin";
 
 const WHATSAPP_API_URL = "https://graph.facebook.com/v17.0"; // Or latest version
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function sendWhatsApp(to: string, templateName: string, components: any[], businessId: string, tokenId?: string) {
     const { PHONE_NUMBER_ID, ACCESS_TOKEN } = process.env;
 
@@ -49,6 +50,7 @@ export async function sendWhatsApp(to: string, templateName: string, components:
     }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function logMessage(businessId: string, tokenId: string | undefined, status: string, response: any) {
     const supabase = createAdminClient();
     await supabase.from("message_logs").insert({

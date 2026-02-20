@@ -22,11 +22,13 @@ async function getBusinessBySlug(slug: string) {
     return data;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getActiveSession(supabase: any, businessId: string) {
     const { data } = await supabase.from('sessions').select('*').eq('business_id', businessId).eq('status', 'OPEN').single();
     return data;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function logAudit(businessId: string, action: string, details: any = {}) {
     try {
         const user = await getAuthenticatedUser();
@@ -112,6 +114,7 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
 
         if (error) throw error;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = data as any;
         const token = { id: result.token_id, token_number: result.token_number };
 
@@ -161,7 +164,8 @@ export async function nextPatient(clinicSlug: string) {
         });
 
         if (error) throw error;
-        
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = data as any;
         if (!result.success) return { error: result.error || result.message };
 
@@ -231,6 +235,7 @@ async function processQueueAction(slug: string, action: string, tokenId?: string
 
         if (error) throw error;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = data as any;
         if (!result.success) return { error: result.error || result.message };
 

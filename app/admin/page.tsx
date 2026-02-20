@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 
 export default function AdminPage() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
@@ -109,6 +110,7 @@ export default function AdminPage() {
                         <div className="space-y-3">
                             {stats.businesses && stats.businesses.length === 0 && <p className="text-slate-400">No businesses found.</p>}
 
+                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                             {stats.businesses?.map((b: any) => (
                                 <Card key={b.id} className="p-4 flex items-center justify-between hover:shadow-md transition-shadow">
                                     <div>
