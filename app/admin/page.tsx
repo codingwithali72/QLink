@@ -18,6 +18,8 @@ export default function AdminPage() {
     const [name, setName] = useState("");
     const [slug, setSlug] = useState("");
     const [phone, setPhone] = useState("");
+    const [adminEmail, setAdminEmail] = useState("");
+    const [adminPassword, setAdminPassword] = useState("");
     const [actionLoading, setActionLoading] = useState(false);
 
     useEffect(() => {
@@ -35,7 +37,7 @@ export default function AdminPage() {
     async function handleCreate(e: React.FormEvent) {
         e.preventDefault();
         setActionLoading(true);
-        const res = await createBusiness(name, slug, phone);
+        const res = await createBusiness(name, slug, phone, adminEmail, adminPassword);
         setActionLoading(false);
 
         if (res.error) alert(res.error);
@@ -43,6 +45,8 @@ export default function AdminPage() {
             setName("");
             setSlug("");
             setPhone("");
+            setAdminEmail("");
+            setAdminPassword("");
             fetchStats();
         }
     }
@@ -96,6 +100,14 @@ export default function AdminPage() {
                                 <div className="space-y-2">
                                     <Label>Contact Phone</Label>
                                     <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91..." required />
+                                </div>
+                                <div className="space-y-2 pt-4 border-t border-slate-100">
+                                    <Label className="text-blue-600 font-bold">Receptionist Email</Label>
+                                    <Input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} placeholder="reception@clinic.com" required />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-blue-600 font-bold">Receptionist Password</Label>
+                                    <Input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="SecurePassword123!" minLength={6} required />
                                 </div>
                                 <Button type="submit" className="w-full bg-slate-900 text-white" disabled={actionLoading}>
                                     {actionLoading ? <Loader2 className="animate-spin w-4 h-4" /> : "Create Business"}

@@ -12,7 +12,7 @@ async function isSuperAdmin() {
     return user?.email === ADMIN_EMAIL;
 }
 
-export async function createBusiness(name: string, slug: string, phone: string) {
+export async function createBusiness(name: string, slug: string, phone: string, email?: string, password?: string) {
     if (!await isSuperAdmin()) return { error: "Unauthorized" };
 
     const supabase = createAdminClient();
@@ -21,14 +21,44 @@ export async function createBusiness(name: string, slug: string, phone: string) 
     const { data: existing } = await supabase.from('businesses').select('id').eq('slug', slug).single();
     if (existing) return { error: "Slug already exists" };
 
-    const { error } = await supabase.from('businesses').insert({
+    // Insert Business
+    const { data: newBusiness, error: bizError } = await supabase.from('businesses').insert({
         name,
         slug,
         contact_phone: phone,
         settings: {}
-    });
+    }).select('id').single();
 
-    if (error) return { error: error.message };
+    if (bizError || !newBusiness) return { error: bizError?.message || "Failed to create business" };
+
+    // Create Staff User Auth
+    if (email && password) {
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true
+        });
+
+        if (authError || !authData.user) {
+            await supabase.from('businesses').delete().eq('id', newBusiness.id); // Rollback
+            return { error: authError?.message || "Failed to create auth user" };
+        }
+
+        // Link Auth to Clinic
+        const { error: staffError } = await supabase.from('staff_users').insert({
+            id: authData.user.id,
+            business_id: newBusiness.id,
+            name: `${name} Reception`,
+            role: 'RECEPTIONIST'
+        });
+
+        if (staffError) {
+            await supabase.auth.admin.deleteUser(authData.user.id);
+            await supabase.from('businesses').delete().eq('id', newBusiness.id); // Rollback
+            return { error: staffError.message };
+        }
+    }
+
     revalidatePath('/admin');
     return { success: true };
 }
