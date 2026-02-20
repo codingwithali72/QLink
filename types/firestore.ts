@@ -1,50 +1,53 @@
-export type TokenStatus = 'WAITING' | 'SERVING' | 'SERVED' | 'SKIPPED' | 'CANCELLED' | 'DONE';
+export type Business = {
+    id: string; // UUID
+    slug: string;
+    name: string;
+    settings: {
+        queueRules?: string;
+        maxTokensPerDay?: number;
+    };
+    isActive: boolean;
+    createdAt: string;
+};
 
-export interface Session {
-    id: string;
-    clinicId: string;
-    date: string;
-    status: 'OPEN' | 'PAUSED' | 'CLOSED';
-    currentTokenNumber: number;
-    lastTokenNumber: number;
-    updatedAt: string;
-}
+export type StaffUser = {
+    id: string; // UUID (matches auth.users)
+    businessId: string;
+    role: 'owner' | 'admin' | 'staff';
+    email: string;
+    fullName?: string;
+};
 
-export interface Token {
-    id: string;
-    clinicId: string;
+export type Session = {
+    id: string; // UUID
+    businessId: string;
+    date: string; // YYYY-MM-DD
+    status: 'OPEN' | 'CLOSED' | 'PAUSED';
+    startTime: string | null;
+    endTime: string | null;
+    dailyTokenCount: number;
+    createdAt: string;
+};
+
+export type Token = {
+    id: string; // UUID
+    businessId: string;
     sessionId: string;
     tokenNumber: number;
-    customerName: string;
     customerPhone: string;
-    status: TokenStatus;
+    customerName: string;
+    status: 'WAITING' | 'SERVING' | 'SERVED' | 'SKIPPED' | 'CANCELLED';
     isPriority: boolean;
-    rating?: number;
-    feedback?: string;
     createdAt: string;
-}
+    completedAt: string | null;
+    createdByStaffId?: string;
+};
 
-// Database helper types (Snake case)
-export interface DBSession {
+export type AuditLog = {
     id: string;
-    clinic_id: string;
-    date: string;
-    status: 'OPEN' | 'PAUSED' | 'CLOSED';
-    current_token_number: number;
-    last_token_number: number;
-    updated_at: string;
-}
-
-export interface DBToken {
-    id: string;
-    clinic_id: string;
-    session_id: string;
-    token_number: number;
-    customer_name: string;
-    customer_phone: string;
-    status: TokenStatus;
-    is_priority: boolean;
-    rating?: number;
-    feedback?: string;
-    created_at: string;
-}
+    businessId: string;
+    staffId: string;
+    action: 'NEXT' | 'ADD' | 'SKIP' | 'CANCEL' | 'PAUSE' | 'RESUME' | 'EMERGENCY' | 'UNDO';
+    details: any;
+    createdAt: string;
+};

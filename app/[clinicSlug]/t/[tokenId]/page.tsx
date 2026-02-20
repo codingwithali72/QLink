@@ -1,35 +1,29 @@
 "use client";
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
-import { cancelToken, submitFeedback } from "@/app/actions/queue";
-import { getReviewUrl } from "@/lib/clinic-config";
+import { cancelToken } from "@/app/actions/queue";
 import { Button } from "@/components/ui/button";
-import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw, Star } from "lucide-react";
+import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
-// import { useRouter } from "next/navigation";  // DISABLED
 
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function TicketPage({ params }: { params: { clinicSlug: string; tokenId: string } }) {
     const { session, tokens, loading, isConnected, isSynced } = useClinicRealtime(params.clinicSlug);
-    // const router = useRouter(); // DISABLED
     const [actionLoading, setActionLoading] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
-    const [rating, setRating] = useState(0);
-    const [reviewSubmitted, setReviewSubmitted] = useState(false);
-    const [feedback, setFeedback] = useState("");
-    const [feedbackSending, setFeedbackSending] = useState(false);
 
     const [showRealtimeError, setShowRealtimeError] = useState(false);
     useEffect(() => {
-        if ((!isConnected || isOffline) && !loading) {
-            const timer = setTimeout(() => setShowRealtimeError(true), 3000);
+        // Only show error if we previously had connection
+        if ((!isConnected || isOffline) && !loading && isSynced) {
+            const timer = setTimeout(() => setShowRealtimeError(true), 5000);
             return () => clearTimeout(timer);
         } else {
             setShowRealtimeError(false);
         }
-    }, [isConnected, isOffline, loading]);
+    }, [isConnected, isOffline, loading, isSynced]);
 
     useEffect(() => {
         const handleOnline = () => setIsOffline(false);
@@ -52,21 +46,13 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     }, []);
 
     // LOADING STATE: 
-    // Show loader if:
-    // 1. Initial Loading is true
-    // 2. Token is missing BUT we haven't synced with server yet (Stale data cache issue)
     const token = tokens.find(t => t.id === params.tokenId);
-
     const [showError, setShowError] = useState(false);
-
-    // Grace period for error (REMOVED DUPLICATE)
-
     const missingData = !token || !session;
 
     // Grace period for error
     useEffect(() => {
         if (!loading && isSynced && missingData) {
-            // If data is loaded but missing, wait 2 seconds before showing error
             const timer = setTimeout(() => setShowError(true), 2000);
             return () => clearTimeout(timer);
         } else if (!missingData) {
@@ -74,20 +60,17 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         }
     }, [loading, isSynced, missingData]);
 
-    // Guard: Show Loader if:
-    // 1. App is Loading
-    // 2. Data is missing AND (Not synced OR Error timeout hasn't fired yet)
     if (loading || (missingData && (!isSynced || !showError))) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <Loader2 className="w-10 h-10 animate-spin text-slate-400" />
-                {!loading && missingData && <p className="absolute mt-16 text-xs text-slate-400">Verifying ticket...</p>}
+                {!loading && missingData && <p className="absolute mt-16 text-xs text-slate-400">Verifying status...</p>}
             </div>
         );
     }
 
     if (missingData) {
-        return <div className="p-8 text-center">Ticket not found or session expired.</div>;
+        return <div className="p-8 text-center mt-10 text-slate-500">Ticket not found or session expired.</div>;
     }
 
     const handleCancel = async () => {
@@ -103,7 +86,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
             try {
                 await navigator.share({
                     title: `My Token ${formatToken(token.tokenNumber, token.isPriority)}`,
-                    text: `Track my queue position at ${params.clinicSlug}`,
+                    text: `Track my queue position for ${params.clinicSlug}`,
                     url: window.location.href,
                 });
             } catch { console.error("Share failed"); }
@@ -117,7 +100,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
 
     // --- LOGIC ---
     const isServing = token.status === "SERVING";
-    const isDone = token.status === "SERVED" || token.status === "DONE";
+    const isDone = token.status === "SERVED";
     const isCancelled = token.status === "CANCELLED";
     const isSkipped = token.status === "SKIPPED";
     const isEmergency = token.isPriority;
@@ -131,15 +114,13 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     if (token.status === 'WAITING') {
         tokensAhead = tokens.filter(t => {
             if (t.status !== 'WAITING') return false;
+            // Sorting logic matches Reception dashboard
             if (token.isPriority) return t.isPriority && t.tokenNumber < token.tokenNumber;
             return t.isPriority || t.tokenNumber < token.tokenNumber;
         }).length;
-        // Previously we added +1 for serving token here, but removed it per user request.
     }
 
     // --- ETA RANGE LOGIC (4-8 mins/person) ---
-    // User requested: "for two person if ahead so it should be 8to 16 mins"
-    // This implies we calculate strictly on 'tokensAhead'.
     const minMins = tokensAhead * 4;
     const maxMins = tokensAhead * 8;
 
@@ -156,17 +137,14 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     let statusBg = "bg-blue-600";
     let pulse = "";
 
-    if (isApproaching) {
-        statusText = "APPROACHING";
-        statusBg = "bg-blue-600"; // Back to Blue
-        pulse = "animate-pulse duration-700"; // Faster pulse
-    }
+    if (isApproaching) { statusText = "APPROACHING"; statusBg = "bg-blue-600"; pulse = "animate-pulse duration-700"; }
     if (isEmergency) { statusText = "EMERGENCY"; statusBg = "bg-red-600"; pulse = "animate-pulse"; }
     if (isServing) { statusText = "NOW SERVING"; statusBg = "bg-green-600"; pulse = "animate-bounce"; }
     if (isDone) { statusText = "COMPLETED"; statusBg = "bg-blue-600"; pulse = ""; }
     if (isCancelled) { statusText = "CANCELLED"; statusBg = "bg-slate-500"; pulse = ""; }
     if (isSkipped) { statusText = "SKIPPED"; statusBg = "bg-yellow-600"; pulse = ""; }
     if (session.status === "PAUSED") { statusText = "QUEUE PAUSED"; statusBg = "bg-orange-500"; pulse = "animate-pulse"; }
+    if (session.status === "CLOSED") { statusText = "CLOSED"; statusBg = "bg-slate-700"; pulse = ""; }
 
     return (
         <div className="min-h-screen bg-slate-100 flex flex-col relative">
@@ -222,89 +200,6 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                             </div>
                         )}
 
-                        {/* REVIEW SYSTEM - Only when DONE */}
-                        {isDone && (
-                            <div className="bg-white border border-slate-100 rounded-2xl p-6 text-center shadow-sm space-y-4">
-                                {!reviewSubmitted ? (
-                                    <>
-                                        <h3 className="font-bold text-slate-800">How was your visit?</h3>
-                                        <div className="flex justify-center gap-2">
-                                            {[1, 2, 3, 4, 5].map((star) => (
-                                                <button
-                                                    key={star}
-                                                    onClick={() => {
-                                                        setRating(star);
-                                                        // If high rating, submit immediately and redirect
-                                                        if (star >= 4) {
-                                                            setReviewSubmitted(true);
-                                                            // Submit high rating to DB silently
-                                                            submitFeedback(params.clinicSlug, params.tokenId, star, "").then(res => {
-                                                                if (res.error) console.error("Rating Error:", res.error);
-                                                            });
-
-                                                            // Direct Redirect Logic
-                                                            setTimeout(() => {
-                                                                const url = getReviewUrl(params.clinicSlug);
-                                                                setTimeout(() => {
-                                                                    window.location.href = url;
-                                                                }, 300); // Small delay to visualize click
-                                                            }, 300); // Small delay to visualize click
-                                                        }
-                                                    }}
-                                                    className={`transition-all active:scale-90 ${rating >= star ? "text-yellow-400 fill-yellow-400" : "text-slate-200"}`}
-                                                >
-                                                    <Star className="w-8 h-8" />
-                                                </button>
-                                            ))}
-                                        </div>
-
-                                        {/* Feedback Form for Low Ratings */}
-                                        {rating > 0 && rating < 4 && (
-                                            <div className="mt-4 space-y-3">
-                                                <p className="text-sm text-slate-900 font-bold">Please add feedback:</p>
-                                                <textarea
-                                                    value={feedback}
-                                                    onChange={(e) => setFeedback(e.target.value)}
-                                                    placeholder="Add feedback..."
-                                                    autoFocus
-                                                    className="w-full p-3 rounded-xl border-2 border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
-                                                />
-                                                <Button
-                                                    onClick={async () => {
-                                                        setFeedbackSending(true);
-                                                        const res = await submitFeedback(params.clinicSlug, params.tokenId, rating, feedback);
-                                                        setFeedbackSending(false);
-                                                        if (res.error) {
-                                                            alert("Error saving feedback: " + res.error + "\n\n(Hint: Did you run the database migration?)");
-                                                        } else {
-                                                            setReviewSubmitted(true);
-                                                        }
-                                                    }}
-                                                    disabled={feedbackSending}
-                                                    className="w-full rounded-xl font-bold"
-                                                >
-                                                    {feedbackSending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Feedback"}
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </>
-                                ) : (
-                                    <div className="py-2 animate-in zoom-in">
-                                        {rating >= 4 ? (
-                                            <p className="text-slate-600 font-bold flex items-center justify-center gap-2">
-                                                <Loader2 className="w-4 h-4 animate-spin" /> Redirecting to Google...
-                                            </p>
-                                        ) : (
-                                            <div className="space-y-2">
-                                                <p className="text-slate-800 font-bold text-lg">Thank You!</p>
-                                                <p className="text-slate-600 text-sm">Your feedback has been sent to our team.</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
                         {!isDone && !isCancelled && !isSkipped && !isServing && (
                             <>
                                 {/* GRID: Now Serving | Remaining */}
@@ -314,22 +209,37 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                         <p className="text-3xl font-black text-slate-900 mt-1">{currentServingDisplay}</p>
                                     </div>
                                     <div className="p-4 bg-white rounded-2xl text-center border border-slate-100 shadow-sm">
-                                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Ahead of You</p>
+                                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Tokens Left</p>
                                         <p className="text-3xl font-black text-slate-900 mt-1">{tokensAhead}</p>
                                     </div>
                                 </div>
 
                                 {/* ETA & NOTE */}
-                                <div className="text-center space-y-2 py-2">
+                                <div className="text-center space-y-2 py-2 mt-4">
                                     <div className="flex items-center justify-center gap-2 text-slate-600">
                                         <Clock className="w-5 h-5" />
                                         <span className="text-lg font-bold">ETA: <span className="text-slate-900">{etaText}</span></span>
                                     </div>
-                                    <p className="text-xs text-slate-400 font-medium bg-slate-200/50 inline-block px-3 py-1 rounded-full">
-                                        Please arrive 10 mins early
-                                    </p>
+                                    <div className="mt-4">
+                                        <p className="text-[13px] text-blue-900 font-bold bg-blue-100/80 inline-block px-4 py-2 rounded-xl">
+                                            Keep this page open. Check when tokens left ≤ 5.
+                                        </p>
+                                    </div>
                                 </div>
                             </>
+                        )}
+
+                        {/* Show if COMPLETED */}
+                        {isDone && (
+                            <div className="p-8 text-center space-y-4">
+                                <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
+                                    <RefreshCw className="w-8 h-8 text-green-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-xl text-slate-900">All Done!</h3>
+                                    <p className="text-slate-500">Thank you for visiting today.</p>
+                                </div>
+                            </div>
                         )}
 
                         {/* ACTIONS */}
@@ -354,7 +264,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                         </div>
                     </div>
 
-                    {/* CARD FOOTER - Flush Bottom */}
+                    {/* FOOTER */}
                     <div className="bg-blue-600 p-3 text-center text-xs text-white/80 font-bold tracking-widest uppercase border-t border-blue-500">
                         Powered by QLink
                     </div>

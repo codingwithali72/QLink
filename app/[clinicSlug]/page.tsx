@@ -1,23 +1,21 @@
-
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { ClinicForm } from "./_components/ClinicForm";
-import { ClinicStatusBadge } from "./_components/ClinicStatusBadge"; // Import Badge
+import { ClinicStatusBadge } from "./_components/ClinicStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Lock, StopCircle, Phone } from "lucide-react";
 import { getClinicDate } from "@/lib/date";
 
-// Force dynamic since we lookup by slug
 export const dynamic = "force-dynamic";
 
 interface PageProps {
     params: { clinicSlug: string };
 }
 
-async function getClinic(slug: string) {
+async function getBusiness(slug: string) {
     const supabase = createClient();
     const { data, error } = await supabase
-        .from('clinics')
+        .from('businesses')
         .select('id, name, slug')
         .eq('slug', slug)
         .single();
@@ -27,19 +25,20 @@ async function getClinic(slug: string) {
 }
 
 export default async function ClinicLandingPage({ params }: PageProps) {
-    const clinic = await getClinic(params.clinicSlug);
+    const business = await getBusiness(params.clinicSlug);
 
-    if (!clinic) return notFound();
+    if (!business) return notFound();
 
-    // Fetch Today's Session Status
     const supabase = createClient();
     const today = getClinicDate();
-    const { data: session } = await supabase.from('sessions').select('status').eq('clinic_id', clinic.id).eq('date', today).single();
 
-
-
-    // Logic: If session exists AND status is CLOSED/PAUSED -> Block.
-    // If session is null -> Open.
+    // Check for today's session
+    const { data: session } = await supabase
+        .from('sessions')
+        .select('status')
+        .eq('business_id', business.id)
+        .eq('date', today)
+        .single();
 
     const isClosedOrPaused = session && (session.status === 'CLOSED' || session.status === 'PAUSED');
     const statusMessage = session?.status === 'PAUSED' ? "Queue is currently paused." : "Queue is closed for today.";
@@ -50,12 +49,11 @@ export default async function ClinicLandingPage({ params }: PageProps) {
                 <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
                     {/* HEADER */}
                     <div className="bg-blue-600 p-8 text-center text-white relative">
-                        {/* Sync Badge */}
                         <div className="absolute top-4 right-4">
                             <ClinicStatusBadge clinicSlug={params.clinicSlug} />
                         </div>
 
-                        <h1 className="text-2xl font-bold tracking-tight">{clinic.name}</h1>
+                        <h1 className="text-2xl font-bold tracking-tight">{business.name}</h1>
                         <p className="text-slate-400 text-sm mt-1">Join the Queue</p>
                     </div>
 

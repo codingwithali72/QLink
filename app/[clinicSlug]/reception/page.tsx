@@ -1,20 +1,19 @@
 "use client";
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
-import { addEmergencyToken, nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, getTokensForDate } from "@/app/actions/queue";
+import { addEmergencyToken, nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, undoLastAction } from "@/app/actions/queue";
 import { logout } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, MessageSquare, Star } from "lucide-react";
+import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, Star, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { TokenItem } from "./_components/TokenItem";
 import { getClinicDate } from "@/lib/date";
-// import { Token } from "@/types/firestore";
 
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
@@ -31,10 +30,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         else document.documentElement.classList.remove('dark');
     }, [darkMode]);
 
-    useEffect(() => {
-        // console.log("System Updated"); 
-    }, []);
-
     // Manual Token Form
     const [manualName, setManualName] = useState("");
     const [manualPhone, setManualPhone] = useState("");
@@ -42,11 +37,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const [searchTerm, setSearchTerm] = useState("");
 
     // History State
-    // const d = new Date();
-    // const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const todayStr = getClinicDate();
     const [selectedDate, setSelectedDate] = useState(todayStr);
-    const [historyTokens, setHistoryTokens] = useState<any[]>([]); // eslint-disable-line @typescript-eslint/no-explicit-any
+    const [historyTokens, setHistoryTokens] = useState<any[]>([]); // eslint-disable-line
     const [historyLoading, setHistoryLoading] = useState(false);
 
     // Fetch History/Log Data
@@ -60,11 +53,11 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             setHistoryLoading(false);
         }
         fetchLog();
-    }, [selectedDate, params.clinicSlug, isLogOpen, todayStr]); // Fetch when log opens or date changes
+    }, [selectedDate, params.clinicSlug, isLogOpen, todayStr]);
 
     const displayedTokens = historyTokens;
 
-    const performAction = async (actionFn: () => Promise<any>) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    const performAction = async (actionFn: () => Promise<any>) => {
         if (actionLoading) return;
         setActionLoading(true);
         try {
@@ -91,7 +84,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         });
     }, [tokens]);
 
-    // Limit to 50 for performance
     const visibleWaitingTokens = useMemo(() => waitingTokens.slice(0, 50), [waitingTokens]);
 
     const servingToken = useMemo(() => tokens.find(t => t.status === 'SERVING') || null, [tokens]);
@@ -100,24 +92,25 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         return tokens.filter(t => t.status === 'SKIPPED').sort((a, b) => a.tokenNumber - b.tokenNumber);
     }, [tokens]);
 
-    // Use displayedTokens so history shows correct count
     const totalServedCount = useMemo(() => {
-        if (selectedDate === todayStr) return tokens.filter(t => t.status === 'SERVED' || t.status === 'DONE').length;
-        return displayedTokens.filter(t => t.status === 'SERVED' || t.status === 'DONE').length;
+        if (selectedDate === todayStr) return tokens.filter(t => t.status === 'SERVED').length;
+        return displayedTokens.filter(t => t.status === 'SERVED').length;
     }, [tokens, displayedTokens, selectedDate, todayStr]);
 
     // Handlers
     const handleNext = () => performAction(() => nextPatient(params.clinicSlug));
     const handleSkip = () => { if (servingToken && confirm("Skip current patient?")) performAction(() => skipToken(params.clinicSlug, servingToken.id)); };
     const handleEmergency = () => { if (confirm("🚨 Create EMERGENCY Token?")) performAction(() => addEmergencyToken(params.clinicSlug)); };
+    const handleUndo = () => { if (confirm("Undo the last action?")) performAction(() => undoLastAction(params.clinicSlug)); };
     const handlePauseToggle = () => { if (session) performAction(() => session.status === 'OPEN' ? pauseQueue(params.clinicSlug) : resumeQueue(params.clinicSlug)); };
-    const handleCloseQueue = () => { if (confirm("Are you sure you want to CLOSE the queue? No new tokens can be created.")) performAction(() => closeQueue(params.clinicSlug)); };
+    const handleCloseQueue = () => { if (confirm("Are you sure you want to CLOSE the queue?")) performAction(() => closeQueue(params.clinicSlug)); };
+    const handleStartSession = () => performAction(() => startSession(params.clinicSlug));
+
     const handleRecall = (id: string) => { if (confirm("Recall this patient?")) performAction(() => recallToken(params.clinicSlug, id)); };
 
-    // Memoize Cancel Handler for TokenItem
     const handleCancelToken = useCallback((id: string) => {
         if (confirm("Cancel this token?")) performAction(() => cancelToken(params.clinicSlug, id));
-    }, [params.clinicSlug]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [params.clinicSlug]);
 
     const handleManualAdd = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -128,7 +121,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         setActionLoading(false);
     };
 
-    // Offline Banner Grace Period
+    // Offline Banner
     const [showOfflineError, setShowOfflineError] = useState(false);
     useEffect(() => {
         if (!isConnected && !loading) {
@@ -139,10 +132,11 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         }
     }, [isConnected, loading]);
 
-    // Date
     const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
     if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><Loader2 className="animate-spin text-slate-400 w-8 h-8" /></div>;
+
+    const isSessionActive = session?.status === 'OPEN' || session?.status === 'PAUSED';
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300 p-3 pb-20 md:p-6 lg:p-8 font-sans relative">
@@ -176,18 +170,16 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 session?.status === 'PAUSED' ? "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800" :
                                     "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800"
                         )}>
-                            <div className={cn("w-1.5 h-1.5 md:w-2 md:h-2 rounded-full animate-pulse",
-                                session?.status === 'OPEN' ? "bg-green-600" : session?.status === 'PAUSED' ? "bg-yellow-600" : "bg-red-600"
+                            <div className={cn("w-1.5 h-1.5 md:w-2 md:h-2 rounded-full",
+                                session?.status === 'OPEN' ? "bg-green-600 animate-pulse" : session?.status === 'PAUSED' ? "bg-yellow-600" : "bg-red-600"
                             )}></div>
                             {session?.status || "CLOSED"}
                         </div>
 
-                        {/* Dark Mode Toggle */}
                         <Button variant="ghost" size="icon" onClick={() => setDarkMode(!darkMode)} className="rounded-full h-8 w-8 md:h-10 md:w-10 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
                             {darkMode ? <Sun className="w-4 h-4 md:w-5 md:h-5" /> : <Moon className="w-4 h-4 md:w-5 md:h-5" />}
                         </Button>
 
-                        {/* Logout */}
                         <Button variant="ghost" size="sm" onClick={() => logout()} className="text-slate-500 dark:text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl h-8 text-xs md:text-sm md:h-9">
                             <LogOut className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" /> Logout
                         </Button>
@@ -203,7 +195,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         {/* HERO CARD: Now Serving */}
                         <Card className="relative overflow-hidden border-0 shadow-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white h-56 md:h-72 flex flex-col items-center justify-center p-6 md:p-8 rounded-3xl">
                             <div className="absolute top-0 right-0 p-8 opacity-10"><Users className="w-32 h-32 md:w-48 md:h-48" /></div>
-
                             <p className="text-blue-100 uppercase tracking-[0.2em] text-xs md:text-sm font-bold mb-2 md:mb-4">Now Serving</p>
 
                             {servingToken ? (
@@ -223,7 +214,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 </div>
                             )}
 
-                            {/* Connection Status */}
                             <div className="absolute bottom-4 left-6 md:bottom-6 md:left-8 flex items-center gap-2 text-[10px] text-blue-200/80 font-mono uppercase tracking-widest">
                                 <RefreshCw className="w-3 h-3 animate-spin" /> Last synced: {lastUpdated.toLocaleTimeString()}
                             </div>
@@ -234,7 +224,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             {/* NEXT BUTTON (Big) */}
                             <Button
                                 onClick={handleNext}
-                                disabled={actionLoading || (waitingTokens.length === 0 && !servingToken)}
+                                disabled={actionLoading || !isSessionActive || (waitingTokens.length === 0 && !servingToken)}
                                 className={cn("col-span-2 h-20 md:h-24 text-xl md:text-2xl font-black rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:grayscale",
                                     "bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
                                 )}
@@ -251,7 +241,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             <Button
                                 variant="outline"
                                 onClick={handleSkip}
-                                disabled={!servingToken || actionLoading}
+                                disabled={!servingToken || actionLoading || !isSessionActive}
                                 className="h-20 md:h-24 flex flex-col items-center justify-center gap-1 md:gap-2 rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-300"
                             >
                                 <SkipForward className="w-5 h-5 md:w-6 md:h-6 text-slate-500" />
@@ -262,7 +252,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             <Button
                                 variant="destructive"
                                 onClick={handleEmergency}
-                                disabled={actionLoading}
+                                disabled={actionLoading || !isSessionActive}
                                 className="h-20 md:h-24 flex flex-col items-center justify-center gap-1 md:gap-2 rounded-2xl shadow-red-500/20 bg-red-600 hover:bg-red-700 border-t-4 border-red-400"
                             >
                                 <AlertOctagon className="w-5 h-5 md:w-6 md:h-6" />
@@ -271,25 +261,44 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         </div>
 
                         {/* SECONDARY CONTROLS */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <Button
-                                variant="outline"
-                                onClick={handlePauseToggle}
-                                className={cn("h-16 font-bold rounded-2xl border-2 dark:bg-slate-800 dark:border-slate-700",
-                                    session?.status === 'OPEN' ? "text-slate-600 dark:text-slate-300 hover:bg-slate-50" : "bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400"
-                                )}
-                            >
-                                {session?.status === 'OPEN' ? <><PauseCircle className="mr-2 w-5 h-5" /> PAUSE QUEUE</> : <><PlayCircle className="mr-2 w-5 h-5" /> RESUME QUEUE</>}
-                            </Button>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {isSessionActive ? (
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleUndo}
+                                        disabled={actionLoading}
+                                        className="h-16 font-bold rounded-2xl border-2 dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-50"
+                                    >
+                                        <RotateCcw className="mr-2 w-5 h-5" /> UNDO
+                                    </Button>
 
-                            <Button
-                                variant="ghost"
-                                onClick={handleCloseQueue}
-                                disabled={session?.status === 'CLOSED'}
-                                className="h-16 font-bold rounded-2xl text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
-                            >
-                                <Power className="mr-2 w-5 h-5" /> CLOSE FOR DAY
-                            </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={handlePauseToggle}
+                                        className={cn("h-16 font-bold rounded-2xl border-2 dark:bg-slate-800 dark:border-slate-700",
+                                            session?.status === 'OPEN' ? "text-slate-600 dark:text-slate-300 hover:bg-slate-50" : "bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400"
+                                        )}
+                                    >
+                                        {session?.status === 'OPEN' ? <><PauseCircle className="mr-2 w-5 h-5" /> PAUSE</> : <><PlayCircle className="mr-2 w-5 h-5" /> RESUME</>}
+                                    </Button>
+
+                                    <Button
+                                        variant="ghost"
+                                        onClick={handleCloseQueue}
+                                        className="h-16 font-bold rounded-2xl text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 border border-transparent hover:border-red-100"
+                                    >
+                                        <Power className="mr-2 w-5 h-5" /> CLOSE
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button
+                                    onClick={handleStartSession}
+                                    className="col-span-2 h-16 font-bold rounded-2xl bg-green-600 hover:bg-green-700 text-white shadow-lg text-lg"
+                                >
+                                    <PlayCircle className="mr-2 w-6 h-6" /> START NEW SESSION
+                                </Button>
+                            )}
                         </div>
 
                     </div>
@@ -301,7 +310,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         <Card className="p-1 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
                             <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                                 <DialogTrigger asChild>
-                                    <Button className="w-full h-14 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl text-lg shadow-lg">
+                                    <Button disabled={!isSessionActive} className="w-full h-14 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl text-lg shadow-lg">
                                         <Plus className="w-5 h-5 mr-2" /> Add Walk-in
                                     </Button>
                                 </DialogTrigger>
@@ -378,7 +387,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
                             {isLogOpen && (
                                 <div className="border-t border-slate-100 dark:border-slate-800 animate-in slide-in-from-top-2">
-                                    {/* Controls: Search + Date */}
                                     <div className="p-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 flex flex-col gap-2">
                                         <div className="flex justify-between items-center">
                                             <div className="flex gap-2">
@@ -404,7 +412,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                             <div className="relative flex-1">
                                                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                                                 <Input
-                                                    placeholder="Search name or phone..."
+                                                    placeholder="Search..."
                                                     value={searchTerm}
                                                     onChange={(e) => setSearchTerm(e.target.value)}
                                                     className="pl-9 h-9 text-sm bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
@@ -420,7 +428,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                         </div>
                                     </div>
 
-                                    {/* Scrollable List */}
                                     <div className="max-h-[300px] overflow-y-auto p-0">
                                         {historyLoading ? (
                                             <div className="py-8 flex justify-center text-slate-400"><Loader2 className="animate-spin w-5 h-5" /></div>
@@ -430,8 +437,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                     <tr>
                                                         <th className="px-4 py-2 font-semibold">Tkn</th>
                                                         <th className="px-4 py-2 font-semibold">Name</th>
-                                                        <th className="px-4 py-2 font-semibold">Phone</th>
-                                                        <th className="px-4 py-2 font-semibold text-blue-600 dark:text-blue-400">Rating ⭐</th>
                                                         <th className="px-4 py-2 font-semibold text-right">Status</th>
                                                     </tr>
                                                 </thead>
@@ -446,32 +451,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                                 <td className="px-4 py-3 font-mono font-bold text-slate-700 dark:text-slate-300">
                                                                     {formatToken(t.tokenNumber, t.isPriority)}
                                                                 </td>
-                                                                <td className="px-4 py-3 text-slate-900 dark:text-white font-medium max-w-[120px] truncate" title={t.customerName}>
+                                                                <td className="px-4 py-3 text-slate-900 dark:text-white font-medium max-w-[120px] truncate">
                                                                     {t.customerName}
-                                                                </td>
-                                                                <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs font-mono">
-                                                                    {t.customerPhone || "-"}
-                                                                </td>
-                                                                <td className="px-4 py-3">
-                                                                    {t.rating > 0 || t.feedback ? (
-                                                                        <div className="flex flex-col gap-1 max-w-[200px]">
-                                                                            {t.rating > 0 && (
-                                                                                <div className="flex items-center text-xs font-bold text-slate-700 dark:text-slate-300">
-                                                                                    <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 mr-1" />
-                                                                                    {t.rating}
-                                                                                </div>
-                                                                            )}
-                                                                            {t.feedback ? (
-                                                                                <span className="text-xs text-slate-500 dark:text-slate-400 italic truncate block" title={t.feedback}>
-                                                                                    "{t.feedback}"
-                                                                                </span>
-                                                                            ) : (
-                                                                                <span className="text-[10px] text-slate-300 dark:text-slate-600 italic">No message</span>
-                                                                            )}
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className="text-slate-300 dark:text-slate-600 text-xs">-</span>
-                                                                    )}
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right">
                                                                     <Badge variant="outline" className={cn("text-[10px] uppercase",
@@ -486,11 +467,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                                 </td>
                                                             </tr>
                                                         ))}
-                                                    {displayedTokens.length === 0 && (
-                                                        <tr>
-                                                            <td colSpan={4} className="text-center py-8 text-slate-400">No visitors found</td>
-                                                        </tr>
-                                                    )}
                                                 </tbody>
                                             </table>
                                         )}
@@ -502,7 +478,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         {/* Stats Footer */}
                         <div className="text-center">
                             <p className="text-xs text-slate-400 dark:text-slate-600 font-medium">
-                                Total Served ({selectedDate === todayStr ? "Today" : selectedDate}): <span className="text-slate-900 dark:text-slate-300 font-bold">{totalServedCount}</span>
+                                Total Served: <span className="text-slate-900 dark:text-slate-300 font-bold">{totalServedCount}</span>
                             </p>
                         </div>
                     </div>

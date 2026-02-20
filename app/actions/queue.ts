@@ -3,314 +3,292 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
-import { sendSMS } from "@/lib/sms";
-
-import { getClinicDate } from "@/lib/date";
+import { sendWhatsApp } from "@/lib/whatsapp";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-const getTodayString = () => getClinicDate();
 
-const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
+// --- HELPERS ---
 
+async function getAuthenticatedUser() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+}
+
+async function getBusinessBySlug(slug: string) {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase.from('businesses').select('id, name, settings').eq('slug', slug).single();
+    if (error || !data) return null;
+    return data;
+}
+
+async function getActiveSession(supabase: any, businessId: string) {
+    const { data } = await supabase.from('sessions').select('*').eq('business_id', businessId).eq('status', 'OPEN').single();
+    return data;
+}
+
+async function logAudit(businessId: string, action: string, details: any = {}) {
+    try {
+        const user = await getAuthenticatedUser();
+        // If no user (e.g. public QR join), we log staff_id as null
+        const supabase = createAdminClient();
+        await supabase.from('audit_logs').insert({
+            business_id: businessId,
+            staff_id: user?.id || null,
+            action,
+            details
+        });
+    } catch (e) {
+        console.error("Audit Log Error:", e);
+    }
+}
+
+// --- ACTIONS ---
+
+// 1. START SESSION (New)
+export async function startSession(clinicSlug: string) {
+    const supabase = createClient();
+    try {
+        const user = await getAuthenticatedUser();
+        if (!user) return { error: "Unauthorized" };
+
+        const business = await getBusinessBySlug(clinicSlug);
+        if (!business) return { error: "Clinic not found" };
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // Check if session exists
+        const { data: existing } = await supabase.from('sessions').select('id').eq('business_id', business.id).eq('date', today).single();
+
+        if (existing) {
+            // Re-open if closed
+            await supabase.from('sessions').update({ status: 'OPEN' }).eq('id', existing.id);
+        } else {
+            // Create new
+            const { error } = await supabase.from('sessions').insert({
+                business_id: business.id,
+                date: today,
+                status: 'OPEN',
+                daily_token_count: 0,
+                start_time: new Date().toISOString()
+            });
+            if (error) throw error;
+        }
+
+        await logAudit(business.id, 'START_SESSION');
+        revalidatePath(`/${clinicSlug}`);
+        return { success: true };
+    } catch (e) {
+        return { error: (e as Error).message };
+    }
+}
+
+// 2. CREATE TOKEN
 export async function createToken(clinicSlug: string, phone: string, name: string = "", isPriority: boolean = false) {
     if (!clinicSlug) return { error: "Missing clinic slug" };
+    if (!phone || phone.length < 10) return { error: "Valid phone number required" };
+
     const supabase = createAdminClient();
-    const today = getTodayString();
+    const user = await getAuthenticatedUser();
 
     try {
-        const { data: clinic } = await supabase.from('clinics').select('id, name').eq('slug', clinicSlug).single();
-        if (!clinic) throw new Error("Clinic not found");
+        const business = await getBusinessBySlug(clinicSlug);
+        if (!business) return { error: "Clinic not found" };
 
-        // CALL ATOMIC DB FUNCTION
+        const session = await getActiveSession(supabase, business.id);
+        if (!session) return { error: "Queue is CLOSED. Ask reception to start session." };
+
+        const createdByStaffId = user?.id || null;
+
+        // RPC
         const { data, error } = await supabase.rpc('create_token_atomic', {
-            p_clinic_slug: clinicSlug,
+            p_business_id: business.id,
+            p_session_id: session.id,
+            p_name: name || "Guest",
             p_phone: phone,
-            p_name: name || null,
-            p_is_priority: isPriority
+            p_is_priority: isPriority,
+            p_staff_id: createdByStaffId
         });
 
         if (error) throw error;
 
         const result = data as any;
-        if (result.error) return { error: result.error };
+        const token = { id: result.token_id, token_number: result.token_number };
 
-        const token = {
-            id: result.token.id,
-            token_number: result.token.token_number,
-            is_priority: result.token.is_priority,
-            // Add other fields if needed or refactor return type
-        };
+        // Audit
+        // If created by staff, log 'ADD_TOKEN'. If public, log 'JOIN_QR'.
+        await logAudit(business.id, createdByStaffId ? 'ADD_TOKEN' : 'JOIN_QR', { token_no: token.token_number, priority: isPriority });
 
-        // NON-BLOCKING SMS
-        if (phone && phone.length > 5) {
-            const trackingLink = `${BASE_URL}/${clinicSlug}/t/${token.id}`;
-            const formattedToken = formatToken(token.token_number, token.is_priority);
-            const msg = `Welcome to ${clinic.name}.\nYour Token: ${formattedToken}\nTrack Live: ${trackingLink}`;
-            logMessageToDB(clinic.id, token.id, phone, msg, 'sms').catch(console.error);
-            sendSMS(phone, msg).catch(console.error);
-        }
+        // WhatsApp
+        const trackingLink = `${BASE_URL}/${clinicSlug}/t/${token.id}`;
+        await sendWhatsApp(
+            phone,
+            "token_created",
+            [
+                { type: "text", text: business.name },
+                { type: "text", text: isPriority ? `E-${token.token_number}` : `#${token.token_number}` },
+                { type: "text", text: trackingLink }
+            ],
+            business.id,
+            token.id
+        );
 
         revalidatePath(`/${clinicSlug}`);
         return { success: true, token };
 
     } catch (e) {
+        console.error("Create Token Error:", e);
         return { error: (e as Error).message };
     }
 }
 
-async function logMessageToDB(clinicId: string, tokenId: string, phone: string, text: string, channel: string) {
-    const supabase = createClient();
-    await supabase.from('message_logs').insert({
-        clinic_id: clinicId, token_id: tokenId, phone, message_text: text, channel, status: 'sent'
-    });
-}
-
+// 3. NEXT
 export async function nextPatient(clinicSlug: string) {
     const supabase = createClient();
-    const today = getTodayString();
-
     try {
-        // CALL ATOMIC DB FUNCTION
-        const { data, error } = await supabase.rpc('next_patient_atomic', {
-            p_clinic_slug: clinicSlug,
-            p_date: today
+        const business = await getBusinessBySlug(clinicSlug);
+        if (!business) return { error: "Clinic not found" };
+
+        const session = await getActiveSession(supabase, business.id);
+        if (!session) return { error: "No active session" };
+
+        const user = await getAuthenticatedUser();
+        const { data, error } = await supabase.rpc('rpc_process_queue_action', {
+            p_business_id: business.id,
+            p_session_id: session.id,
+            p_staff_id: user?.id,
+            p_action: 'NEXT'
+        });
+
+        if (error) throw error;
+        
+        const result = data as any;
+        if (!result.success) return { error: result.error || result.message };
+
+        await logAudit(business.id, 'NEXT', { result });
+
+        revalidatePath(`/${clinicSlug}`);
+        return { success: true, data: result };
+    } catch (e) {
+        return { error: (e as Error).message };
+    }
+}
+
+// 4. SKIP
+export async function skipToken(clinicSlug: string, tokenId: string) {
+    return processQueueAction(clinicSlug, 'SKIP', tokenId);
+}
+
+// 5. RECALL
+export async function recallToken(clinicSlug: string, tokenId: string) {
+    return processQueueAction(clinicSlug, 'RECALL', tokenId);
+}
+
+// 6. CANCEL
+export async function cancelToken(clinicSlug: string, tokenId: string) {
+    return processQueueAction(clinicSlug, 'CANCEL', tokenId);
+}
+
+// 7. UNDO (New)
+export async function undoLastAction(clinicSlug: string) {
+    return processQueueAction(clinicSlug, 'UNDO');
+}
+
+// 8. SOS
+export async function addEmergencyToken(clinicSlug: string) {
+    return createToken(clinicSlug, "0000000000", "🚨 EMERGENCY", true);
+}
+
+// 9. SESSION CONTROLS
+export async function pauseQueue(clinicSlug: string) {
+    return processQueueAction(clinicSlug, 'PAUSE_SESSION');
+}
+export async function resumeQueue(clinicSlug: string) {
+    return processQueueAction(clinicSlug, 'RESUME_SESSION');
+}
+export async function closeQueue(clinicSlug: string) {
+    return updateSessionStatus(clinicSlug, 'CLOSED');
+}
+
+// Helper for RPC queue actions
+async function processQueueAction(slug: string, action: string, tokenId?: string) {
+    const supabase = createClient();
+    try {
+        const business = await getBusinessBySlug(slug);
+        if (!business) return { error: "Business not found" };
+
+        const session = await getActiveSession(supabase, business.id);
+        if (!session && action !== 'RESUME_SESSION') return { error: "No active session" };
+
+        const user = await getAuthenticatedUser();
+        const { data, error } = await supabase.rpc('rpc_process_queue_action', {
+            p_business_id: business.id,
+            p_session_id: session?.id || null,
+            p_staff_id: user?.id,
+            p_action: action,
+            p_token_id: tokenId || null
         });
 
         if (error) throw error;
 
-        // Define expected return type from RPC
-        type NextPatientResult = {
-            error?: string;
-            success?: boolean;
-            message?: string;
-            token_id?: string;
-            token_number: number;
-            is_priority: boolean;
-            customer_phone?: string;
-            clinic_name?: string;
-        };
+        const result = data as any;
+        if (!result.success) return { error: result.error || result.message };
 
-        const result = data as unknown as NextPatientResult; // Type assertion
-
-        if (result.error) return { error: result.error };
-        if (!result.token_id) return { success: true, message: result.message }; // No patients
-
-        // Helper to format string
-        const formattedToken = formatToken(result.token_number, result.is_priority);
-
-        // SMS LOGIC (Now decoupled from DB logic)
-        if (result.customer_phone && result.customer_phone.length > 5) {
-            const msg = `${result.clinic_name}: It's your turn! Ticket ${formattedToken}. Please proceed to reception.`;
-            // Fire and forget logging provided we have IDs (we might need clinic_id back from RPC if we want to log accurately, 
-            // but for now let's skip the heavy logging for speed or do it async)
-            // Ideally RPC returns clinicID too.
-            // For now, assuming simple SMS dispatch.
-            sendSMS(result.customer_phone, msg).catch(console.error);
-        }
-
-        // --- NEW: APPROACHING ALERT (3rd in Line) ---
-        // Fire and forget to avoid blocking UI
-        checkAndSendApproachingSMS(clinicSlug).catch(err => console.error("Approaching SMS Error:", err));
-
-        revalidatePath(`/${clinicSlug}`);
+        await logAudit(business.id, action, { token_id: tokenId, result });
+        revalidatePath(`/${slug}`);
         return { success: true };
     } catch (e) {
-        console.error("Next Patient Error:", e);
         return { error: (e as Error).message };
     }
 }
 
-export async function skipToken(clinicSlug: string, tokenId: string) {
+async function updateSessionStatus(slug: string, status: 'OPEN' | 'CLOSED' | 'PAUSED') {
+    const supabase = createClient();
     try {
-        const supabase = createClient();
-        const { error } = await supabase.from('tokens').update({ status: 'SKIPPED' }).eq('id', tokenId);
+        const business = await getBusinessBySlug(slug);
+        if (!business) throw new Error("Business not found");
+
+        const today = new Date().toISOString().split('T')[0];
+        const { error } = await supabase.from('sessions')
+            .update({ status })
+            .eq('business_id', business.id)
+            .eq('date', today);
+
         if (error) throw error;
-        revalidatePath(`/${clinicSlug}`);
+
+        await logAudit(business.id, status === 'PAUSED' ? 'PAUSE' : status === 'OPEN' ? 'RESUME' : 'CLOSE');
+        revalidatePath(`/${slug}`);
         return { success: true };
     } catch (e) {
         return { error: (e as Error).message };
     }
 }
 
-export async function cancelToken(clinicSlug: string, tokenId: string) {
-    try {
-        const supabase = createClient();
-        const { error } = await supabase.from('tokens').update({ status: 'CANCELLED' }).eq('id', tokenId);
-        if (error) throw error;
-        revalidatePath(`/${clinicSlug}`);
-        return { success: true };
-    } catch (e) {
-        return { error: (e as Error).message };
-    }
-}
 
-export async function recallToken(clinicSlug: string, tokenId: string) {
+// 9. HISTORY
+export async function getTokensForDate(clinicSlug: string, date: string) {
+    const supabase = createClient();
     try {
-        const supabase = createClient();
-        // Logic Changed: Set status to WAITING, but keep is_priority AS IS.
-        const { error } = await supabase.from('tokens').update({ status: 'WAITING' }).eq('id', tokenId);
-        if (error) throw error;
-        revalidatePath(`/${clinicSlug}`);
-        return { success: true };
-    } catch (e) {
-        return { error: (e as Error).message };
-    }
-}
+        const business = await getBusinessBySlug(clinicSlug);
+        if (!business) return { error: "Business not found" };
 
-export async function submitFeedback(clinicSlug: string, tokenId: string, rating: number, feedback: string) {
-    try {
-        const supabase = createAdminClient();
-        const { error } = await supabase.from('tokens')
-            .update({ rating, feedback })
-            .eq('id', tokenId)
-            .select()
+        const { data: session } = await supabase
+            .from('sessions')
+            .select('id')
+            .eq('business_id', business.id)
+            .eq('date', date)
             .single();
 
-        if (error) throw error;
-        // Count check is just for debugging; admin client will work if ID exists.
+        if (!session) return { tokens: [] };
 
-        revalidatePath(`/${clinicSlug}`);
-        return { success: true };
-    } catch (e) {
-        return { error: (e as Error).message };
-    }
-}
-
-export async function pauseQueue(clinicSlug: string) {
-    try {
-        const supabase = createClient();
-        const today = getTodayString();
-        const { data: clinic } = await supabase.from('clinics').select('id').eq('slug', clinicSlug).single();
-        if (!clinic) throw new Error("Clinic not found");
-
-        const { error } = await supabase.from('sessions').update({ status: 'PAUSED' }).eq('clinic_id', clinic.id).eq('date', today);
-        if (error) throw error;
-
-        revalidatePath(`/${clinicSlug}`);
-        return { success: true };
-    } catch (e) {
-        return { error: (e as Error).message };
-    }
-}
-
-export async function resumeQueue(clinicSlug: string) {
-    try {
-        const supabase = createClient();
-        const today = getTodayString();
-        const { data: clinic } = await supabase.from('clinics').select('id').eq('slug', clinicSlug).single();
-        if (!clinic) throw new Error("Clinic not found");
-
-        const { error } = await supabase.from('sessions').update({ status: 'OPEN' }).eq('clinic_id', clinic.id).eq('date', today);
-        if (error) throw error;
-
-        revalidatePath(`/${clinicSlug}`);
-        return { success: true };
-    } catch (e) {
-        return { error: (e as Error).message };
-    }
-}
-
-export async function addEmergencyToken(clinicSlug: string) {
-    // True Priority = Triggers E-X logic
-    return createToken(clinicSlug, "0000000000", "🚨 EMERGENCY", true);
-}
-
-export async function closeQueue(clinicSlug: string) {
-    try {
-        const supabase = createClient();
-        const today = getTodayString();
-        const { data: clinic } = await supabase.from('clinics').select('id').eq('slug', clinicSlug).single();
-        if (!clinic) throw new Error("Clinic not found");
-
-        const { error } = await supabase.from('sessions').update({ status: 'CLOSED' }).eq('clinic_id', clinic.id).eq('date', today);
-        if (error) throw error;
-
-        revalidatePath(`/${clinicSlug}`);
-        return { success: true };
-    } catch (e) {
-        return { error: (e as Error).message };
-    }
-}
-
-export async function getTokensForDate(clinicSlug: string, date: string) {
-    const supabase = createAdminClient();
-    try {
-        const { data: clinic } = await supabase.from('clinics').select('id').eq('slug', clinicSlug).single();
-        if (!clinic) return { error: "Clinic not found" };
-
-        const { data: session } = await supabase.from('sessions').select('id').eq('clinic_id', clinic.id).eq('date', date).single();
-        if (!session) return { tokens: [] }; // No session = no tokens
-
-        const { data: tokens } = await supabase.from('tokens')
+        const { data } = await supabase
+            .from('tokens')
             .select('*')
             .eq('session_id', session.id)
             .order('token_number', { ascending: true });
 
-        return {
-            tokens: tokens?.map(t => ({
-                id: t.id,
-                clinicId: t.clinic_id,
-                sessionId: t.session_id,
-                tokenNumber: t.token_number,
-                customerName: t.customer_name,
-                customerPhone: t.customer_phone,
-                status: t.status,
-                isPriority: t.is_priority,
-                rating: t.rating || undefined,
-                feedback: t.feedback || undefined,
-                createdAt: t.created_at
-            })) || []
-        };
+        return { tokens: data || [] };
     } catch (e) {
         return { error: (e as Error).message };
     }
-}
-
-// Internal Helper for Approaching SMS
-async function checkAndSendApproachingSMS(clinicSlug: string) {
-    const supabase = createAdminClient();
-    const today = getTodayString();
-
-    // 1. Get Context
-    const { data: clinic } = await supabase.from('clinics').select('id, name').eq('slug', clinicSlug).single();
-    if (!clinic) return;
-
-    const { data: session } = await supabase.from('sessions').select('id').eq('clinic_id', clinic.id).eq('date', today).single();
-    if (!session) return;
-
-    // 2. Get Waiting List (Top 3)
-    // Ordered by Priority DESC, then Token Number ASC
-    const { data: waitingTokens } = await supabase
-        .from('tokens')
-        .select('*')
-        .eq('session_id', session.id)
-        .eq('status', 'WAITING')
-        .order('is_priority', { ascending: false })
-        .order('token_number', { ascending: true })
-        .limit(3);
-
-    if (!waitingTokens || waitingTokens.length < 3) return;
-
-    // 3. Identify 3rd Person
-    const targetToken = waitingTokens[2]; // Index 2 = 3rd person
-    if (!targetToken.customer_phone || targetToken.customer_phone.length < 10) return;
-
-    // 4. Check if already sent
-    // We check message_logs for this specific token and content type
-    const APPROACHING_KEYWORD = "Approaching Alert";
-    const { data: existingLog } = await supabase
-        .from('message_logs')
-        .select('id')
-        .eq('token_id', targetToken.id)
-        .ilike('message_text', `%${APPROACHING_KEYWORD}%`) // simple check
-        .single();
-
-    if (existingLog) return; // Already sent
-
-    // 5. Send SMS
-    const formattedToken = formatToken(targetToken.token_number, targetToken.is_priority);
-    const msg = `${clinic.name}: Heads up! You are 3rd in line (${formattedToken}). Please be ready at the clinic. [${APPROACHING_KEYWORD}]`;
-
-    await sendSMS(targetToken.customer_phone, msg);
-    await logMessageToDB(clinic.id, targetToken.id, targetToken.customer_phone, msg, 'sms');
 }
