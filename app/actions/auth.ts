@@ -10,7 +10,7 @@ export async function login(formData: FormData) {
 
     const supabase = createClient();
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error, data: authData } = await supabase.auth.signInWithPassword({
         email,
         password,
     });
@@ -20,43 +20,50 @@ export async function login(formData: FormData) {
         return { error: error.message };
     }
 
-    // Find the clinic for this user
-    const { data: { user } } = await supabase.auth.getUser();
-
+    // Find the logged-in user
+    const user = authData.user;
     if (!user) {
-        console.error("No user found after login");
         return { error: "User not found" };
     }
 
-    // Fetch staff user record to get clinic_id
+    // 1. IS SUPER ADMIN BYPASS?
+    const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@qlink.com";
+    if (user.email === ADMIN_EMAIL) {
+        // Just let them straight into the Super Admin panel.
+        revalidatePath("/admin", "layout");
+        redirect("/admin");
+    }
+
+    // 2. IS REGULAR STAFF? Let's find their clinic routing
+    // Fetch staff user record to get business_id
     const { data: staffUser, error: staffError } = await supabase
         .from('staff_users')
-        .select('clinic_id')
-        .eq('email', email)
+        .select('business_id')
+        .eq('id', user.id) // Query by UUID, since email is removed from staff_users
         .limit(1)
         .maybeSingle();
 
     if (staffError || !staffUser) {
         console.error("Staff user lookup failed:", staffError?.message || "User not found in staff_users table");
         await supabase.auth.signOut();
-        return { error: "No clinic associated with this account." };
+        return { error: "No clinic associated with this account. Check with Admin." };
     }
 
     // Fetch clinic slug
-    const { data: clinic, error: clinicError } = await supabase
-        .from('clinics')
+    const { data: business, error: businessError } = await supabase
+        .from('businesses')
         .select('slug')
-        .eq('id', staffUser.clinic_id)
+        .eq('id', staffUser.business_id)
         .single();
 
-    if (clinicError || !clinic) {
-        console.error("Clinic lookup failed:", clinicError?.message);
+    if (businessError || !business) {
+        console.error("Clinic lookup failed:", businessError?.message);
         await supabase.auth.signOut();
-        return { error: "Clinic not found." };
+        return { error: "Clinic not found or deactivated." };
     }
 
     revalidatePath("/", "layout");
-    redirect(`/${clinic.slug}/reception`);
+    redirect(`/${business.slug}/reception`);
 }
 
 export async function logout() {
