@@ -23,6 +23,11 @@ async function getBusinessBySlug(slug: string) {
     return data;
 }
 
+export async function getBusinessId(slug: string) {
+    const business = await getBusinessBySlug(slug);
+    return business?.id || null;
+}
+
 import { getClinicDate } from "@/lib/date";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -310,6 +315,38 @@ async function updateSessionStatus(slug: string, status: 'OPEN' | 'CLOSED' | 'PA
     }
 }
 
+
+export async function getDashboardData(businessId: string) {
+    const supabase = createAdminClient();
+    try {
+        const today = getClinicDate();
+
+        // Get active session
+        const { data: session } = await supabase
+            .from('sessions')
+            .select('*')
+            .eq('business_id', businessId)
+            .eq('date', today)
+            .in('status', ['OPEN', 'PAUSED'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (!session) return { session: null, tokens: [] };
+
+        // Get tokens
+        const { data: tokens } = await supabase
+            .from('tokens')
+            .select('*')
+            .eq('session_id', session.id)
+            .order('token_number', { ascending: true });
+
+        return { session, tokens: tokens || [] };
+    } catch (e) {
+        console.error("Dashboard Data Fetch Error:", e);
+        return { session: null, tokens: [] };
+    }
+}
 
 // 9. HISTORY
 export async function getTokensForDate(clinicSlug: string, date: string) {

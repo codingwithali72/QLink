@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Session, Token } from "@/types/firestore";
 import { useOfflineSync } from "./useOfflineSync";
+import { getBusinessId, getDashboardData } from "@/app/actions/queue";
 
 import { getClinicDate } from "@/lib/date";
 
@@ -28,14 +29,9 @@ export function useClinicRealtime(clinicSlug: string) {
         async function fetchBusinessId() {
             if (!clinicSlug) return;
             try {
-                const { data, error } = await supabase
-                    .from('businesses')
-                    .select('id')
-                    .eq('slug', clinicSlug)
-                    .single();
-
-                if (data) setBusinessId(data.id);
-                else console.error("Business not found:", error);
+                const id = await getBusinessId(clinicSlug);
+                if (id) setBusinessId(id);
+                else console.error("Business not found for realtime hook");
             } catch (err) {
                 console.error("Error fetching business:", err);
             }
@@ -48,33 +44,17 @@ export function useClinicRealtime(clinicSlug: string) {
         if (!businessId) return;
 
         try {
-            const today = getTodayString();
+            const res = await getDashboardData(businessId);
 
-            // 2. Get Session
-            // We search for OPEN or PAUSED or CLOSED session for today
-            const { data: dbSession } = await supabase
-                .from('sessions')
-                .select('*')
-                .eq('business_id', businessId)
-                .eq('date', today)
-                .single();
-
-            if (dbSession) {
-                const mappedSession = mapSession(dbSession);
+            if (res.session) {
+                const mappedSession = mapSession(res.session);
                 setSession(prev => {
                     if (JSON.stringify(prev) !== JSON.stringify(mappedSession)) return mappedSession;
                     return prev;
                 });
 
-                // 3. Get Tokens
-                const { data: dbTokens } = await supabase
-                    .from('tokens')
-                    .select('*')
-                    .eq('session_id', dbSession.id)
-                    .order('token_number', { ascending: true });
-
-                if (dbTokens) {
-                    setTokens(dbTokens.map(mapToken));
+                if (res.tokens) {
+                    setTokens(res.tokens.map(mapToken));
                 } else {
                     setTokens([]);
                 }
@@ -100,26 +80,19 @@ export function useClinicRealtime(clinicSlug: string) {
         }, 100);
     }, [fetchData]);
 
-    // Setup Polling & Realtime
+    // Setup Polling
     useEffect(() => {
         if (!businessId) return;
 
         fetchData();
-        pollingInterval.current = setInterval(fetchData, 5000);
-
-        const channel = supabase.channel(`business:${businessId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions', filter: `business_id=eq.${businessId}` }, debouncedFetch)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'tokens', filter: `business_id=eq.${businessId}` }, debouncedFetch)
-            .subscribe((status) => {
-                setIsConnected(status === 'SUBSCRIBED');
-            });
+        setIsConnected(true);
+        pollingInterval.current = setInterval(fetchData, 3000);
 
         return () => {
             if (pollingInterval.current) clearInterval(pollingInterval.current);
             if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
-            supabase.removeChannel(channel);
         };
-    }, [businessId, fetchData, debouncedFetch]);
+    }, [businessId, fetchData]);
 
     // Offline Sync - passing businessId explicitly if needed, but keeping simple for now
     // Note: useOfflineSync might need updates if it relies on old types
