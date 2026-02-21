@@ -8,6 +8,9 @@ import { useState, useEffect, useCallback } from "react";
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
+// ⭐ Replace this with your real Google Maps review link
+const GOOGLE_REVIEW_URL = "https://g.page/r/CaBC123ExampleClinic/review";
+
 export default function TicketPage({ params }: { params: { clinicSlug: string; tokenId: string } }) {
     const [actionLoading, setActionLoading] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
@@ -90,6 +93,10 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         await submitFeedback(params.tokenId, rating, feedbackText);
         setFeedbackLoading(false);
         setFeedbackSubmitted(true);
+        // 4 or 5 stars → redirect to Google review page
+        if (rating >= 4) {
+            setTimeout(() => window.open(GOOGLE_REVIEW_URL, "_blank"), 800);
+        }
     };
 
     const handleCancel = async () => {
