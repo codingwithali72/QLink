@@ -197,38 +197,9 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
 }
 
 // 3. NEXT
-export async function nextPatient(clinicSlug: string, tokenId?: string, roomNumber?: string) {
-    const supabase = createClient();
-    try {
-        const business = await getBusinessBySlug(clinicSlug);
-        if (!business) return { error: "Clinic not found" };
-
-        const session = await getActiveSession(business.id);
-        if (!session) return { error: "No active session" };
-
-        const user = await getAuthenticatedUser();
-        const { data, error } = await supabase.rpc('rpc_process_queue_action', {
-            p_business_id: business.id,
-            p_session_id: session.id,
-            p_staff_id: user?.id,
-            p_action: 'NEXT',
-            p_token_id: tokenId || null,
-            p_room_number: roomNumber || null
-        });
-
-        if (error) throw error;
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = data as any;
-        if (!result.success) return { error: result.error || result.message };
-
-        await logAudit(business.id, 'NEXT', { result });
-
-        revalidatePath(`/${clinicSlug}`);
-        return { success: true, data: result };
-    } catch (e) {
-        return { error: (e as Error).message };
-    }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function nextPatient(clinicSlug: string, tokenId?: string) {
+    return processQueueAction(clinicSlug, 'NEXT', tokenId);
 }
 
 // 4. SKIP
