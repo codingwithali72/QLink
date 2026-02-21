@@ -211,7 +211,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                             </div>
                         )}
 
-                        {!isDone && !isCancelled && !isSkipped && !isServing && (
+                        {!isDone && !isCancelled && !isSkipped && !isServing && tokenData.status !== 'PAUSED' && (
                             <>
                                 {/* GRID: Now Serving | Remaining */}
                                 <div className="grid grid-cols-2 gap-4">
@@ -239,6 +239,17 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                 </div>
                             </>
                         )}
+
+                        {/* B3 FIX: Show pause notice instead of misleading ETA */}
+                        {tokenData.status === 'PAUSED' && (
+                            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-6 text-center space-y-2">
+                                <div className="text-3xl">⏸️</div>
+                                <h4 className="font-bold text-orange-800">Queue Temporarily Paused</h4>
+                                <p className="text-sm text-orange-600">The doctor is attending to an emergency. Please stay seated — the queue will resume shortly.</p>
+                                <p className="text-xs text-orange-400 font-semibold uppercase tracking-wider mt-2">ETA unavailable during pause</p>
+                            </div>
+                        )}
+
 
                         {/* Show Room Allocation if SERVING */}
                         {isServing && tokenData.room_number && (

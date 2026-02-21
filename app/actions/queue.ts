@@ -213,6 +213,33 @@ export async function submitFeedback(tokenId: string, rating: number, feedbackTe
     }
 }
 
+// B4 FIX: Edit token patient name / phone after creation
+export async function updateToken(clinicSlug: string, tokenId: string, name: string, phone: string) {
+    if (!tokenId || !clinicSlug) return { error: "Missing data" };
+    try {
+        const user = await getAuthenticatedUser();
+        if (!user) return { error: "Unauthorized" };
+
+        const supabase = createAdminClient();
+        const business = await getBusinessBySlug(clinicSlug);
+        if (!business) return { error: "Business not found" };
+
+        const { error } = await supabase
+            .from('tokens')
+            .update({ patient_name: name || null, patient_phone: phone || null })
+            .eq('id', tokenId)
+            .eq('business_id', business.id) // C3 safety: verify ownership
+            .in('status', ['WAITING', 'SERVING']); // only editable while active
+
+        if (error) throw error;
+        await logAudit(business.id, 'TOKEN_EDITED', { token_id: tokenId });
+        revalidatePath(`/${clinicSlug}`);
+        return { success: true };
+    } catch (e) {
+        return { error: (e as Error).message };
+    }
+}
+
 // 3. NEXT
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function nextPatient(clinicSlug: string, tokenId?: string) {
