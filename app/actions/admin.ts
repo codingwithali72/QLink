@@ -12,7 +12,7 @@ async function isSuperAdmin() {
     return user?.email === ADMIN_EMAIL;
 }
 
-export async function createBusiness(name: string, slug: string, phone: string, email?: string, password?: string) {
+export async function createBusiness(name: string, slug: string, phone: string, email?: string, password?: string, existingUserId?: string) {
     if (!await isSuperAdmin()) return { error: "Unauthorized" };
 
     const supabase = createAdminClient();
@@ -31,8 +31,11 @@ export async function createBusiness(name: string, slug: string, phone: string, 
 
     if (bizError || !newBusiness) return { error: bizError?.message || "Failed to create business" };
 
+    let targetUserId = existingUserId;
+    let createdNewUser = false;
+
     // Create Staff User Auth
-    if (email && password) {
+    if (!targetUserId && email && password) {
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
             email,
             password,
@@ -44,19 +47,30 @@ export async function createBusiness(name: string, slug: string, phone: string, 
             return { error: authError?.message || "Failed to create auth user" };
         }
 
+        targetUserId = authData.user.id;
+        createdNewUser = true;
+    }
+
+    if (targetUserId) {
         // Link Auth to Clinic
         const { error: staffError } = await supabase.from('staff_users').insert({
-            id: authData.user.id,
+            id: targetUserId,
             business_id: newBusiness.id,
             name: `${name} Reception`,
             role: 'RECEPTIONIST'
         });
 
         if (staffError) {
-            await supabase.auth.admin.deleteUser(authData.user.id);
+            if (createdNewUser) {
+                await supabase.auth.admin.deleteUser(targetUserId);
+            }
             await supabase.from('businesses').delete().eq('id', newBusiness.id); // Rollback
             return { error: staffError.message };
         }
+    } else {
+        // Rollback business if no user ID was provided or created
+        await supabase.from('businesses').delete().eq('id', newBusiness.id);
+        return { error: "No user ID provided or created." };
     }
 
     revalidatePath('/admin');
@@ -79,6 +93,28 @@ export async function resetBusinessSession(businessId: string) {
 
     const { error } = await supabase.from('sessions').update({ status: 'CLOSED' }).eq('business_id', businessId).eq('date', today);
     if (error) return { error: error.message };
+    revalidatePath('/admin');
+    return { success: true };
+}
+
+export async function deleteBusiness(id: string) {
+    if (!await isSuperAdmin()) return { error: "Unauthorized" };
+    const supabase = createAdminClient();
+
+    // Find staff users (auth users) before deleting business
+    const { data: staffUsers } = await supabase.from('staff_users').select('id').eq('business_id', id);
+
+    // Delete the business (this cascades to staff_users, sessions, tokens, etc. in Postgres)
+    const { error } = await supabase.from('businesses').delete().eq('id', id);
+    if (error) return { error: error.message };
+
+    // Clean up auth.users (Supabase Auth)
+    if (staffUsers && staffUsers.length > 0) {
+        for (const staff of staffUsers) {
+            await supabase.auth.admin.deleteUser(staff.id);
+        }
+    }
+
     revalidatePath('/admin');
     return { success: true };
 }

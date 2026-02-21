@@ -146,7 +146,7 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
 }
 
 // 3. NEXT
-export async function nextPatient(clinicSlug: string) {
+export async function nextPatient(clinicSlug: string, tokenId?: string, roomNumber?: string) {
     const supabase = createClient();
     try {
         const business = await getBusinessBySlug(clinicSlug);
@@ -160,7 +160,9 @@ export async function nextPatient(clinicSlug: string) {
             p_business_id: business.id,
             p_session_id: session.id,
             p_staff_id: user?.id,
-            p_action: 'NEXT'
+            p_action: 'NEXT',
+            p_token_id: tokenId || null,
+            p_room_number: roomNumber || null
         });
 
         if (error) throw error;
@@ -198,9 +200,26 @@ export async function undoLastAction(clinicSlug: string) {
     return processQueueAction(clinicSlug, 'UNDO');
 }
 
-// 8. SOS
-export async function addEmergencyToken(clinicSlug: string) {
-    return createToken(clinicSlug, "0000000000", "🚨 EMERGENCY", true);
+// 8. PUBLIC TRACKING (Replaces Realtime)
+export async function getPublicTokenStatus(tokenId: string) {
+    if (!tokenId) return { error: "Invalid token ID" };
+    try {
+        const supabase = createAdminClient();
+        const { data, error } = await supabase.rpc('rpc_get_public_token_status', {
+            p_token_id: tokenId
+        });
+
+        if (error) throw error;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = data as any;
+        if (!result.success) return { error: result.error };
+
+        return { success: true, data: result };
+    } catch (e) {
+        console.error("Public Token Error:", e);
+        return { error: (e as Error).message };
+    }
 }
 
 // 9. SESSION CONTROLS

@@ -1,29 +1,51 @@
 "use client";
 
-import { useClinicRealtime } from "@/hooks/useRealtime";
-import { cancelToken } from "@/app/actions/queue";
+import { cancelToken, getPublicTokenStatus } from "@/app/actions/queue";
 import { Button } from "@/components/ui/button";
 import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function TicketPage({ params }: { params: { clinicSlug: string; tokenId: string } }) {
-    const { session, tokens, loading, isConnected, isSynced } = useClinicRealtime(params.clinicSlug);
     const [actionLoading, setActionLoading] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
 
-    const [showRealtimeError, setShowRealtimeError] = useState(false);
-    useEffect(() => {
-        // Only show error if we previously had connection
-        if ((!isConnected || isOffline) && !loading && isSynced) {
-            const timer = setTimeout(() => setShowRealtimeError(true), 5000);
-            return () => clearTimeout(timer);
-        } else {
-            setShowRealtimeError(false);
+    // Polling State
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [tokenData, setTokenData] = useState<any>(null);
+    const [tokensAhead, setTokensAhead] = useState(0);
+    const [currentServingDisplay, setCurrentServingDisplay] = useState("--");
+    const [loading, setLoading] = useState(true);
+    const [syncError, setSyncError] = useState(false);
+
+    const fetchStatus = useCallback(async () => {
+        if (isOffline) return;
+        try {
+            const res = await getPublicTokenStatus(params.tokenId);
+            if (res.success && res.data) {
+                setTokenData(res.data.token);
+                setTokensAhead(res.data.tokens_ahead);
+                setCurrentServingDisplay(res.data.current_serving);
+                setSyncError(false);
+            } else {
+                setSyncError(true);
+            }
+        } catch (error) {
+            console.error(error);
+            setSyncError(true);
+        } finally {
+            setLoading(false);
         }
-    }, [isConnected, isOffline, loading, isSynced]);
+    }, [params.tokenId, isOffline]);
+
+    // Setup Polling
+    useEffect(() => {
+        fetchStatus(); // initial fetch
+        const interval = setInterval(fetchStatus, 5000); // Poll every 5 seconds
+        return () => clearInterval(interval);
+    }, [fetchStatus]);
 
     useEffect(() => {
         const handleOnline = () => setIsOffline(false);
@@ -45,31 +67,15 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         return () => clearInterval(interval);
     }, []);
 
-    // LOADING STATE: 
-    const token = tokens.find(t => t.id === params.tokenId);
-    const [showError, setShowError] = useState(false);
-    const missingData = !token || !session;
-
-    // Grace period for error
-    useEffect(() => {
-        if (!loading && isSynced && missingData) {
-            const timer = setTimeout(() => setShowError(true), 2000);
-            return () => clearTimeout(timer);
-        } else if (!missingData) {
-            setShowError(false);
-        }
-    }, [loading, isSynced, missingData]);
-
-    if (loading || (missingData && (!isSynced || !showError))) {
+    if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <Loader2 className="w-10 h-10 animate-spin text-slate-400" />
-                {!loading && missingData && <p className="absolute mt-16 text-xs text-slate-400">Verifying status...</p>}
             </div>
         );
     }
 
-    if (missingData) {
+    if (syncError || !tokenData) {
         return <div className="p-8 text-center mt-10 text-slate-500">Ticket not found or session expired.</div>;
     }
 
@@ -78,6 +84,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         setActionLoading(true);
         const res = await cancelToken(params.clinicSlug, params.tokenId);
         if (res.error) alert("Error: " + res.error);
+        else fetchStatus(); // Refresh instantly
         setActionLoading(false);
     };
 
@@ -85,7 +92,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         if (navigator.share) {
             try {
                 await navigator.share({
-                    title: `My Token ${formatToken(token.tokenNumber, token.isPriority)}`,
+                    title: `My Token ${formatToken(tokenData.token_number, tokenData.is_priority)}`,
                     text: `Track my queue position for ${params.clinicSlug}`,
                     url: window.location.href,
                 });
@@ -99,34 +106,19 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     };
 
     // --- LOGIC ---
-    const isServing = token.status === "SERVING";
-    const isDone = token.status === "SERVED";
-    const isCancelled = token.status === "CANCELLED";
-    const isSkipped = token.status === "SKIPPED";
-    const isEmergency = token.isPriority;
+    const isServing = tokenData.status === "SERVING";
+    const isDone = tokenData.status === "SERVED";
+    const isCancelled = tokenData.status === "CANCELLED";
+    const isSkipped = tokenData.status === "SKIPPED";
+    const isEmergency = tokenData.is_priority;
 
-    // --- CURRENT SERVING LOGIC ---
-    const servingToken = tokens.find(t => t.status === 'SERVING');
-    const currentServingDisplay = servingToken ? formatToken(servingToken.tokenNumber, servingToken.isPriority) : "--";
-
-    // --- WAITING CALCULATION ---
-    let tokensAhead = 0;
-    if (token.status === 'WAITING') {
-        tokensAhead = tokens.filter(t => {
-            if (t.status !== 'WAITING') return false;
-            // Sorting logic matches Reception dashboard
-            if (token.isPriority) return t.isPriority && t.tokenNumber < token.tokenNumber;
-            return t.isPriority || t.tokenNumber < token.tokenNumber;
-        }).length;
-    }
-
-    // --- ETA RANGE LOGIC (4-8 mins/person) ---
+    // --- ETA RANGE LOGIC (4-8 mins/ticket) ---
     const minMins = tokensAhead * 4;
     const maxMins = tokensAhead * 8;
 
     let etaText = "";
-    if (tokensAhead === 0 && servingToken) etaText = "Next Up";
-    else if (tokensAhead === 0 && !servingToken) etaText = "Ready Now";
+    if (tokensAhead === 0 && currentServingDisplay !== "--") etaText = "Next Up";
+    else if (tokensAhead === 0 && currentServingDisplay === "--") etaText = "Ready Now";
     else if (minMins > 60) etaText = `> 1 hr`;
     else etaText = `${minMins}-${maxMins} mins`;
 
@@ -143,15 +135,14 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     if (isDone) { statusText = "COMPLETED"; statusBg = "bg-blue-600"; pulse = ""; }
     if (isCancelled) { statusText = "CANCELLED"; statusBg = "bg-slate-500"; pulse = ""; }
     if (isSkipped) { statusText = "SKIPPED"; statusBg = "bg-yellow-600"; pulse = ""; }
-    if (session.status === "PAUSED") { statusText = "QUEUE PAUSED"; statusBg = "bg-orange-500"; pulse = "animate-pulse"; }
-    if (session.status === "CLOSED") { statusText = "CLOSED"; statusBg = "bg-slate-700"; pulse = ""; }
+    if (tokenData.status === "PAUSED") { statusText = "QUEUE PAUSED"; statusBg = "bg-orange-500"; pulse = "animate-pulse"; }
 
     return (
         <div className="min-h-screen bg-slate-100 flex flex-col relative">
 
-            {showRealtimeError && (
+            {isOffline && (
                 <div className="absolute top-0 left-0 w-full bg-red-500 text-white text-center text-xs py-2 font-bold z-50 animate-in slide-in-from-top-full">
-                    {isOffline ? "You are offline. Reconnecting..." : "Connecting to live updates..."}
+                    You are offline. Reconnecting...
                 </div>
             )}
 
@@ -164,7 +155,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
 
                         <div className="flex justify-between items-start relative z-10">
                             <div>
-                                <p className="opacity-80 text-xs font-semibold uppercase tracking-wider">Clinic</p>
+                                <p className="opacity-80 text-xs font-semibold uppercase tracking-wider">Workspace</p>
                                 <h2 className="font-bold text-lg leading-tight truncate max-w-[200px]">{params.clinicSlug}</h2>
                             </div>
                             {/* Sync Indicator */}
@@ -175,7 +166,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
 
                         <div className="mt-6 text-center relative z-10">
                             <p className="opacity-80 text-sm uppercase tracking-widest font-medium">Your Token</p>
-                            <h1 className="text-8xl font-black tracking-tighter my-2">{formatToken(token.tokenNumber, token.isPriority)}</h1>
+                            <h1 className="text-8xl font-black tracking-tighter my-2">{formatToken(tokenData.token_number, tokenData.is_priority)}</h1>
                             <span className={`inline-block px-4 py-1.5 rounded-full text-xs font-bold tracking-wide bg-white/20 backdrop-blur-sm ${pulse}`}>
                                 {statusText}
                             </span>
@@ -209,7 +200,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                         <p className="text-3xl font-black text-slate-900 mt-1">{currentServingDisplay}</p>
                                     </div>
                                     <div className="p-4 bg-white rounded-2xl text-center border border-slate-100 shadow-sm">
-                                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Tokens Left</p>
+                                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Tokens Ahead</p>
                                         <p className="text-3xl font-black text-slate-900 mt-1">{tokensAhead}</p>
                                     </div>
                                 </div>
@@ -222,11 +213,20 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                     </div>
                                     <div className="mt-4">
                                         <p className="text-[13px] text-blue-900 font-bold bg-blue-100/80 inline-block px-4 py-2 rounded-xl">
-                                            Keep this page open. Check when tokens left ≤ 5.
+                                            Keep this page open. Check when tokens ahead ≤ 5.
                                         </p>
                                     </div>
                                 </div>
                             </>
+                        )}
+
+                        {/* Show Room Allocation if SERVING */}
+                        {isServing && tokenData.room_number && (
+                            <div className="p-6 bg-green-50 rounded-2xl text-center border-2 border-green-200 shadow-sm animate-in zoom-in">
+                                <p className="text-xs text-green-600 uppercase font-bold tracking-wider">Notice</p>
+                                <p className="text-2xl font-black text-green-900 mt-1">Please proceed to</p>
+                                <p className="text-5xl font-black text-green-700 mt-2">{tokenData.room_number}</p>
+                            </div>
                         )}
 
                         {/* Show if COMPLETED */}

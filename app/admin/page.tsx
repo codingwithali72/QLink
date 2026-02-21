@@ -1,11 +1,11 @@
 "use client";
 
-import { createBusiness, getAdminStats, toggleBusinessStatus, resetBusinessSession } from "@/app/actions/admin";
+import { createBusiness, getAdminStats, toggleBusinessStatus, resetBusinessSession, deleteBusiness } from "@/app/actions/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw } from "lucide-react";
+import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
@@ -18,8 +18,10 @@ export default function AdminPage() {
     const [name, setName] = useState("");
     const [slug, setSlug] = useState("");
     const [phone, setPhone] = useState("");
+    const [linkMode, setLinkMode] = useState<"new" | "existing">("new");
     const [adminEmail, setAdminEmail] = useState("");
     const [adminPassword, setAdminPassword] = useState("");
+    const [existingUserId, setExistingUserId] = useState("");
     const [actionLoading, setActionLoading] = useState(false);
 
     useEffect(() => {
@@ -37,7 +39,14 @@ export default function AdminPage() {
     async function handleCreate(e: React.FormEvent) {
         e.preventDefault();
         setActionLoading(true);
-        const res = await createBusiness(name, slug, phone, adminEmail, adminPassword);
+        const res = await createBusiness(
+            name,
+            slug,
+            phone,
+            linkMode === 'new' ? adminEmail : undefined,
+            linkMode === 'new' ? adminPassword : undefined,
+            linkMode === 'existing' ? existingUserId : undefined
+        );
         setActionLoading(false);
 
         if (res.error) alert(res.error);
@@ -47,6 +56,7 @@ export default function AdminPage() {
             setPhone("");
             setAdminEmail("");
             setAdminPassword("");
+            setExistingUserId("");
             fetchStats();
         }
     }
@@ -98,16 +108,16 @@ export default function AdminPage() {
                                 <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
                                     <Plus className="w-5 h-5" />
                                 </div>
-                                <h2 className="font-bold text-lg text-white">Board a New Clinic</h2>
+                                <h2 className="font-bold text-lg text-white">Register New Workspace</h2>
                             </div>
 
                             <form onSubmit={handleCreate} className="space-y-5">
                                 <div className="space-y-1.5">
-                                    <Label className="text-slate-300 text-xs uppercase tracking-wider font-bold">Clinic Name</Label>
+                                    <Label className="text-slate-300 text-xs uppercase tracking-wider font-bold">Workspace Name</Label>
                                     <Input
                                         value={name}
                                         onChange={e => setName(e.target.value)}
-                                        placeholder="E.g., Prime Care Clinic"
+                                        placeholder="E.g., Customer Service Desk 1"
                                         required
                                         className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500"
                                     />
@@ -118,7 +128,7 @@ export default function AdminPage() {
                                         <Input
                                             value={slug}
                                             onChange={e => setSlug(e.target.value)}
-                                            placeholder="prime-care"
+                                            placeholder="main-desk"
                                             required
                                             className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500"
                                         />
@@ -137,31 +147,65 @@ export default function AdminPage() {
 
                                 <div className="pt-4 mt-2 border-t border-white/10 space-y-5">
                                     <div className="flex items-center justify-between">
-                                        <Label className="text-indigo-400 text-xs uppercase tracking-wider font-bold">Admin Credentials</Label>
-                                        <span className="text-[10px] text-slate-500 bg-black/30 px-2 py-0.5 rounded">Auto-linked</span>
+                                        <Label className="text-indigo-400 text-xs uppercase tracking-wider font-bold">Staff Assignment</Label>
+                                        <div className="flex bg-black/30 rounded-lg p-1 text-[10px] md:text-xs">
+                                            <button
+                                                type="button"
+                                                onClick={() => setLinkMode("new")}
+                                                className={`px-3 py-1 rounded-md transition-colors ${linkMode === 'new' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                                            >New Staff</button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setLinkMode("existing")}
+                                                className={`px-3 py-1 rounded-md transition-colors ${linkMode === 'existing' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                                            >Link UUID</button>
+                                        </div>
                                     </div>
 
-                                    <div className="space-y-1.5">
-                                        <Input
-                                            type="email"
-                                            value={adminEmail}
-                                            onChange={e => setAdminEmail(e.target.value)}
-                                            placeholder="reception@clinic.com"
-                                            required
-                                            className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <Input
-                                            type="password"
-                                            value={adminPassword}
-                                            onChange={e => setAdminPassword(e.target.value)}
-                                            placeholder="Set secure password"
-                                            minLength={6}
-                                            required
-                                            className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500"
-                                        />
-                                    </div>
+                                    {linkMode === "new" ? (
+                                        <div className="space-y-4">
+                                            <p className="text-[11px] text-indigo-300 leading-tight bg-indigo-500/10 p-2.5 rounded-lg border border-indigo-500/20 text-balance">
+                                                We will <b>automatically</b> create a new login for this workspace. You do NOT need to go to your Supabase dashboard.
+                                            </p>
+                                            <div className="space-y-1.5">
+                                                <Input
+                                                    type="email"
+                                                    value={adminEmail}
+                                                    onChange={e => setAdminEmail(e.target.value)}
+                                                    placeholder="admin@workspace.com"
+                                                    required={linkMode === 'new'}
+                                                    className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Input
+                                                    type="password"
+                                                    value={adminPassword}
+                                                    onChange={e => setAdminPassword(e.target.value)}
+                                                    placeholder="Set secure password"
+                                                    minLength={6}
+                                                    required={linkMode === 'new'}
+                                                    className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500"
+                                                />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <p className="text-[11px] text-slate-400 leading-tight bg-slate-500/10 p-2.5 rounded-lg border border-slate-500/20 text-balance">
+                                                Already created a user manually in the Supabase Dashboard? Paste their <b>User UUID</b> here to grant them access.
+                                            </p>
+                                            <div className="space-y-1.5">
+                                                <Input
+                                                    type="text"
+                                                    value={existingUserId}
+                                                    onChange={e => setExistingUserId(e.target.value)}
+                                                    placeholder="Paste Supabase Auth User UUID"
+                                                    required={linkMode === 'existing'}
+                                                    className="bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500 font-mono text-xs"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <Button
@@ -178,13 +222,13 @@ export default function AdminPage() {
                     {/* RIGHT COL: Tenant List */}
                     <div className="lg:col-span-8 space-y-4">
                         <div className="flex items-center justify-between px-2">
-                            <h2 className="font-bold text-xl text-white">Active Deployments ({stats.businesses?.length})</h2>
+                            <h2 className="font-bold text-xl text-white">Active Workspaces ({stats.businesses?.length})</h2>
                         </div>
 
                         <div className="space-y-3">
                             {stats.businesses && stats.businesses.length === 0 && (
                                 <div className="p-8 text-center rounded-2xl border-2 border-dashed border-slate-700 text-slate-500">
-                                    No infrastructure deployed yet.
+                                    No workspaces added yet.
                                 </div>
                             )}
 
@@ -209,7 +253,7 @@ export default function AdminPage() {
                                     <div className="flex flex-wrap items-center gap-2">
                                         <Link href={`/${b.slug}/reception`} target="_blank">
                                             <Button variant="outline" size="sm" className="h-9 bg-transparent border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
-                                                Reception <ExternalLink className="w-3.5 h-3.5 ml-2 opacity-70" />
+                                                Dashboard <ExternalLink className="w-3.5 h-3.5 ml-2 opacity-70" />
                                             </Button>
                                         </Link>
 
@@ -240,6 +284,23 @@ export default function AdminPage() {
                                             }}
                                         >
                                             <RefreshCw className="w-4 h-4" />
+                                        </Button>
+
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            title="Delete business"
+                                            className="h-9 px-3 text-red-500 hover:bg-red-500/10 hover:text-red-400"
+                                            onClick={async () => {
+                                                const confirmText = prompt(`Type "DELETE" to permanently delete ${b.name} and all its data.`);
+                                                if (confirmText === 'DELETE') {
+                                                    const res = await deleteBusiness(b.id);
+                                                    if (res?.error) alert(res.error);
+                                                    fetchStats();
+                                                }
+                                            }}
+                                        >
+                                            <Trash2 className="w-4 h-4" />
                                         </Button>
                                     </div>
                                 </div>

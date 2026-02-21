@@ -1,12 +1,13 @@
 "use client";
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
-import { addEmergencyToken, nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, undoLastAction } from "@/app/actions/queue";
+import { nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, undoLastAction } from "@/app/actions/queue";
 import { logout } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,11 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     // Manual Token Form
     const [manualName, setManualName] = useState("");
     const [manualPhone, setManualPhone] = useState("");
+    const [manualIsPriority, setManualIsPriority] = useState(false);
+
+    // Queue Controls
+    const [roomNumber, setRoomNumber] = useState("");
+
     const [isLogOpen, setIsLogOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
 
@@ -99,15 +105,23 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     }, [tokens, displayedTokens, selectedDate, todayStr]);
 
     // Handlers
-    const handleNext = () => performAction(() => nextPatient(params.clinicSlug));
-    const handleSkip = () => { if (servingToken && confirm("Skip current patient?")) performAction(() => skipToken(params.clinicSlug, servingToken.id)); };
-    const handleEmergency = () => { if (confirm("🚨 Create EMERGENCY Token?")) performAction(() => addEmergencyToken(params.clinicSlug)); };
+    const handleNext = () => performAction(() => nextPatient(params.clinicSlug, undefined, roomNumber));
+    const handleCallManual = (tokenId: string) => performAction(() => nextPatient(params.clinicSlug, tokenId, roomNumber));
+
+    const handleSkip = () => { if (servingToken && confirm("Skip current ticket?")) performAction(() => skipToken(params.clinicSlug, servingToken.id)); };
+
+    const handleEmergencyClick = () => {
+        setManualIsPriority(true);
+        setManualName("");
+        setManualPhone("0000000000");
+        setIsAddModalOpen(true);
+    };
     const handleUndo = () => { if (confirm("Undo the last action?")) performAction(() => undoLastAction(params.clinicSlug)); };
     const handlePauseToggle = () => { if (session) performAction(() => session.status === 'OPEN' ? pauseQueue(params.clinicSlug) : resumeQueue(params.clinicSlug)); };
     const handleCloseQueue = () => { if (confirm("Are you sure you want to CLOSE the queue?")) performAction(() => closeQueue(params.clinicSlug)); };
     const handleStartSession = () => performAction(() => startSession(params.clinicSlug));
 
-    const handleRecall = (id: string) => { if (confirm("Recall this patient?")) performAction(() => recallToken(params.clinicSlug, id)); };
+    const handleRecall = (id: string) => { if (confirm("Recall this ticket?")) performAction(() => recallToken(params.clinicSlug, id)); };
 
     const handleCancelToken = (id: string) => {
         if (confirm("Cancel this token?")) performAction(() => cancelToken(params.clinicSlug, id));
@@ -116,9 +130,15 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const handleManualAdd = async (e: React.FormEvent) => {
         e.preventDefault();
         setActionLoading(true);
-        const res = await createToken(params.clinicSlug, manualPhone, manualName, false);
+        const res = await createToken(params.clinicSlug, manualPhone, manualName, manualIsPriority);
         if (res.error) alert(res.error);
-        else { setIsAddModalOpen(false); setManualName(""); setManualPhone(""); refresh(); }
+        else {
+            setIsAddModalOpen(false);
+            setManualName("");
+            setManualPhone("");
+            setManualIsPriority(false);
+            refresh();
+        }
         setActionLoading(false);
     };
 
@@ -155,9 +175,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             Q
                         </div>
                         <div>
-                            <h1 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white leading-tight">Reception Dashboard</h1>
+                            <h1 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white leading-tight">Queue Dashboard</h1>
                             <div className="flex items-center gap-2 text-[10px] md:text-xs font-medium text-slate-500 dark:text-slate-400">
-                                <span className="uppercase tracking-wider">{params.clinicSlug}</span>
+                                <span className="uppercase tracking-wider">Workspace: {params.clinicSlug}</span>
                                 <span className="w-1 h-1 rounded-full bg-slate-300"></span>
                                 <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {todayDate}</span>
                             </div>
@@ -211,7 +231,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             ) : (
                                 <div className="text-center z-10 opacity-60">
                                     <div className="text-6xl md:text-7xl font-black text-white/50">--</div>
-                                    <p className="mt-2 text-base md:text-lg font-medium text-blue-100">Waiting for next patient</p>
+                                    <p className="mt-2 text-base md:text-lg font-medium text-blue-100">Waiting for next ticket</p>
                                 </div>
                             )}
 
@@ -238,6 +258,18 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 )}
                             </Button>
 
+                            {/* ROOM ALLOCATION INPUT */}
+                            <div className="col-span-2 md:col-span-4 flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                <Label className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap ml-2">Room / Desk :</Label>
+                                <Input
+                                    value={roomNumber}
+                                    onChange={(e) => setRoomNumber(e.target.value)}
+                                    placeholder="e.g. 101 or Desk 3"
+                                    className="flex-1 font-bold dark:bg-slate-900 border-slate-300 dark:border-slate-600"
+                                    disabled={!isSessionActive}
+                                />
+                            </div>
+
                             {/* SKIP */}
                             <Button
                                 variant="outline"
@@ -252,9 +284,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             {/* EMERGENCY */}
                             <Button
                                 variant="destructive"
-                                onClick={handleEmergency}
+                                onClick={handleEmergencyClick}
                                 disabled={actionLoading || !isSessionActive}
-                                className="h-20 md:h-24 flex flex-col items-center justify-center gap-1 md:gap-2 rounded-2xl shadow-red-500/20 bg-red-600 hover:bg-red-700 border-t-4 border-red-400"
+                                className="col-span-2 md:col-span-1 h-20 md:h-24 flex flex-col items-center justify-center gap-1 md:gap-2 rounded-2xl shadow-red-500/20 bg-red-600 hover:bg-red-700 border-t-4 border-red-400"
                             >
                                 <AlertOctagon className="w-5 h-5 md:w-6 md:h-6" />
                                 <span className="font-bold text-base md:text-lg">SOS</span>
@@ -316,10 +348,20 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                     </Button>
                                 </DialogTrigger>
                                 <DialogContent className="dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-white">
-                                    <DialogHeader><DialogTitle>Add Patient Manually</DialogTitle></DialogHeader>
+                                    <DialogHeader><DialogTitle>Add Walk-in Ticket</DialogTitle></DialogHeader>
                                     <form onSubmit={handleManualAdd} className="space-y-4 py-4">
+                                        <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                                            <div className="space-y-0.5">
+                                                <Label className="font-bold text-slate-900 dark:text-white">Priority / Emergency</Label>
+                                                <p className="text-xs text-slate-500">Push ticket to the front of the queue</p>
+                                            </div>
+                                            <Switch
+                                                checked={manualIsPriority}
+                                                onCheckedChange={setManualIsPriority}
+                                            />
+                                        </div>
                                         <div className="space-y-2">
-                                            <Label className="dark:text-slate-300">Patient Name</Label>
+                                            <Label className="dark:text-slate-300">Customer Name</Label>
                                             <Input value={manualName} onChange={e => setManualName(e.target.value)} placeholder="e.g. John Doe" className="dark:bg-slate-800 dark:border-slate-700" />
                                         </div>
                                         <div className="space-y-2">
@@ -349,7 +391,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                     </div>
                                 ) : (
                                     visibleWaitingTokens.map((t) => (
-                                        <TokenItem key={t.id} token={t} onCancel={handleCancelToken} />
+                                        <TokenItem key={t.id} token={t} onCancel={handleCancelToken} onCall={handleCallManual} />
                                     ))
                                 )}
                             </div>
@@ -372,7 +414,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             </Card>
                         )}
 
-                        {/* Daily Patient Log (Dropdown) */}
                         <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 overflow-hidden">
                             <div
                                 className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
@@ -380,7 +421,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             >
                                 <div className="flex items-center gap-2">
                                     <Users className="w-4 h-4 text-slate-500" />
-                                    <h3 className="font-bold text-slate-700 dark:text-slate-300">Patient Log</h3>
+                                    <h3 className="font-bold text-slate-700 dark:text-slate-300">Session Log</h3>
                                     <Badge variant="secondary" className="ml-2">{displayedTokens.length}</Badge>
                                 </div>
                                 {isLogOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
@@ -398,7 +439,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                     const encodedUri = encodeURI(csvContent);
                                                     const link = document.createElement("a");
                                                     link.setAttribute("href", encodedUri);
-                                                    link.setAttribute("download", `patient_log_${selectedDate}.csv`);
+                                                    link.setAttribute("download", `session_log_${selectedDate}.csv`);
                                                     document.body.appendChild(link);
                                                     link.click();
                                                     document.body.removeChild(link);

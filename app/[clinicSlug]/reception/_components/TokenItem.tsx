@@ -7,11 +7,12 @@ import { Token } from "@/types/firestore";
 interface TokenItemProps {
     token: Token;
     onCancel: (id: string) => void;
+    onCall?: (id: string) => void;
 }
 
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
-export const TokenItem = memo(function TokenItem({ token, onCancel }: TokenItemProps) {
+export const TokenItem = memo(function TokenItem({ token, onCancel, onCall }: TokenItemProps) {
     return (
         <div className={cn("p-3 rounded-xl flex items-center justify-between group transition-colors", token.isPriority ? "bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30" : "bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800")}>
             <div className="flex items-center gap-3">
@@ -23,9 +24,16 @@ export const TokenItem = memo(function TokenItem({ token, onCancel }: TokenItemP
                     <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{token.customerPhone}</p>
                 </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => onCancel(token.id)} className="h-8 w-8 text-slate-300 hover:text-red-500 dark:hover:text-red-400 hover:bg-white dark:hover:bg-slate-700 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                <XCircle className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {onCall && (
+                    <Button variant="outline" size="sm" onClick={() => onCall(token.id)} className="h-8 text-xs font-bold text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/40">
+                        Call
+                    </Button>
+                )}
+                <Button variant="ghost" size="icon" onClick={() => onCancel(token.id)} className="h-8 w-8 text-slate-300 hover:text-red-500 dark:hover:text-red-400 hover:bg-white dark:hover:bg-slate-700 rounded-full">
+                    <XCircle className="w-4 h-4" />
+                </Button>
+            </div>
         </div>
     );
 });
