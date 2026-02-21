@@ -26,7 +26,8 @@ async function getBusinessBySlug(slug: string) {
 import { getClinicDate } from "@/lib/date";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getActiveSession(supabase: any, businessId: string) {
+async function getActiveSession(businessId: string) {
+    const supabase = createAdminClient();
     const today = getClinicDate();
     const { data } = await supabase.from('sessions').select('*').eq('business_id', businessId).eq('date', today).eq('status', 'OPEN').single();
     return data;
@@ -53,7 +54,7 @@ async function logAudit(businessId: string, action: string, details: any = {}) {
 
 // 1. START SESSION (New)
 export async function startSession(clinicSlug: string) {
-    const supabase = createClient();
+    const supabase = createAdminClient();
     try {
         const user = await getAuthenticatedUser();
         if (!user) return { error: "Unauthorized" };
@@ -99,7 +100,7 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Clinic not found" };
 
-        const session = await getActiveSession(supabase, business.id);
+        const session = await getActiveSession(business.id);
         if (!session) return { error: "Queue is CLOSED. Ask reception to start session." };
 
         const createdByStaffId = user?.id || null;
@@ -173,7 +174,7 @@ export async function nextPatient(clinicSlug: string, tokenId?: string, roomNumb
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Clinic not found" };
 
-        const session = await getActiveSession(supabase, business.id);
+        const session = await getActiveSession(business.id);
         if (!session) return { error: "No active session" };
 
         const user = await getAuthenticatedUser();
@@ -261,7 +262,7 @@ async function processQueueAction(slug: string, action: string, tokenId?: string
         const business = await getBusinessBySlug(slug);
         if (!business) return { error: "Business not found" };
 
-        const session = await getActiveSession(supabase, business.id);
+        const session = await getActiveSession(business.id);
         if (!session && action !== 'RESUME_SESSION') return { error: "No active session" };
 
         const user = await getAuthenticatedUser();
@@ -288,7 +289,7 @@ async function processQueueAction(slug: string, action: string, tokenId?: string
 }
 
 async function updateSessionStatus(slug: string, status: 'OPEN' | 'CLOSED' | 'PAUSED') {
-    const supabase = createClient();
+    const supabase = createAdminClient();
     try {
         const business = await getBusinessBySlug(slug);
         if (!business) throw new Error("Business not found");

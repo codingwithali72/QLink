@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { ClinicForm } from "./_components/ClinicForm";
 import { ClinicStatusBadge } from "./_components/ClinicStatusBadge";
@@ -13,7 +14,7 @@ interface PageProps {
 }
 
 async function getBusiness(slug: string) {
-    const supabase = createClient();
+    const supabase = createAdminClient();
     const { data, error } = await supabase
         .from('businesses')
         .select('id, name, slug')
