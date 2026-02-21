@@ -473,7 +473,7 @@ export async function getDashboardData(businessId: string) {
 
 // 9. HISTORY
 export async function getTokensForDate(clinicSlug: string, date: string) {
-    const supabase = createClient();
+    const supabase = createAdminClient();
     try {
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Business not found" };
@@ -483,17 +483,31 @@ export async function getTokensForDate(clinicSlug: string, date: string) {
             .select('id')
             .eq('business_id', business.id)
             .eq('date', date)
-            .single();
+            .maybeSingle();
 
         if (!session) return { tokens: [] };
 
         const { data } = await supabase
             .from('tokens')
-            .select('*')
+            .select('id, token_number, patient_name, patient_phone, status, is_priority, rating, feedback, created_at, served_at, cancelled_at, created_by_staff_id')
             .eq('session_id', session.id)
             .order('token_number', { ascending: true });
 
-        return { tokens: data || [] };
+        // Map to camelCase for consistent use in the UI
+        const tokens = (data || []).map((t: any) => ({ // eslint-disable-line
+            id: t.id,
+            tokenNumber: t.token_number,
+            customerName: t.patient_name,
+            customerPhone: t.patient_phone,
+            status: t.status,
+            isPriority: t.is_priority,
+            rating: t.rating,
+            feedback: t.feedback,
+            createdAt: t.created_at,
+            servedAt: t.served_at,
+        }));
+
+        return { tokens };
     } catch (e) {
         return { error: (e as Error).message };
     }

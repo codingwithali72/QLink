@@ -465,6 +465,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                     <tr>
                                                         <th className="px-4 py-2 font-semibold">Tkn</th>
                                                         <th className="px-4 py-2 font-semibold">Name</th>
+                                                        <th className="px-4 py-2 font-semibold">Feedback</th>
                                                         <th className="px-4 py-2 font-semibold text-right">Status</th>
                                                     </tr>
                                                 </thead>
@@ -479,8 +480,15 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                                 <td className="px-4 py-3 font-mono font-bold text-slate-700 dark:text-slate-300">
                                                                     {formatToken(t.tokenNumber, t.isPriority)}
                                                                 </td>
-                                                                <td className="px-4 py-3 text-slate-900 dark:text-white font-medium max-w-[120px] truncate">
-                                                                    {t.customerName}
+                                                                <td className="px-4 py-3 text-slate-900 dark:text-white font-medium max-w-[100px] truncate">
+                                                                    {t.customerName || '—'}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs max-w-[140px]">
+                                                                    {t.feedback ? (
+                                                                        <span className="italic text-orange-700 dark:text-orange-400">&ldquo;{t.feedback}&rdquo;</span>
+                                                                    ) : (
+                                                                        <span className="text-slate-300">—</span>
+                                                                    )}
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right">
                                                                     <Badge variant="outline" className={cn("text-[10px] uppercase",
