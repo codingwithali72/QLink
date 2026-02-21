@@ -1,6 +1,6 @@
 "use client";
 
-import { cancelToken, getPublicTokenStatus } from "@/app/actions/queue";
+import { cancelToken, getPublicTokenStatus, submitFeedback } from "@/app/actions/queue";
 import { Button } from "@/components/ui/button";
 import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
@@ -11,6 +11,11 @@ const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}
 export default function TicketPage({ params }: { params: { clinicSlug: string; tokenId: string } }) {
     const [actionLoading, setActionLoading] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
+    const [rating, setRating] = useState(0);
+    const [hoverRating, setHoverRating] = useState(0);
+    const [feedbackText, setFeedbackText] = useState("");
+    const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+    const [feedbackLoading, setFeedbackLoading] = useState(false);
 
     // Polling State
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,6 +83,14 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     if (syncError || !tokenData) {
         return <div className="p-8 text-center mt-10 text-slate-500">Ticket not found or session expired.</div>;
     }
+
+    const handleSubmitFeedback = async () => {
+        if (!rating) return;
+        setFeedbackLoading(true);
+        await submitFeedback(params.tokenId, rating, feedbackText);
+        setFeedbackLoading(false);
+        setFeedbackSubmitted(true);
+    };
 
     const handleCancel = async () => {
         if (!confirm("Are you sure you want to cancel your ticket?")) return;
@@ -229,16 +242,56 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                             </div>
                         )}
 
-                        {/* Show if COMPLETED */}
+                        {/* COMPLETED: Rating Section */}
                         {isDone && (
-                            <div className="p-8 text-center space-y-4">
-                                <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
-                                    <RefreshCw className="w-8 h-8 text-green-600" />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-xl text-slate-900">All Done!</h3>
-                                    <p className="text-slate-500">Thank you for visiting today.</p>
-                                </div>
+                            <div className="p-6 space-y-5">
+                                {feedbackSubmitted ? (
+                                    <div className="text-center py-6 space-y-3 animate-in zoom-in duration-300">
+                                        <div className="text-4xl">🎉</div>
+                                        <h3 className="font-bold text-xl text-slate-900">Thank you!</h3>
+                                        <p className="text-slate-500 text-sm">Your feedback helps us improve.</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="text-center space-y-1">
+                                            <div className="bg-green-100 w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                <span className="text-2xl">✅</span>
+                                            </div>
+                                            <h3 className="font-bold text-xl text-slate-900">Visit Complete!</h3>
+                                            <p className="text-slate-500 text-sm">How was your experience today?</p>
+                                        </div>
+                                        <div className="flex justify-center gap-2">
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                <button
+                                                    key={star}
+                                                    onClick={() => setRating(star)}
+                                                    onMouseEnter={() => setHoverRating(star)}
+                                                    onMouseLeave={() => setHoverRating(0)}
+                                                    className="text-4xl transition-transform active:scale-90 hover:scale-110"
+                                                >
+                                                    {star <= (hoverRating || rating) ? "⭐" : "☆"}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {rating > 0 && rating <= 3 && (
+                                            <textarea
+                                                value={feedbackText}
+                                                onChange={e => setFeedbackText(e.target.value)}
+                                                placeholder="Tell us what we can improve..."
+                                                className="w-full p-3 text-sm border border-slate-200 rounded-xl resize-none h-24 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                            />
+                                        )}
+                                        {rating > 0 && (
+                                            <Button
+                                                onClick={handleSubmitFeedback}
+                                                disabled={feedbackLoading}
+                                                className="w-full h-12 font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
+                                            >
+                                                {feedbackLoading ? <Loader2 className="animate-spin w-4 h-4" /> : "Submit Feedback"}
+                                            </Button>
+                                        )}
+                                    </>
+                                )}
                             </div>
                         )}
 

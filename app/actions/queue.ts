@@ -196,6 +196,23 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
     }
 }
 
+// SUBMIT FEEDBACK
+export async function submitFeedback(tokenId: string, rating: number, feedbackText: string = "") {
+    if (!tokenId || !rating) return { error: "Missing data" };
+    try {
+        const supabase = createAdminClient();
+        const { error } = await supabase
+            .from('tokens')
+            .update({ rating, feedback: feedbackText || null })
+            .eq('id', tokenId);
+        if (error) throw error;
+        return { success: true };
+    } catch (e) {
+        console.error("Feedback Error:", e);
+        return { error: (e as Error).message };
+    }
+}
+
 // 3. NEXT
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function nextPatient(clinicSlug: string, tokenId?: string) {
