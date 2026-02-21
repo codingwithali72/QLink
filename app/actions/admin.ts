@@ -148,3 +148,56 @@ export async function getAdminStats() {
         totalMessages: totalMessages || 0
     };
 }
+
+export async function getAnalytics(dateFrom?: string, dateTo?: string) {
+    if (!await isSuperAdmin()) return { error: "Unauthorized" };
+
+    const supabase = createAdminClient();
+
+    // Build token query
+    let query = supabase.from('tokens').select('status, rating, created_at, served_at');
+    if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00`);
+    if (dateTo) query = query.lte('created_at', `${dateTo}T23:59:59`);
+
+    const { data: tokens } = await query;
+    const rows = tokens || [];
+
+    const totalCreated = rows.length;
+    const totalServed = rows.filter(t => t.status === 'SERVED').length;
+    const totalCancelled = rows.filter(t => t.status === 'CANCELLED').length;
+    const totalSkipped = rows.filter(t => t.status === 'SKIPPED').length;
+
+    // Average rating (only tokens with a rating)
+    const ratedTokens = rows.filter(t => t.rating !== null && t.rating > 0);
+    const avgRating = ratedTokens.length
+        ? (ratedTokens.reduce((sum, t) => sum + (t.rating || 0), 0) / ratedTokens.length).toFixed(1)
+        : null;
+
+    // Average wait time in minutes (created_at → served_at)
+    const servedWithTimes = rows.filter(t => t.status === 'SERVED' && t.served_at && t.created_at);
+    const avgWaitMins = servedWithTimes.length
+        ? Math.round(servedWithTimes.reduce((sum, t) => {
+            const diff = (new Date(t.served_at!).getTime() - new Date(t.created_at).getTime()) / 60000;
+            return sum + diff;
+        }, 0) / servedWithTimes.length)
+        : null;
+
+    // Time saved: assume 20 min avg physical queue wait per served patient
+    const AVG_QUEUE_WAIT_MINS = 20;
+    const timeSavedMins = totalServed * AVG_QUEUE_WAIT_MINS;
+    const timeSavedHours = Math.floor(timeSavedMins / 60);
+    const timeSavedRemainder = timeSavedMins % 60;
+
+    return {
+        totalCreated,
+        totalServed,
+        totalCancelled,
+        totalSkipped,
+        avgRating,
+        avgWaitMins,
+        timeSavedMins,
+        timeSavedLabel: timeSavedHours > 0
+            ? `${timeSavedHours}h ${timeSavedRemainder}m`
+            : `${timeSavedMins}m`,
+    };
+}

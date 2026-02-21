@@ -1,18 +1,41 @@
 "use client";
 
-import { createBusiness, getAdminStats, toggleBusinessStatus, resetBusinessSession, deleteBusiness } from "@/app/actions/admin";
+import { createBusiness, getAdminStats, toggleBusinessStatus, resetBusinessSession, deleteBusiness, getAnalytics } from "@/app/actions/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw, Trash2, BarChart2, Clock, Star, TrendingUp } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { getClinicDate } from "@/lib/date";
 
 export default function AdminPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+
+    // Analytics State
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [analytics, setAnalytics] = useState<any>(null);
+    const [analyticsLoading, setAnalyticsLoading] = useState(false);
+    const [datePreset, setDatePreset] = useState<'today' | '7days' | 'alltime'>('today');
+
+    const today = getClinicDate();
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+    async function fetchAnalytics(preset: 'today' | '7days' | 'alltime') {
+        setAnalyticsLoading(true);
+        setDatePreset(preset);
+        let from: string | undefined;
+        let to: string | undefined = today;
+        if (preset === 'today') { from = today; }
+        else if (preset === '7days') { from = sevenDaysAgo; }
+        else { from = undefined; to = undefined; }
+        const res = await getAnalytics(from, to);
+        if (!res.error) setAnalytics(res);
+        setAnalyticsLoading(false);
+    }
 
     // Form State
     const [name, setName] = useState("");
@@ -26,6 +49,7 @@ export default function AdminPage() {
 
     useEffect(() => {
         fetchStats();
+        fetchAnalytics('today');
     }, []);
 
     async function fetchStats() {
@@ -98,6 +122,55 @@ export default function AdminPage() {
                         </div>
                     </div>
                 </header>
+
+                {/* ── ANALYTICS SECTION ── */}
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl space-y-5">
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-2">
+                            <BarChart2 className="w-5 h-5 text-blue-400" />
+                            <h2 className="font-bold text-white text-lg">Platform Analytics</h2>
+                        </div>
+                        <div className="flex gap-2">
+                            {(['today', '7days', 'alltime'] as const).map((preset) => (
+                                <button
+                                    key={preset}
+                                    onClick={() => fetchAnalytics(preset)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${datePreset === preset
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white'
+                                        }`}
+                                >
+                                    {preset === 'today' ? 'Today' : preset === '7days' ? 'Last 7 Days' : 'All Time'}
+                                </button>
+                            ))}
+                            <button onClick={() => fetchAnalytics(datePreset)} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white transition-colors">
+                                <RefreshCw className={`w-3.5 h-3.5 ${analyticsLoading ? 'animate-spin' : ''}`} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {analyticsLoading ? (
+                        <div className="flex justify-center py-6"><Loader2 className="animate-spin w-6 h-6 text-slate-400" /></div>
+                    ) : analytics && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                            {[
+                                { label: 'Tokens Created', value: analytics.totalCreated, icon: <Users className="w-4 h-4" />, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                                { label: 'Served', value: analytics.totalServed, icon: <Activity className="w-4 h-4" />, color: 'text-green-400', bg: 'bg-green-500/10' },
+                                { label: 'Cancelled', value: analytics.totalCancelled, icon: <Power className="w-4 h-4" />, color: 'text-red-400', bg: 'bg-red-500/10' },
+                                { label: 'Avg Rating', value: analytics.avgRating ? `${analytics.avgRating} ⭐` : '—', icon: <Star className="w-4 h-4" />, color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
+                                { label: 'Avg Wait', value: analytics.avgWaitMins !== null ? `${analytics.avgWaitMins} min` : '—', icon: <Clock className="w-4 h-4" />, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+                                { label: 'Time Saved*', value: analytics.timeSavedLabel || '0m', icon: <TrendingUp className="w-4 h-4" />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+                            ].map(({ label, value, icon, color, bg }) => (
+                                <div key={label} className="bg-white/5 rounded-xl p-4 border border-white/10 flex flex-col gap-2">
+                                    <div className={`w-8 h-8 rounded-lg ${bg} ${color} flex items-center justify-center`}>{icon}</div>
+                                    <div className={`text-2xl font-black ${color}`}>{value}</div>
+                                    <div className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider">{label}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <p className="text-[10px] text-slate-600">* Time Saved = Tokens Served × 20 min (avg physical queue wait estimate)</p>
+                </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
