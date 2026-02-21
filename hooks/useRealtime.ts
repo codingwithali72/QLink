@@ -82,17 +82,53 @@ export function useClinicRealtime(clinicSlug: string) {
         }, 100);
     }, [fetchData]);
 
-    // Setup Polling
+    // Setup Polling with exponential backoff on failures
     useEffect(() => {
         if (!businessId) return;
 
-        fetchData();
+        let failCount = 0;
+        const BASE_INTERVAL = 3000;
+        const MAX_INTERVAL = 30000;
+
+        fetchData(); // Initial load
         setIsConnected(true);
-        pollingInterval.current = setInterval(fetchData, 3000);
+
+        function scheduleNext() {
+            const delay = Math.min(BASE_INTERVAL * Math.pow(2, failCount), MAX_INTERVAL);
+            pollingInterval.current = setTimeout(async () => {
+                // Pause polling when tab is hidden
+                if (document.visibilityState === 'hidden') {
+                    failCount = 0; // reset on resume
+                    scheduleNext();
+                    return;
+                }
+                try {
+                    await fetchData();
+                    failCount = 0; // reset backoff on success
+                } catch {
+                    failCount = Math.min(failCount + 1, 4); // cap at 4 = 30s max
+                }
+                scheduleNext();
+            }, delay);
+        }
+
+        scheduleNext();
+
+        // Resume immediately when tab becomes visible again
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                if (pollingInterval.current) clearTimeout(pollingInterval.current);
+                failCount = 0;
+                fetchData();
+                scheduleNext();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
 
         return () => {
-            if (pollingInterval.current) clearInterval(pollingInterval.current);
+            if (pollingInterval.current) clearTimeout(pollingInterval.current);
             if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
+            document.removeEventListener('visibilitychange', handleVisibility);
         };
     }, [businessId, fetchData]);
 

@@ -2,57 +2,73 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const WHATSAPP_API_URL = "https://graph.facebook.com/v17.0";
-const CRON_SECRET = process.env.CRON_SECRET || "default_cron_secret";
+const CRON_SECRET = process.env.CRON_SECRET;
+const MAX_RETRIES = 3;
 
 export async function GET(request: Request) {
-    // Basic Security: Protect route from random public pings unless they have the secret Header
-    const authHeader = request.headers.get('authorization');
-    if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${CRON_SECRET}`) {
-        // Return 401 strictly in production, but we allow unsecured testing locally
-        // return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Security: require CRON_SECRET bearer token in production
+    if (process.env.NODE_ENV === 'production') {
+        const authHeader = request.headers.get('authorization');
+        if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
     }
 
     try {
         const supabase = createAdminClient();
+        const { PHONE_NUMBER_ID, ACCESS_TOKEN } = process.env;
 
-        // 1. Fetch pending messages (limit to 50 per batch)
+        // Fetch PENDING + FAILED/EXCEPTION messages eligible for retry
         const { data: pendingMessages, error: fetchError } = await supabase
             .from("message_logs")
             .select("*")
-            .eq("status", "PENDING")
+            .or("status.eq.PENDING,status.eq.FAILED,status.eq.EXCEPTION")
             .order("created_at", { ascending: true })
             .limit(50);
 
         if (fetchError) throw fetchError;
-
         if (!pendingMessages || pendingMessages.length === 0) {
             return NextResponse.json({ success: true, processed: 0, message: "No pending messages." });
         }
 
         let processedCount = 0;
-        const { PHONE_NUMBER_ID, ACCESS_TOKEN } = process.env;
+        let retriedCount = 0;
+        let skippedCount = 0;
 
-        // 2. Process each message securely
         for (const msg of pendingMessages) {
-            // Lock row immediately to prevent double-sends in concurrent cron setups
-            await supabase.from("message_logs").update({ status: "PROCESSING" }).eq("id", msg.id);
-
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const payload = msg.provider_response as any;
-            if (!payload || !payload.phone || !payload.components) {
-                await supabase.from("message_logs").update({ status: "FAILED", provider_response: { error: "Invalid queued payload format" } }).eq("id", msg.id);
+            const retryCount: number = payload?.retry_count ?? 0;
+
+            // Permanently give up after MAX_RETRIES
+            if (msg.status !== 'PENDING' && retryCount >= MAX_RETRIES) {
+                await supabase.from("message_logs")
+                    .update({ status: "PERMANENTLY_FAILED" })
+                    .eq("id", msg.id);
+                skippedCount++;
+                continue;
+            }
+
+            // Lock row to prevent concurrent cron double-sends
+            await supabase.from("message_logs").update({ status: "PROCESSING" }).eq("id", msg.id);
+
+            if (!payload?.phone || !payload?.components) {
+                await supabase.from("message_logs").update({
+                    status: "PERMANENTLY_FAILED",
+                    provider_response: { error: "Invalid payload", retry_count: retryCount }
+                }).eq("id", msg.id);
+                skippedCount++;
                 continue;
             }
 
             let finalStatus = "FAILED";
-            let providerData = null;
+            let providerData: Record<string, unknown> = { retry_count: retryCount };
 
             if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
-                // Mock Mode
+                // Mock Mode (dev / no credentials)
                 finalStatus = "MOCK_SENT";
-                providerData = { mock: true, sent_to: payload.phone };
+                providerData = { mock: true, sent_to: payload.phone, retry_count: retryCount };
             } else {
-                // Real Send
                 try {
                     const response = await fetch(`${WHATSAPP_API_URL}/${PHONE_NUMBER_ID}/messages`, {
                         method: "POST",
@@ -72,24 +88,36 @@ export async function GET(request: Request) {
                         }),
                     });
 
-                    providerData = await response.json();
+                    const responseData = await response.json();
                     finalStatus = response.ok ? "SENT" : "FAILED";
+                    providerData = {
+                        ...responseData,
+                        retry_count: retryCount + (response.ok ? 0 : 1),
+                        // Preserve phone+components for next retry attempt
+                        ...(response.ok ? {} : { phone: payload.phone, components: payload.components })
+                    };
                 } catch (err) {
-                    providerData = { error: (err as Error).message };
                     finalStatus = "EXCEPTION";
+                    providerData = {
+                        error: (err as Error).message,
+                        retry_count: retryCount + 1,
+                        // Keep payload so next retry can resend
+                        phone: payload.phone,
+                        components: payload.components
+                    };
                 }
             }
 
-            // Update original record tracking idempotently
             await supabase.from("message_logs").update({
                 status: finalStatus,
                 provider_response: providerData
             }).eq("id", msg.id);
 
+            if (msg.status !== 'PENDING') retriedCount++;
             processedCount++;
         }
 
-        return NextResponse.json({ success: true, processed: processedCount });
+        return NextResponse.json({ success: true, processed: processedCount, retried: retriedCount, skipped: skippedCount });
 
     } catch (e) {
         console.error("Message Cron Processing Error:", e);
