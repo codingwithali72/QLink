@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { ClinicForm } from "./_components/ClinicForm";
@@ -30,7 +29,7 @@ export default async function ClinicLandingPage({ params }: PageProps) {
 
     if (!business) return notFound();
 
-    const supabase = createClient();
+    const supabase = createAdminClient();
     const today = getClinicDate();
 
     // Check for today's session
@@ -41,7 +40,7 @@ export default async function ClinicLandingPage({ params }: PageProps) {
         .eq('date', today)
         .single();
 
-    const isClosedOrPaused = session && (session.status === 'CLOSED' || session.status === 'PAUSED');
+    const isClosedOrPaused = !session || session.status !== 'OPEN';
     const statusMessage = session?.status === 'PAUSED' ? "Queue is currently paused." : "Queue is closed for today.";
 
     return (

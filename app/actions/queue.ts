@@ -34,7 +34,7 @@ import { getClinicDate } from "@/lib/date";
 async function getActiveSession(businessId: string) {
     const supabase = createAdminClient();
     const today = getClinicDate();
-    const { data } = await supabase.from('sessions').select('*').eq('business_id', businessId).eq('date', today).eq('status', 'OPEN').single();
+    const { data } = await supabase.from('sessions').select('*').eq('business_id', businessId).eq('date', today).in('status', ['OPEN', 'PAUSED']).single();
     return data;
 }
 
