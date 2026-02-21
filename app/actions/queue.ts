@@ -18,8 +18,10 @@ async function getAuthenticatedUser() {
 
 async function getBusinessBySlug(slug: string) {
     const supabase = createAdminClient();
-    const { data, error } = await supabase.from('businesses').select('id, name, settings').eq('slug', slug).single();
+    const { data, error } = await supabase.from('businesses').select('id, name, settings, is_active').eq('slug', slug).single();
     if (error || !data) return null;
+    // Billing bypass protection: suspended clinics cannot perform any queue operations
+    if (!data.is_active) return null;
     return data;
 }
 
@@ -150,6 +152,25 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
                 console.error("Rate Limit Verification Error:", rlError);
             } else if (allowed === false) {
                 return { error: "You are requesting tokens too fast. Please wait 10 minutes or see the reception counter." };
+            }
+        }
+
+        // --- PHONE NUMBER DAILY LIMIT (Abuse/Duplicate Prevention) ---
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const settings = business.settings as any;
+        const phoneLimit = settings?.max_tokens_per_phone_per_day ?? 1;
+
+        if (phone) {
+            const todayStr = getClinicDate();
+            const { count: phoneCount } = await supabase.from('tokens')
+                .select('id', { count: 'exact', head: true })
+                .eq('business_id', business.id)
+                .eq('patient_phone', phone)
+                .gte('created_at', `${todayStr}T00:00:00`)
+                .neq('status', 'CANCELLED');
+
+            if ((phoneCount || 0) >= phoneLimit) {
+                return { error: `This phone number has already reached the limit of ${phoneLimit} token(s) today.` };
             }
         }
 
