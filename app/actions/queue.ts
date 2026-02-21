@@ -313,101 +313,43 @@ export async function closeQueue(clinicSlug: string) {
     return updateSessionStatus(clinicSlug, 'CLOSED');
 }
 
-// Helper for queue actions (replaces RPC)
+// C1 + C3 FIX: Use atomic Postgres RPC with FOR UPDATE row lock
+// The SQL function serializes concurrent actions and verifies business_id ownership
 async function processQueueAction(slug: string, action: string, tokenId?: string) {
     const supabase = createAdminClient();
     try {
         const business = await getBusinessBySlug(slug);
         if (!business) return { error: "Business not found" };
 
-        const session = await getActiveSession(business.id);
-        if (!session && action !== 'RESUME_SESSION') return { error: "No active session" };
-
+        // C3 FIX: Require authenticated staff for all queue mutations
         const user = await getAuthenticatedUser();
-        const staffId = user?.id || null;
-        const sessionId = session?.id;
+        if (!user) return { error: "Unauthorized: staff login required" };
 
-        // ---- NEXT ----
-        if (action === 'NEXT') {
-            // Mark current SERVING as SERVED
-            const { data: serving } = await supabase
-                .from('tokens').select('id, token_number')
-                .eq('session_id', sessionId).eq('status', 'SERVING').limit(1).maybeSingle();
-
-            if (serving) {
-                await supabase.from('tokens').update({ previous_status: 'SERVING', status: 'SERVED', served_at: new Date().toISOString() }).eq('id', serving.id);
-                await supabase.from('audit_logs').insert({ business_id: business.id, staff_id: staffId, token_id: serving.id, action: 'SERVED' });
-            }
-
-            // Find next WAITING (priority first, then sequential)
-            const { data: next } = await supabase
-                .from('tokens').select('id, token_number')
-                .eq('session_id', sessionId).eq('status', 'WAITING')
-                .order('is_priority', { ascending: false }).order('token_number', { ascending: true })
-                .limit(1).maybeSingle();
-
-            if (!next) return { error: "Queue is empty" };
-
-            await supabase.from('tokens').update({ previous_status: 'WAITING', status: 'SERVING' }).eq('id', next.id);
-            await supabase.from('audit_logs').insert({ business_id: business.id, staff_id: staffId, token_id: next.id, action: 'CALLED' });
-
-            // ---- SKIP ----
-        } else if (action === 'SKIP' && tokenId) {
-            await supabase.from('tokens').update({ previous_status: 'SERVING', status: 'SKIPPED' }).eq('id', tokenId);
-            await supabase.from('audit_logs').insert({ business_id: business.id, staff_id: staffId, token_id: tokenId, action: 'SKIPPED' });
-
-            // ---- RECALL ----
-        } else if (action === 'RECALL' && tokenId) {
-            await supabase.from('tokens').update({ previous_status: 'SKIPPED', status: 'WAITING', is_priority: true }).eq('id', tokenId);
-            await supabase.from('audit_logs').insert({ business_id: business.id, staff_id: staffId, token_id: tokenId, action: 'RECALLED' });
-
-            // ---- CANCEL ----
-        } else if (action === 'CANCEL' && tokenId) {
-            await supabase.from('tokens').update({ previous_status: 'WAITING', status: 'CANCELLED', cancelled_at: new Date().toISOString() }).eq('id', tokenId);
-            await supabase.from('audit_logs').insert({ business_id: business.id, staff_id: staffId, token_id: tokenId, action: 'CANCELLED' });
-
-            // ---- UNDO ----
-        } else if (action === 'UNDO') {
-            // Revert current SERVING back to WAITING
-            const { data: currentServing } = await supabase
-                .from('tokens').select('id, previous_status')
-                .eq('session_id', sessionId).eq('status', 'SERVING').order('created_at', { ascending: false }).limit(1).maybeSingle();
-
-            if (currentServing?.previous_status) {
-                await supabase.from('tokens').update({ status: currentServing.previous_status }).eq('id', currentServing.id);
-            }
-
-            // Resurrect last SERVED back to SERVING
-            const { data: lastServed } = await supabase
-                .from('tokens').select('id, token_number, previous_status')
-                .eq('session_id', sessionId).eq('status', 'SERVED').order('served_at', { ascending: false }).limit(1).maybeSingle();
-
-            if (lastServed) {
-                await supabase.from('tokens').update({ status: 'SERVING', served_at: null }).eq('id', lastServed.id);
-            }
-
-            await supabase.from('audit_logs').insert({ business_id: business.id, staff_id: staffId, action: 'UNDO_EXECUTED' });
-
-            // ---- PAUSE_SESSION ----
-        } else if (action === 'PAUSE_SESSION') {
-            await supabase.from('sessions').update({ status: 'PAUSED' }).eq('id', sessionId);
-            await supabase.from('tokens').update({ previous_status: 'WAITING', status: 'PAUSED' }).eq('session_id', sessionId).eq('status', 'WAITING');
-
-            // ---- RESUME_SESSION ----
-        } else if (action === 'RESUME_SESSION') {
-            // Find today's session (may be paused)
+        // For RESUME_SESSION, look for a PAUSED session too
+        let session = await getActiveSession(business.id);
+        if (!session && action === 'RESUME_SESSION') {
             const today = getClinicDate();
-            const { data: pausedSession } = await supabase
-                .from('sessions').select('id')
+            const { data: paused } = await supabase
+                .from('sessions').select('*')
                 .eq('business_id', business.id).eq('date', today).eq('status', 'PAUSED').maybeSingle();
-
-            if (pausedSession) {
-                await supabase.from('sessions').update({ status: 'OPEN' }).eq('id', pausedSession.id);
-                await supabase.from('tokens').update({ status: 'WAITING' }).eq('session_id', pausedSession.id).eq('status', 'PAUSED');
-            }
-        } else {
-            return { error: "Invalid action" };
+            session = paused;
         }
+        if (!session) return { error: "No active session" };
+
+        // C1 FIX: Single atomic RPC call — uses SELECT FOR UPDATE inside Postgres
+        const { data, error } = await supabase.rpc('rpc_process_queue_action', {
+            p_business_id: business.id,
+            p_session_id: session.id,
+            p_staff_id: user.id,
+            p_action: action,
+            p_token_id: tokenId || null,
+        });
+
+        if (error) throw error;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = data as any;
+        if (result && result.success === false) return { error: result.error || 'Action failed' };
 
         revalidatePath(`/${slug}`);
         return { success: true };

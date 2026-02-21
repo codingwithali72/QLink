@@ -4,9 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@qlink.com";
+// C5 FIX: No fallback — if ADMIN_EMAIL env var is not set, nobody is superadmin
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
 async function isSuperAdmin() {
+    if (!ADMIN_EMAIL) return false; // Fail closed — missing env = no admin access
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     return user?.email === ADMIN_EMAIL;
