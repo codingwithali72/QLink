@@ -56,7 +56,21 @@ async function logMessage(businessId: string, tokenId: string | undefined, statu
     await supabase.from("message_logs").insert({
         business_id: businessId,
         token_id: tokenId,
+        message_type: "MANUAL",
         status,
         provider_response: response
+    });
+}
+
+// Queue system to decouple HTTP request from User action
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function queueWhatsAppMessage(businessId: string, tokenId: string, templateName: string, phone: string, components: any[]) {
+    const supabase = createAdminClient();
+    await supabase.from("message_logs").insert({
+        business_id: businessId,
+        token_id: tokenId,
+        message_type: templateName,
+        status: "PENDING",
+        provider_response: { phone, components } // Store payload for the async worker
     });
 }

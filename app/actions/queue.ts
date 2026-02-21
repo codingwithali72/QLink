@@ -3,7 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { headers } from "next/headers";
+import { queueWhatsAppMessage } from "@/lib/whatsapp";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
@@ -100,6 +101,25 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
 
         const createdByStaffId = user?.id || null;
 
+        // --- RATE LIMITING (Public QR Joiner Block) ---
+        if (!createdByStaffId) {
+            const reqHeaders = headers();
+            const ip = reqHeaders.get("x-forwarded-for") || reqHeaders.get("x-real-ip") || "unknown_ip";
+
+            const { data: allowed, error: rlError } = await supabase.rpc('rpc_check_rate_limit', {
+                p_ip: ip,
+                p_endpoint: 'create_token_qr',
+                p_max_hits: 3, // Max 3 tokens from same IP
+                p_window_seconds: 600 // per 10 minutes
+            });
+
+            if (rlError && !rlError.message.includes('function')) {
+                console.error("Rate Limit Verification Error:", rlError);
+            } else if (allowed === false) {
+                return { error: "You are requesting tokens too fast. Please wait 10 minutes or see the reception counter." };
+            }
+        }
+
         // RPC
         const { data, error } = await supabase.rpc('create_token_atomic', {
             p_business_id: business.id,
@@ -120,18 +140,18 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         // If created by staff, log 'ADD_TOKEN'. If public, log 'JOIN_QR'.
         await logAudit(business.id, createdByStaffId ? 'ADD_TOKEN' : 'JOIN_QR', { token_no: token.token_number, priority: isPriority });
 
-        // WhatsApp
+        // WhatsApp (Decoupled to Background Queue)
         const trackingLink = `${BASE_URL}/${clinicSlug}/t/${token.id}`;
-        await sendWhatsApp(
-            phone,
+        await queueWhatsAppMessage(
+            business.id,
+            token.id,
             "token_created",
+            phone,
             [
                 { type: "text", text: business.name },
                 { type: "text", text: isPriority ? `E-${token.token_number}` : `#${token.token_number}` },
                 { type: "text", text: trackingLink }
-            ],
-            business.id,
-            token.id
+            ]
         );
 
         revalidatePath(`/${clinicSlug}`);

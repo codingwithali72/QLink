@@ -7,41 +7,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Lock, StopCircle, Phone } from "lucide-react";
-import { useClinicRealtime } from "@/hooks/useRealtime";
 
 export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
-    // const router = useRouter(); // DISABLED
-    const { session, loading: sessionLoading, isConnected } = useClinicRealtime(clinicSlug);
     const [loading, setLoading] = useState(false);
     const [phone, setPhone] = useState("");
     const [name, setName] = useState("");
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [isOffline, setIsOffline] = useState(false);
 
-    // Auto-update status message based on realtime session
     useEffect(() => {
-        if (!sessionLoading) {
-            // Priority: Trust the realtime session status over everything
-            if (session?.status === 'CLOSED') {
-                setStatusMessage("Queue is closed for today.");
-            } else if (session?.status === 'PAUSED') {
-                setStatusMessage("Queue is currently paused.");
-            } else {
-                setStatusMessage(null); // Clear message if it opens again
-            }
-        }
-    }, [session, sessionLoading]);
-
-    // Offline Banner Grace Period
-    const [showOfflineError, setShowOfflineError] = useState(false);
-    useEffect(() => {
-        if (!isConnected && !loading && !sessionLoading) {
-            const timer = setTimeout(() => setShowOfflineError(true), 3000);
-            return () => clearTimeout(timer);
-        } else {
-            setShowOfflineError(false);
-        }
-    }, [isConnected, loading, sessionLoading]);
+        const handleOnline = () => setIsOffline(false);
+        const handleOffline = () => setIsOffline(true);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -72,7 +56,7 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
         return (
             <div className="text-center py-8 space-y-6 animate-in fade-in zoom-in duration-300">
                 <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 shadow-sm">
-                    {session?.status === 'PAUSED' ?
+                    {statusMessage.includes('paused') ?
                         <StopCircle className="h-10 w-10 text-orange-400" /> :
                         <Lock className="h-10 w-10 text-slate-400" />
                     }
@@ -97,9 +81,9 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4 relative pt-2">
-            {showOfflineError && (
+            {isOffline && (
                 <div className="bg-yellow-50 text-yellow-800 text-xs px-2 py-1 rounded text-center mb-2 animate-in fade-in">
-                    Connecting to live updates...
+                    You appear to be offline.
                 </div>
             )}
             <div className="space-y-2">

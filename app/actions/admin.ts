@@ -17,7 +17,7 @@ export async function createBusiness(name: string, slug: string, phone: string, 
 
     const supabase = createAdminClient();
 
-    // Verify existing user UUID BEFORE creating the business
+    // 1. Verify existing user UUID BEFORE proceeding
     if (existingUserId) {
         const { data: userObj, error: userErr } = await supabase.auth.admin.getUserById(existingUserId);
         if (userErr || !userObj.user) {
@@ -25,24 +25,14 @@ export async function createBusiness(name: string, slug: string, phone: string, 
         }
     }
 
-    // Check if slug exists
+    // 2. Check if slug exists
     const { data: existing } = await supabase.from('businesses').select('id').eq('slug', slug).single();
     if (existing) return { error: "Slug already exists" };
-
-    // Insert Business
-    const { data: newBusiness, error: bizError } = await supabase.from('businesses').insert({
-        name,
-        slug,
-        contact_phone: phone,
-        settings: {}
-    }).select('id').single();
-
-    if (bizError || !newBusiness) return { error: bizError?.message || "Failed to create business" };
 
     let targetUserId = existingUserId;
     let createdNewUser = false;
 
-    // Create Staff User Auth
+    // 3. Create Auth User First (if new account needed)
     if (!targetUserId && email && password) {
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
             email,
@@ -51,34 +41,45 @@ export async function createBusiness(name: string, slug: string, phone: string, 
         });
 
         if (authError || !authData.user) {
-            await supabase.from('businesses').delete().eq('id', newBusiness.id); // Rollback
-            return { error: authError?.message || "Failed to create auth user" };
+            // No business to rollback here, completely safe exit
+            return { error: authError?.message || "Failed to create auth user. Email might be in use." };
         }
 
         targetUserId = authData.user.id;
         createdNewUser = true;
     }
 
-    if (targetUserId) {
-        // Link Auth to Clinic
-        const { error: staffError } = await supabase.from('staff_users').insert({
-            id: targetUserId,
-            business_id: newBusiness.id,
-            name: `${name} Reception`,
-            role: 'RECEPTIONIST'
-        });
-
-        if (staffError) {
-            if (createdNewUser) {
-                await supabase.auth.admin.deleteUser(targetUserId);
-            }
-            await supabase.from('businesses').delete().eq('id', newBusiness.id); // Rollback
-            return { error: staffError.message };
-        }
-    } else {
-        // Rollback business if no user ID was provided or created
-        await supabase.from('businesses').delete().eq('id', newBusiness.id);
+    if (!targetUserId) {
         return { error: "No user ID provided or created." };
+    }
+
+    // 4. Create Business
+    const { data: newBusiness, error: bizError } = await supabase.from('businesses').insert({
+        name,
+        slug,
+        contact_phone: phone,
+        settings: {}
+    }).select('id').single();
+
+    if (bizError || !newBusiness) {
+        // Rollback User Auth if we just created them
+        if (createdNewUser) await supabase.auth.admin.deleteUser(targetUserId);
+        return { error: bizError?.message || "Failed to create business" };
+    }
+
+    // 5. Link Auth to Clinic as OWNER
+    const { error: staffError } = await supabase.from('staff_users').insert({
+        id: targetUserId,
+        business_id: newBusiness.id,
+        name: `${name} Owner`,
+        role: 'OWNER'
+    });
+
+    if (staffError) {
+        // Rollback Everything
+        if (createdNewUser) await supabase.auth.admin.deleteUser(targetUserId);
+        await supabase.from('businesses').delete().eq('id', newBusiness.id);
+        return { error: staffError.message };
     }
 
     revalidatePath('/admin');

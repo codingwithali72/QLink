@@ -50,7 +50,7 @@ export default async function ClinicLandingPage({ params }: PageProps) {
                     {/* HEADER */}
                     <div className="bg-blue-600 p-8 text-center text-white relative">
                         <div className="absolute top-4 right-4">
-                            <ClinicStatusBadge clinicSlug={params.clinicSlug} />
+                            <ClinicStatusBadge />
                         </div>
 
                         <h1 className="text-2xl font-bold tracking-tight">{business.name}</h1>
