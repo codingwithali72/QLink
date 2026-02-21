@@ -3,7 +3,7 @@
 import { cancelToken, getPublicTokenStatus, submitFeedback } from "@/app/actions/queue";
 import { Button } from "@/components/ui/button";
 import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
@@ -28,13 +28,36 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     const [loading, setLoading] = useState(true);
     const [syncError, setSyncError] = useState(false);
 
+    // SF2 + SF3: Queue movement alerts
+    const prevTokensAheadRef = useRef<number | null>(null);
+    const [queueAlert, setQueueAlert] = useState<{ type: 'fast' | 'next' | 'shifted'; msg: string } | null>(null);
+
     const fetchStatus = useCallback(async () => {
         if (isOffline) return;
         try {
             const res = await getPublicTokenStatus(params.tokenId);
             if (res.success && res.data) {
+                const newAhead = res.data.tokens_ahead;
+                const prev = prevTokensAheadRef.current;
+
+                if (prev !== null && res.data.token.status === 'WAITING') {
+                    const delta = prev - newAhead;
+                    if (newAhead === 0) {
+                        // SF2: You are next!
+                        setQueueAlert({ type: 'next', msg: '🔔 You are NEXT. Please come to the reception counter now.' });
+                        if (navigator?.vibrate) navigator.vibrate([300, 100, 300]);
+                    } else if (delta >= 3) {
+                        // SF2: Queue moved fast
+                        setQueueAlert({ type: 'fast', msg: `⚡ Queue moved faster than expected. You are now ${newAhead} ahead — please return to the clinic.` });
+                    } else if (delta < 0) {
+                        // SF3: Queue shifted (recall or emergency)
+                        setQueueAlert({ type: 'shifted', msg: 'ℹ️ A priority case was added. Your position shifted by 1.' });
+                    }
+                }
+                prevTokensAheadRef.current = newAhead;
+
                 setTokenData(res.data.token);
-                setTokensAhead(res.data.tokens_ahead);
+                setTokensAhead(newAhead);
                 setCurrentServingDisplay(res.data.current_serving);
                 setSyncError(false);
             } else {
@@ -132,17 +155,17 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     const isSkipped = tokenData.status === "SKIPPED";
     const isEmergency = tokenData.is_priority;
 
-    // --- ETA RANGE LOGIC (4-8 mins/ticket) ---
-    const minMins = tokensAhead * 4;
-    const maxMins = tokensAhead * 8;
+    // SF4 FIX: ETA range 6–15 min/token (reflects real Indian GP avg of 10–15 min)
+    const minMins = tokensAhead * 6;
+    const maxMins = tokensAhead * 15;
 
     let etaText = "";
     if (tokensAhead === 0 && currentServingDisplay !== "--") etaText = "Next Up";
     else if (tokensAhead === 0 && currentServingDisplay === "--") etaText = "Ready Now";
-    else if (minMins > 60) etaText = `> 1 hr`;
-    else etaText = `${minMins}-${maxMins} mins`;
+    else if (minMins > 90) etaText = `> ${Math.round(minMins / 60)} hr`;
+    else etaText = `${minMins}–${maxMins} min (est.)`;
 
-    const isApproaching = !isServing && !isDone && !isEmergency && !isCancelled && !isSkipped && minMins <= 10 && minMins > 0;
+    const isApproaching = !isServing && !isDone && !isEmergency && !isCancelled && !isSkipped && tokensAhead <= 2 && tokensAhead > 0;
 
     // --- UI STATES ---
     let statusText = "WAITING";
@@ -165,6 +188,21 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                     You are offline. Reconnecting...
                 </div>
             )}
+
+            {/* SF2+SF3: Queue movement alert banner */}
+            {queueAlert && (
+                <div
+                    className={`fixed top-0 left-0 w-full text-white text-center text-xs py-3 font-bold z-50 flex items-center justify-center gap-2 cursor-pointer ${queueAlert.type === 'next' ? 'bg-green-600 animate-pulse' :
+                            queueAlert.type === 'fast' ? 'bg-blue-600 animate-pulse' :
+                                'bg-slate-600'
+                        }`}
+                    onClick={() => setQueueAlert(null)}
+                >
+                    {queueAlert.msg}
+                    <span className="opacity-60 text-[10px]">(tap to dismiss)</span>
+                </div>
+            )}
+
 
             <div className="flex-1 flex items-center justify-center p-4 relative">
                 <div className={`w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden relative z-10 transition-all duration-1000 ease-in-out ${isApproaching ? `shadow-[0_0_60px_-5px_rgba(34,211,238,0.7)] ring-4 ring-cyan-400 ${breathe ? "scale-[1.04]" : "scale-[1.01]"} ` : "scale-100"}`}>

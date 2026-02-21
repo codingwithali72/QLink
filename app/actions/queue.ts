@@ -282,16 +282,21 @@ export async function getPublicTokenStatus(tokenId: string) {
         if (tokenError) throw tokenError;
         if (!token) return { error: "Token not found" };
 
-        // Get tokens ahead (WAITING tokens with lower token_number)
+        // SF1 FIX: Compute tokens_ahead using SORT POSITION, not token_number comparison
+        // This correctly handles priority tokens with high token numbers
         let tokensAhead = 0;
         if (token.status === 'WAITING') {
-            const { count } = await supabase
+            const { data: waitingQueue } = await supabase
                 .from('tokens')
-                .select('id', { count: 'exact', head: true })
+                .select('id')
                 .eq('session_id', token.session_id)
                 .eq('status', 'WAITING')
-                .lt('token_number', token.token_number);
-            tokensAhead = count || 0;
+                .order('is_priority', { ascending: false })
+                .order('token_number', { ascending: true });
+
+            // Find this token's position in the sorted queue
+            const position = (waitingQueue || []).findIndex(t => t.id === token.id);
+            tokensAhead = position > 0 ? position : 0;
         }
 
         // Get currently serving token
