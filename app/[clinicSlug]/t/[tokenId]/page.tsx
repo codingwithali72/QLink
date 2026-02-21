@@ -8,8 +8,8 @@ import { useState, useEffect, useCallback } from "react";
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
-// ⭐ Replace this with your real Google Maps review link
-const GOOGLE_REVIEW_URL = "https://g.page/r/CaBC123ExampleClinic/review";
+// ⭐ Google Reviews link for Prime Care Clinic Mumbai
+const GOOGLE_REVIEW_URL = "https://www.google.com/search?q=prime+care+clinic+mumbai+reviews&si=AL3DRZEsmMGCryMMFSHJ3StBhOdZ2-6yYkXd_doETEE1OR-qORKK79dNQGPzJCWBtNShoDO3RJOrdTxRMupkyX7oxtLsi0pnMJ46_2CI0Z_Ltmdq8kJdtHAOClECcnj3jhlcV8RW96Q--uAhpFqdNEiooHzKeQGM-g%3D%3D&sa=X";
 
 export default function TicketPage({ params }: { params: { clinicSlug: string; tokenId: string } }) {
     const [actionLoading, setActionLoading] = useState(false);
