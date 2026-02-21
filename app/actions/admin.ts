@@ -17,6 +17,14 @@ export async function createBusiness(name: string, slug: string, phone: string, 
 
     const supabase = createAdminClient();
 
+    // Verify existing user UUID BEFORE creating the business
+    if (existingUserId) {
+        const { data: userObj, error: userErr } = await supabase.auth.admin.getUserById(existingUserId);
+        if (userErr || !userObj.user) {
+            return { error: "Invalid UUID: Cannot find a Supabase Auth user with that ID." };
+        }
+    }
+
     // Check if slug exists
     const { data: existing } = await supabase.from('businesses').select('id').eq('slug', slug).single();
     if (existing) return { error: "Slug already exists" };
