@@ -256,17 +256,58 @@ export async function getPublicTokenStatus(tokenId: string) {
     if (!tokenId) return { error: "Invalid token ID" };
     try {
         const supabase = createAdminClient();
-        const { data, error } = await supabase.rpc('rpc_get_public_token_status', {
-            p_token_id: tokenId
-        });
 
-        if (error) throw error;
+        // Fetch the token with its session
+        const { data: token, error: tokenError } = await supabase
+            .from('tokens')
+            .select('*, sessions!inner(status, date, business_id)')
+            .eq('id', tokenId)
+            .maybeSingle();
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = data as any;
-        if (!result.success) return { error: result.error };
+        if (tokenError) throw tokenError;
+        if (!token) return { error: "Token not found" };
 
-        return { success: true, data: result };
+        // Get tokens ahead (WAITING tokens with lower token_number)
+        let tokensAhead = 0;
+        if (token.status === 'WAITING') {
+            const { count } = await supabase
+                .from('tokens')
+                .select('id', { count: 'exact', head: true })
+                .eq('session_id', token.session_id)
+                .eq('status', 'WAITING')
+                .lt('token_number', token.token_number);
+            tokensAhead = count || 0;
+        }
+
+        // Get currently serving token
+        const { data: servingToken } = await supabase
+            .from('tokens')
+            .select('token_number, is_priority')
+            .eq('session_id', token.session_id)
+            .eq('status', 'SERVING')
+            .maybeSingle();
+
+        const currentServing = servingToken
+            ? (servingToken.is_priority ? `E-${servingToken.token_number}` : `#${servingToken.token_number}`)
+            : "--";
+
+        return {
+            success: true,
+            data: {
+                token: {
+                    id: token.id,
+                    token_number: token.token_number,
+                    patient_name: token.patient_name,
+                    status: token.status,
+                    is_priority: token.is_priority,
+                    created_at: token.created_at,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    session_status: (token as any).sessions?.status || 'CLOSED',
+                },
+                tokens_ahead: tokensAhead,
+                current_serving: currentServing,
+            }
+        };
     } catch (e) {
         console.error("Public Token Error:", e);
         return { error: (e as Error).message };
