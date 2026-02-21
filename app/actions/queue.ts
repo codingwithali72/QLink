@@ -70,9 +70,7 @@ export async function startSession(clinicSlug: string) {
             const { error } = await supabase.from('sessions').insert({
                 business_id: business.id,
                 date: today,
-                status: 'OPEN',
-                daily_token_count: 0,
-                start_time: new Date().toISOString()
+                status: 'OPEN'
             });
             if (error) throw error;
         }
