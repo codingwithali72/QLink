@@ -1,11 +1,12 @@
 "use client";
 
-import { createBusiness, getAdminStats, toggleBusinessStatus, resetBusinessSession, deleteBusiness, getAnalytics } from "@/app/actions/admin";
+import { createBusiness, getAdminStats, toggleBusinessStatus, resetBusinessSession, deleteBusiness, getAnalytics, updateBusinessSettings } from "@/app/actions/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw, Trash2, BarChart2, Clock, Star, TrendingUp } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw, Trash2, BarChart2, Clock, Star, TrendingUp, Settings } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getClinicDate } from "@/lib/date";
@@ -46,6 +47,13 @@ export default function AdminPage() {
     const [adminPassword, setAdminPassword] = useState("");
     const [existingUserId, setExistingUserId] = useState("");
     const [actionLoading, setActionLoading] = useState(false);
+
+    // Settings Modal State
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [editingClinic, setEditingClinic] = useState<any>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [clinicSettings, setClinicSettings] = useState<any>({});
+    const [settingsSaving, setSettingsSaving] = useState(false);
 
     useEffect(() => {
         fetchStats();
@@ -136,8 +144,8 @@ export default function AdminPage() {
                                     key={preset}
                                     onClick={() => fetchAnalytics(preset)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${datePreset === preset
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white'
                                         }`}
                                 >
                                     {preset === 'today' ? 'Today' : preset === '7days' ? 'Last 7 Days' : 'All Time'}
@@ -362,6 +370,19 @@ export default function AdminPage() {
                                         <Button
                                             variant="ghost"
                                             size="sm"
+                                            title="Settings"
+                                            className="h-9 px-3 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300"
+                                            onClick={() => {
+                                                setEditingClinic(b);
+                                                setClinicSettings(b.settings || {});
+                                            }}
+                                        >
+                                            <Settings className="w-4 h-4" />
+                                        </Button>
+
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
                                             title="Delete business"
                                             className="h-9 px-3 text-red-500 hover:bg-red-500/10 hover:text-red-400"
                                             onClick={async () => {
@@ -383,6 +404,77 @@ export default function AdminPage() {
 
                 </div>
             </div>
+
+            {/* SETTINGS MODAL */}
+            <Dialog open={!!editingClinic} onOpenChange={(open) => !open && setEditingClinic(null)}>
+                <DialogContent className="sm:max-w-[425px] bg-slate-900 border-slate-700 text-white">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Settings className="w-5 h-5 text-indigo-400" />
+                            Tenant Settings: {editingClinic?.name}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-6 py-4">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-sm font-medium text-slate-300">WhatsApp Messaging</Label>
+                                <Switch
+                                    checked={clinicSettings.whatsapp_enabled ?? true}
+                                    onCheckedChange={(c) => setClinicSettings({ ...clinicSettings, whatsapp_enabled: c })}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <Label className="text-sm font-medium text-slate-300">Public QR Intake</Label>
+                                <Switch
+                                    checked={clinicSettings.qr_intake_enabled ?? true}
+                                    onCheckedChange={(c) => setClinicSettings({ ...clinicSettings, qr_intake_enabled: c })}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-slate-400 uppercase">Max tokens/day</Label>
+                                    <Input
+                                        type="number"
+                                        value={clinicSettings.daily_token_limit || 0}
+                                        onChange={(e) => setClinicSettings({ ...clinicSettings, daily_token_limit: parseInt(e.target.value) })}
+                                        className="bg-black/20 border-slate-700"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-slate-400 uppercase">Max msgs/day</Label>
+                                    <Input
+                                        type="number"
+                                        value={clinicSettings.daily_message_limit || 0}
+                                        onChange={(e) => setClinicSettings({ ...clinicSettings, daily_message_limit: parseInt(e.target.value) })}
+                                        className="bg-black/20 border-slate-700"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                            <Button variant="ghost" onClick={() => setEditingClinic(null)}>Cancel</Button>
+                            <Button
+                                className="bg-indigo-600 hover:bg-indigo-500"
+                                disabled={settingsSaving}
+                                onClick={async () => {
+                                    setSettingsSaving(true);
+                                    await updateBusinessSettings(editingClinic.id, clinicSettings);
+                                    setSettingsSaving(false);
+                                    setEditingClinic(null);
+                                    fetchStats();
+                                }}
+                            >
+                                {settingsSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Changes"}
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }
