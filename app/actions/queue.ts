@@ -23,9 +23,12 @@ async function getBusinessBySlug(slug: string) {
     return data;
 }
 
+import { getClinicDate } from "@/lib/date";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getActiveSession(supabase: any, businessId: string) {
-    const { data } = await supabase.from('sessions').select('*').eq('business_id', businessId).eq('status', 'OPEN').single();
+    const today = getClinicDate();
+    const { data } = await supabase.from('sessions').select('*').eq('business_id', businessId).eq('date', today).eq('status', 'OPEN').single();
     return data;
 }
 

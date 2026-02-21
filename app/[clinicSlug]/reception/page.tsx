@@ -37,8 +37,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const [manualIsPriority, setManualIsPriority] = useState(false);
 
     // Queue Controls
-    const [roomNumber, setRoomNumber] = useState("");
-
     const [isLogOpen, setIsLogOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
 
@@ -105,8 +103,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     }, [tokens, displayedTokens, selectedDate, todayStr]);
 
     // Handlers
-    const handleNext = () => performAction(() => nextPatient(params.clinicSlug, undefined, roomNumber));
-    const handleCallManual = (tokenId: string) => performAction(() => nextPatient(params.clinicSlug, tokenId, roomNumber));
+    const handleNext = () => performAction(() => nextPatient(params.clinicSlug));
+    const handleCallManual = (tokenId: string) => performAction(() => nextPatient(params.clinicSlug, tokenId));
 
     const handleSkip = () => { if (servingToken && confirm("Skip current ticket?")) performAction(() => skipToken(params.clinicSlug, servingToken.id)); };
 
@@ -258,18 +256,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 )}
                             </Button>
 
-                            {/* ROOM ALLOCATION INPUT */}
-                            <div className="col-span-2 md:col-span-4 flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
-                                <Label className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap ml-2">Room / Desk :</Label>
-                                <Input
-                                    value={roomNumber}
-                                    onChange={(e) => setRoomNumber(e.target.value)}
-                                    placeholder="e.g. 101 or Desk 3"
-                                    className="flex-1 font-bold dark:bg-slate-900 border-slate-300 dark:border-slate-600"
-                                    disabled={!isSessionActive}
-                                />
-                            </div>
-
                             {/* SKIP */}
                             <Button
                                 variant="outline"
@@ -286,7 +272,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 variant="destructive"
                                 onClick={handleEmergencyClick}
                                 disabled={actionLoading || !isSessionActive}
-                                className="col-span-2 md:col-span-1 h-20 md:h-24 flex flex-col items-center justify-center gap-1 md:gap-2 rounded-2xl shadow-red-500/20 bg-red-600 hover:bg-red-700 border-t-4 border-red-400"
+                                className="h-20 md:h-24 flex flex-col items-center justify-center gap-1 md:gap-2 rounded-2xl shadow-red-500/20 bg-red-600 hover:bg-red-700 border-t-4 border-red-400"
                             >
                                 <AlertOctagon className="w-5 h-5 md:w-6 md:h-6" />
                                 <span className="font-bold text-base md:text-lg">SOS</span>
