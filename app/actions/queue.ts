@@ -67,7 +67,7 @@ export async function startSession(clinicSlug: string) {
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Clinic not found" };
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = getClinicDate();
 
         // Check if session exists
         const { data: existing } = await supabase.from('sessions').select('id').eq('business_id', business.id).eq('date', today).single();
@@ -299,7 +299,7 @@ async function updateSessionStatus(slug: string, status: 'OPEN' | 'CLOSED' | 'PA
         const business = await getBusinessBySlug(slug);
         if (!business) throw new Error("Business not found");
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = getClinicDate();
         const { error } = await supabase.from('sessions')
             .update({ status })
             .eq('business_id', business.id)
