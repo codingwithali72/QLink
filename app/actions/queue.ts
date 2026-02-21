@@ -34,7 +34,31 @@ import { getClinicDate } from "@/lib/date";
 async function getActiveSession(businessId: string) {
     const supabase = createAdminClient();
     const today = getClinicDate();
-    const { data } = await supabase.from('sessions').select('*').eq('business_id', businessId).eq('date', today).in('status', ['OPEN', 'PAUSED']).single();
+    console.log('[getActiveSession] businessId:', businessId, 'today:', today);
+
+    const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('business_id', businessId)
+        .eq('date', today)
+        .in('status', ['OPEN', 'PAUSED'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error('[getActiveSession] Supabase error:', JSON.stringify(error));
+    }
+    if (!data) {
+        // Debug: check what sessions actually exist for today
+        const { data: allSessions } = await supabase
+            .from('sessions')
+            .select('id, status, date, business_id')
+            .eq('business_id', businessId)
+            .order('created_at', { ascending: false })
+            .limit(5);
+        console.error('[getActiveSession] No OPEN/PAUSED session found. All recent sessions:', JSON.stringify(allSessions));
+    }
     return data;
 }
 
@@ -327,10 +351,9 @@ export async function getDashboardData(businessId: string) {
             .select('*')
             .eq('business_id', businessId)
             .eq('date', today)
-            .in('status', ['OPEN', 'PAUSED'])
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
         if (!session) return { session: null, tokens: [] };
 

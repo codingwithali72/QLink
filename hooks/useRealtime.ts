@@ -64,10 +64,12 @@ export function useClinicRealtime(clinicSlug: string) {
             }
 
             setLastUpdated(new Date());
+            setIsConnected(true);
             setLoading(false);
             setIsSynced(true);
         } catch (error) {
-            console.error("Fetch Error:", error);
+            console.error("Dashboard Fetch Error:", error);
+            setIsConnected(false);
         }
     }, [businessId]);
 
@@ -104,18 +106,20 @@ export function useClinicRealtime(clinicSlug: string) {
         }
     }, [session, tokens, saveToLocal]);
 
-    useEffect(() => {
-        async function loadLocal() {
-            const localData = await readFromLocal();
-            if (localData && loading) {
-                setSession(localData.session);
-                setTokens(localData.tokens);
-                setLastUpdated(new Date(localData.lastUpdated));
-                setLoading(false);
-            }
-        }
-        loadLocal();
-    }, [readFromLocal]);
+    // NOTE: Disabled offline cache loading to prevent stale ghost tokens
+    // The server action polling is the single source of truth
+    // useEffect(() => {
+    //     async function loadLocal() {
+    //         const localData = await readFromLocal();
+    //         if (localData && loading) {
+    //             setSession(localData.session);
+    //             setTokens(localData.tokens);
+    //             setLastUpdated(new Date(localData.lastUpdated));
+    //             setLoading(false);
+    //         }
+    //     }
+    //     loadLocal();
+    // }, [readFromLocal]);
 
     return { session, tokens, loading, lastUpdated, isConnected, isSynced, refresh: fetchData };
 }
@@ -140,18 +144,12 @@ function mapToken(t: any): Token {
         businessId: t.business_id,
         sessionId: t.session_id,
         tokenNumber: t.token_number,
-        customerName: t.customer_name,
-        customerPhone: t.customer_phone,
+        customerName: t.patient_name,
+        customerPhone: t.patient_phone,
         status: t.status,
         isPriority: t.is_priority,
-        // rating/feedback might not be in DB yet, but keep if needed
         createdAt: t.created_at,
-        completedAt: t.completed_at,
+        completedAt: t.served_at,
         createdByStaffId: t.created_by_staff_id,
-        // rating/feedback might need separate table or columns if we want them?
-        // For MVP, we didn't add them to 'tokens' table schema in step 1.
-        // User didn't explicitly ask for feedback in Prompt, only "Queue System Rules".
-        // Previous conversations had feedback. I should check if I need to add them to table.
-        // I will add them to type mapping as undefined for now to avoid breaking UI if UI uses them.
-    } as any; // Cast to any to satisfy strict Token type if it has extra fields
+    } as any;
 }
