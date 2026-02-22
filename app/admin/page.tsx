@@ -517,13 +517,13 @@ export default function AdminPage() {
                         <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
                     ) : clinicMetrics ? (
                         <div className="space-y-6 py-4">
-                            {/* Today's Snapshot */}
+                            {/* Today's Snapshot & Lifetime Stats */}
                             <div>
-                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3">Live Today</h3>
-                                <div className="grid grid-cols-4 gap-3">
+                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3">Live Today & Global</h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                                     <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center">
-                                        <div className="text-3xl font-black text-blue-400">{clinicMetrics.today.created} <span className="text-sm text-slate-500 font-medium">/ {viewingClinicLimit || '∞'}</span></div>
-                                        <div className="text-[10px] text-slate-500 uppercase font-black mt-1">Created (vs Limit)</div>
+                                        <div className="text-3xl font-black text-blue-400">{clinicMetrics.today.created} <span className="text-sm text-slate-500 font-medium max-w-[40px] truncate">/ {viewingClinicLimit || '∞'}</span></div>
+                                        <div className="text-[10px] text-slate-500 uppercase font-black mt-1">Created</div>
                                     </div>
                                     <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center">
                                         <div className="text-3xl font-black text-green-400">{clinicMetrics.today.served}</div>
@@ -536,6 +536,16 @@ export default function AdminPage() {
                                     <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center">
                                         <div className="text-3xl font-black text-orange-400">{clinicMetrics.today.emergency}</div>
                                         <div className="text-[10px] text-slate-500 uppercase font-black mt-1">Priority Insertions</div>
+                                    </div>
+
+                                    {/* Global Aggregates */}
+                                    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center">
+                                        <div className="text-3xl font-black text-yellow-400">{clinicMetrics.avgRating ? `${clinicMetrics.avgRating}` : '—'}</div>
+                                        <div className="text-[10px] text-slate-500 uppercase font-black mt-1">Avg Rating ⭐</div>
+                                    </div>
+                                    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center">
+                                        <div className="text-2xl font-black text-emerald-400 flex items-center h-full">{clinicMetrics.timeSavedLabel || '0m'}</div>
+                                        <div className="text-[10px] text-slate-500 uppercase font-black mt-1 text-center leading-tight">Est. Time Saved</div>
                                     </div>
                                 </div>
                             </div>

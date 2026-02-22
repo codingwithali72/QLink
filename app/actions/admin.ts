@@ -321,10 +321,28 @@ export async function getClinicMetrics(businessId: string) {
     // Historical Rolling 30 Days Trend
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const { data: trend } = await supabase.from('clinic_daily_stats')
-        .select('date, total_tokens, avg_wait_time_minutes')
+        .select('date, total_tokens, avg_wait_time_minutes, served_count')
         .eq('business_id', businessId)
         .gte('date', thirtyDaysAgo)
         .order('date', { ascending: true });
+
+    // Calculate Average Rating across all tokens
+    const { data: ratings } = await supabase.from('tokens')
+        .select('rating')
+        .eq('business_id', businessId)
+        .not('rating', 'is', null);
+
+    const validRatings = ratings?.filter(r => r.rating !== null) || [];
+    const avgRating = validRatings.length > 0
+        ? (validRatings.reduce((acc, r) => acc + Number(r.rating), 0) / validRatings.length).toFixed(1)
+        : null;
+
+    // Time Saved calculation (Total Served * 20 mins)
+    const totalServedHistory = trend?.reduce((acc, row) => acc + (row.served_count || 0), 0) || 0;
+    const totalServedEver = totalServedHistory + (liveServed || 0);
+    const timeSavedMins = totalServedEver * 20; // 20 min estimated average physical wait
+    const timeSavedHours = Math.floor(timeSavedMins / 60);
+    const timeSavedLabel = timeSavedHours > 0 ? `${timeSavedHours}h ${timeSavedMins % 60}m` : `${timeSavedMins}m`;
 
     return {
         today: {
@@ -333,6 +351,8 @@ export async function getClinicMetrics(businessId: string) {
             skipped: liveSkipped || 0,
             emergency: liveEmergency || 0
         },
-        trend: trend || []
+        trend: trend || [],
+        avgRating,
+        timeSavedLabel
     };
 }
