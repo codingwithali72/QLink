@@ -1,12 +1,12 @@
 "use client";
 
-import { createBusiness, getAdminStats, toggleBusinessStatus, resetBusinessSession, deleteBusiness, getAnalytics, updateBusinessSettings } from "@/app/actions/admin";
+import { createBusiness, getAdminStats, toggleBusinessStatus, resetBusinessSession, deleteBusiness, getAnalytics, getClinicMetrics, updateBusinessSettings } from "@/app/actions/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw, Trash2, BarChart2, Clock, Star, TrendingUp, Settings } from "lucide-react";
+import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw, Trash2, BarChart2, Clock, Star, TrendingUp, Settings, ActivitySquare } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getClinicDate } from "@/lib/date";
@@ -36,6 +36,24 @@ export default function AdminPage() {
         const res = await getAnalytics(from, to);
         if (!res.error) setAnalytics(res);
         setAnalyticsLoading(false);
+    }
+
+    // Clinic Specific Metrics State
+    const [viewingClinicMetricsId, setViewingClinicMetricsId] = useState<string | null>(null);
+    const [viewingClinicName, setViewingClinicName] = useState<string | null>(null);
+    const [viewingClinicLimit, setViewingClinicLimit] = useState<number>(0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [clinicMetrics, setClinicMetrics] = useState<any>(null);
+    const [clinicMetricsLoading, setClinicMetricsLoading] = useState(false);
+
+    async function loadClinicMetrics(businessId: string, name: string, limit: number) {
+        setViewingClinicMetricsId(businessId);
+        setViewingClinicName(name);
+        setViewingClinicLimit(limit || 0);
+        setClinicMetricsLoading(true);
+        const res = await getClinicMetrics(businessId);
+        if (!res.error) setClinicMetrics(res);
+        setClinicMetricsLoading(false);
     }
 
     // Form State
@@ -370,11 +388,21 @@ export default function AdminPage() {
                                         <Button
                                             variant="ghost"
                                             size="sm"
+                                            title="View Analytics"
+                                            className="h-9 px-3 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+                                            onClick={() => loadClinicMetrics(b.id, b.name, b.daily_token_limit || b.settings?.daily_token_limit)}
+                                        >
+                                            <ActivitySquare className="w-4 h-4" />
+                                        </Button>
+
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
                                             title="Settings"
                                             className="h-9 px-3 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300"
                                             onClick={() => {
                                                 setEditingClinic(b);
-                                                setClinicSettings(b.settings || {});
+                                                setClinicSettings({ ...b.settings, daily_token_limit: b.daily_token_limit || b.settings?.daily_token_limit || 200 });
                                             }}
                                         >
                                             <Settings className="w-4 h-4" />
@@ -472,6 +500,70 @@ export default function AdminPage() {
                             </Button>
                         </div>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* CLINIC METRICS MODAL */}
+            <Dialog open={!!viewingClinicMetricsId} onOpenChange={(open) => !open && setViewingClinicMetricsId(null)}>
+                <DialogContent className="sm:max-w-[700px] bg-slate-900 border-slate-700 text-white">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <ActivitySquare className="w-5 h-5 text-emerald-400" />
+                            {viewingClinicName} - Analytics
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    {clinicMetricsLoading ? (
+                        <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
+                    ) : clinicMetrics ? (
+                        <div className="space-y-6 py-4">
+                            {/* Today's Snapshot */}
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3">Live Today</h3>
+                                <div className="grid grid-cols-4 gap-3">
+                                    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center">
+                                        <div className="text-3xl font-black text-blue-400">{clinicMetrics.today.created} <span className="text-sm text-slate-500 font-medium">/ {viewingClinicLimit || '∞'}</span></div>
+                                        <div className="text-[10px] text-slate-500 uppercase font-black mt-1">Created (vs Limit)</div>
+                                    </div>
+                                    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center">
+                                        <div className="text-3xl font-black text-green-400">{clinicMetrics.today.served}</div>
+                                        <div className="text-[10px] text-slate-500 uppercase font-black mt-1">Served</div>
+                                    </div>
+                                    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center">
+                                        <div className="text-3xl font-black text-red-400">{clinicMetrics.today.skipped}</div>
+                                        <div className="text-[10px] text-slate-500 uppercase font-black mt-1">Skipped</div>
+                                    </div>
+                                    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center">
+                                        <div className="text-3xl font-black text-orange-400">{clinicMetrics.today.emergency}</div>
+                                        <div className="text-[10px] text-slate-500 uppercase font-black mt-1">Priority Insertions</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 30 Day Trend */}
+                            <div className="pt-4 border-t border-slate-800">
+                                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3">Rolling 30 Days Trend</h3>
+                                {clinicMetrics.trend && clinicMetrics.trend.length > 0 ? (
+                                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                                        {clinicMetrics.trend.map((day: any) => (
+                                            <div key={day.date} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/30">
+                                                <div className="font-mono text-sm text-slate-300">{day.date}</div>
+                                                <div className="flex gap-6 text-sm">
+                                                    <div className="text-blue-400 font-bold w-20 text-right">{day.total_tokens} Created</div>
+                                                    <div className="text-purple-400 font-bold w-20 text-right">{day.avg_wait_time_minutes}m Wait</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-6 text-slate-500 text-sm">No historical data aggregated yet.</div>
+                                )}
+                            </div>
+
+                        </div>
+                    ) : (
+                        <div className="text-red-400 text-center py-6">Failed to load analytics</div>
+                    )}
                 </DialogContent>
             </Dialog>
 

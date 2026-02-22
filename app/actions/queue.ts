@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { queueWhatsAppMessage } from "@/lib/whatsapp";
+import { normalizeIndianPhone } from "@/lib/phone";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
@@ -122,7 +123,19 @@ export async function startSession(clinicSlug: string) {
 // 2. CREATE TOKEN
 export async function createToken(clinicSlug: string, phone: string, name: string = "", isPriority: boolean = false) {
     if (!clinicSlug) return { error: "Missing clinic slug" };
-    if (!phone || phone.length < 10) return { error: "Valid phone number required" };
+
+    // Allow empty phone for emergency walk-ins. Convert legacy 0000000000 to null.
+    const isEmergencyFake = phone === "0000000000" || phone.trim() === "";
+    const cleanPhone = isEmergencyFake ? null : normalizeIndianPhone(phone);
+
+    if (!isEmergencyFake && !cleanPhone) {
+        return { error: "Valid 10-digit Indian mobile number required" };
+    }
+
+    // Public users must provide a phone
+    if (!cleanPhone && !isPriority) {
+        return { error: "Valid 10-digit Indian mobile number required" };
+    }
 
     const supabase = createAdminClient();
     const user = await getAuthenticatedUser();
@@ -160,12 +173,12 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         const settings = business.settings as any;
         const phoneLimit = settings?.max_tokens_per_phone_per_day ?? 1;
 
-        if (phone) {
+        if (cleanPhone) {
             const todayStr = getClinicDate();
             const { count: phoneCount } = await supabase.from('tokens')
                 .select('id', { count: 'exact', head: true })
                 .eq('business_id', business.id)
-                .eq('patient_phone', phone)
+                .eq('patient_phone', cleanPhone)
                 .gte('created_at', `${todayStr}T00:00:00`)
                 .neq('status', 'CANCELLED');
 
@@ -179,7 +192,7 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
             p_business_id: business.id,
             p_session_id: session.id,
             p_name: name || "Guest",
-            p_phone: phone,
+            p_phone: cleanPhone,
             p_is_priority: isPriority,
             p_staff_id: createdByStaffId
         });
@@ -188,25 +201,52 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = data as any;
+
+        // Handle daily token limit reached
+        if (result && result.success === false && result.limit_reached) {
+            return {
+                success: false,
+                error: result.error,
+                limit_reached: true,
+                limit: result.limit,
+                count: result.count
+            };
+        }
+
+        // Handle duplicate active token specifically
+        if (result && result.success === false && result.is_duplicate) {
+            return {
+                success: false,
+                error: result.error,
+                is_duplicate: true,
+                existing_token_id: result.existing_token_id,
+                existing_token_number: result.existing_token_number,
+                existing_status: result.existing_status
+            };
+        }
+
         const token = { id: result.token_id, token_number: result.token_number };
 
         // Audit
         // If created by staff, log 'ADD_TOKEN'. If public, log 'JOIN_QR'.
         await logAudit(business.id, createdByStaffId ? 'ADD_TOKEN' : 'JOIN_QR', { token_no: token.token_number, priority: isPriority });
 
-        // WhatsApp (Decoupled to Background Queue)
-        const trackingLink = `${BASE_URL}/${clinicSlug}/t/${token.id}`;
-        await queueWhatsAppMessage(
-            business.id,
-            token.id,
-            "token_created",
-            phone,
-            [
-                { type: "text", text: business.name },
-                { type: "text", text: isPriority ? `E-${token.token_number}` : `#${token.token_number}` },
-                { type: "text", text: trackingLink }
-            ]
-        );
+        // WhatsApp (Decoupled to Background Queue to avoid blocking DB transactions on High API latency)
+        if (cleanPhone) {
+            const trackingLink = `${BASE_URL}/${clinicSlug}/t/${token.id}`;
+            // Intentionally NO `await` here. Let Vercel/Node finish it asynchronously.
+            queueWhatsAppMessage(
+                business.id,
+                token.id,
+                "token_created",
+                cleanPhone,
+                [
+                    { type: "text", text: business.name },
+                    { type: "text", text: isPriority ? `E-${token.token_number}` : `#${token.token_number}` },
+                    { type: "text", text: trackingLink }
+                ]
+            ).catch(err => console.error("Async WhatsApp Error:", err));
+        }
 
         revalidatePath(`/${clinicSlug}`);
         return { success: true, token };
@@ -237,6 +277,11 @@ export async function submitFeedback(tokenId: string, rating: number, feedbackTe
 // B4 FIX: Edit token patient name / phone after creation
 export async function updateToken(clinicSlug: string, tokenId: string, name: string, phone: string) {
     if (!tokenId || !clinicSlug) return { error: "Missing data" };
+
+    // Only strictly validate if phone is provided as this form might just be updating name
+    const cleanPhone = phone ? normalizeIndianPhone(phone) : null;
+    if (phone && !cleanPhone) return { error: "Valid 10-digit Indian mobile number required" };
+
     try {
         const user = await getAuthenticatedUser();
         if (!user) return { error: "Unauthorized" };
@@ -247,7 +292,7 @@ export async function updateToken(clinicSlug: string, tokenId: string, name: str
 
         const { error } = await supabase
             .from('tokens')
-            .update({ patient_name: name || null, patient_phone: phone || null })
+            .update({ patient_name: name || null, patient_phone: cleanPhone || null })
             .eq('id', tokenId)
             .eq('business_id', business.id) // C3 safety: verify ownership
             .in('status', ['WAITING', 'SERVING']); // only editable while active
@@ -256,6 +301,41 @@ export async function updateToken(clinicSlug: string, tokenId: string, name: str
         await logAudit(business.id, 'TOKEN_EDITED', { token_id: tokenId });
         revalidatePath(`/${clinicSlug}`);
         return { success: true };
+    } catch (e) {
+        return { error: (e as Error).message };
+    }
+}
+
+// SECURE MANUAL CALL
+export async function triggerManualCall(clinicSlug: string, tokenId: string) {
+    if (!tokenId || !clinicSlug) return { error: "Missing data" };
+
+    try {
+        const user = await getAuthenticatedUser();
+        if (!user) return { error: "Unauthorized: Staff login required to access phone numbers." };
+
+        const supabase = createAdminClient();
+        const business = await getBusinessBySlug(clinicSlug);
+        if (!business) return { error: "Clinic not found" };
+
+        const { data: token } = await supabase
+            .from('tokens')
+            .select('id, patient_phone, token_number')
+            .eq('id', tokenId)
+            .eq('business_id', business.id)
+            .single();
+
+        if (!token) return { error: "Token not found" };
+        if (!token.patient_phone) return { error: "No phone number available for this patient" };
+
+        // Log the secure access event
+        await logAudit(business.id, 'manual_call', {
+            token_id: tokenId,
+            token_number: token.token_number
+        });
+
+        return { success: true, phone: token.patient_phone };
+
     } catch (e) {
         return { error: (e as Error).message };
     }
@@ -440,6 +520,13 @@ export async function getDashboardData(businessId: string) {
     try {
         const today = getClinicDate();
 
+        // Get limits from business config
+        const { data: business } = await supabase
+            .from('businesses')
+            .select('daily_token_limit')
+            .eq('id', businessId)
+            .single();
+
         // Get active session
         const { data: session } = await supabase
             .from('sessions')
@@ -459,10 +546,16 @@ export async function getDashboardData(businessId: string) {
             .eq('session_id', session.id)
             .order('token_number', { ascending: true });
 
-        return { session, tokens: tokens || [] };
+        const safeTokens = (tokens || []).map(t => ({
+            ...t,
+            // Mask the phone number for realtime users - only unmask explicitly via triggerManualCall
+            patient_phone: t.patient_phone ? `${t.patient_phone.slice(0, 3)}****${t.patient_phone.slice(-3)}` : null
+        }));
+
+        return { session, tokens: safeTokens, dailyTokenLimit: business?.daily_token_limit || null };
     } catch (e) {
         console.error("Dashboard Data Fetch Error:", e);
-        return { session: null, tokens: [] };
+        return { session: null, tokens: [], dailyTokenLimit: null };
     }
 }
 
@@ -493,7 +586,7 @@ export async function getTokensForDate(clinicSlug: string, date: string) {
             id: t.id,
             tokenNumber: t.token_number,
             customerName: t.patient_name,
-            customerPhone: t.patient_phone,
+            customerPhone: t.patient_phone ? `${t.patient_phone.slice(0, 3)}****${t.patient_phone.slice(-3)}` : null, // MASKED for security, unmask securely via triggerManualCall
             status: t.status,
             isPriority: t.is_priority,
             rating: t.rating,

@@ -17,6 +17,7 @@ export function useClinicRealtime(clinicSlug: string) {
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
     const [isConnected, setIsConnected] = useState(false);
     const [businessId, setBusinessId] = useState<string | null>(null);
+    const [dailyTokenLimit, setDailyTokenLimit] = useState<number | null>(null);
 
     const [isSynced, setIsSynced] = useState(false);
 
@@ -45,6 +46,7 @@ export function useClinicRealtime(clinicSlug: string) {
 
         try {
             const res = await getDashboardData(businessId);
+            setDailyTokenLimit(res.dailyTokenLimit);
 
             if (res.session) {
                 const mappedSession = mapSession(res.session);
@@ -81,6 +83,55 @@ export function useClinicRealtime(clinicSlug: string) {
             fetchData();
         }, 100);
     }, [fetchData]);
+
+    // Realtime subscription setup
+    useEffect(() => {
+        if (!businessId) return;
+
+        let isUnmounting = false;
+
+        const channel = supabase.channel(`clinic-${businessId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'sessions', filter: `business_id=eq.${businessId}` },
+                () => {
+                    console.log('🔄 Session change detected, refreshing...');
+                    debouncedFetch();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'tokens' },
+                () => {
+                    console.log('🔄 Token change detected, refreshing...');
+                    debouncedFetch();
+                }
+            )
+            .subscribe((status) => {
+                if (isUnmounting) return;
+
+                // Set connected indicator
+                setIsConnected(status === 'SUBSCRIBED');
+
+                // CF5 FIX: Session Hydration on Reconnect
+                // If a tablet loses WiFi for 30 seconds, the WebSocket missed token inserts.
+                // When status hits 'SUBSCRIBED' (either first load OR a reconnect event),
+                // we FORCE a hard database fetch to completely catch up state.
+                if (status === 'SUBSCRIBED') {
+                    console.log('🟢 Realtime connected/reconnected. Force syncing state.');
+                    fetchData();
+                } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                    console.log(`🔴 Realtime ${status}`);
+                }
+            });
+
+        return () => {
+            isUnmounting = true;
+            supabase.removeChannel(channel);
+        };
+    }, [businessId, debouncedFetch, fetchData]);
+
+
 
     // Setup Polling with exponential backoff on failures
     useEffect(() => {
@@ -157,7 +208,7 @@ export function useClinicRealtime(clinicSlug: string) {
     //     loadLocal();
     // }, [readFromLocal]);
 
-    return { session, tokens, loading, lastUpdated, isConnected, isSynced, refresh: fetchData };
+    return { session, tokens, loading, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit };
 }
 
 // Mappers

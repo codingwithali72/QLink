@@ -74,7 +74,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     // Setup Polling
     useEffect(() => {
         fetchStatus(); // initial fetch
-        const interval = setInterval(fetchStatus, 5000); // Poll every 5 seconds
+        const interval = setInterval(fetchStatus, 10000); // Poll every 10 seconds
         return () => clearInterval(interval);
     }, [fetchStatus]);
 
@@ -193,8 +193,8 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
             {queueAlert && (
                 <div
                     className={`fixed top-0 left-0 w-full text-white text-center text-xs py-3 font-bold z-50 flex items-center justify-center gap-2 cursor-pointer ${queueAlert.type === 'next' ? 'bg-green-600 animate-pulse' :
-                            queueAlert.type === 'fast' ? 'bg-blue-600 animate-pulse' :
-                                'bg-slate-600'
+                        queueAlert.type === 'fast' ? 'bg-blue-600 animate-pulse' :
+                            'bg-slate-600'
                         }`}
                     onClick={() => setQueueAlert(null)}
                 >

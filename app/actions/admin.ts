@@ -94,10 +94,10 @@ export async function createBusiness(name: string, slug: string, phone: string, 
         name,
         slug,
         contact_phone: phone,
+        daily_token_limit: 200,
         settings: {
             plan: 'FREE',
             qr_intake_enabled: true,
-            daily_token_limit: 200,
             max_active_tokens: 50,
             daily_message_limit: 300,
             whatsapp_enabled: true,
@@ -210,11 +210,17 @@ export async function updateBusinessSettings(id: string, settings: Record<string
     if (!await isSuperAdmin()) return { error: "Unauthorized" };
     const supabase = createAdminClient();
 
+    // Extract limits to update root column
+    const rootUpdates: Record<string, unknown> = {};
+    if ('daily_token_limit' in settings) {
+        rootUpdates.daily_token_limit = settings.daily_token_limit;
+    }
+
     // Merge with existing settings (do not overwrite unrelated keys)
     const { data: biz } = await supabase.from('businesses').select('settings, slug').eq('id', id).single();
     const merged = { ...(biz?.settings as Record<string, unknown> || {}), ...settings };
 
-    const { error } = await supabase.from('businesses').update({ settings: merged }).eq('id', id);
+    const { error } = await supabase.from('businesses').update({ ...rootUpdates, settings: merged }).eq('id', id);
     if (error) return { error: error.message };
     await logAdminAction('UPDATE_SETTINGS', 'BUSINESS', id, biz?.slug, { changed: Object.keys(settings) });
     revalidatePath('/admin');
@@ -257,55 +263,76 @@ export async function getAdminStats() {
     };
 }
 
+// Scalable Global Analytics (Hits aggregated table, no full table live-scans)
 export async function getAnalytics(dateFrom?: string, dateTo?: string) {
     if (!await isSuperAdmin()) return { error: "Unauthorized" };
 
     const supabase = createAdminClient();
 
-    // Build token query
-    let query = supabase.from('tokens').select('status, rating, created_at, served_at');
-    if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00`);
-    if (dateTo) query = query.lte('created_at', `${dateTo}T23:59:59`);
+    let query = supabase.from('clinic_daily_stats').select('*');
+    if (dateFrom) query = query.gte('date', dateFrom);
+    if (dateTo) query = query.lte('date', dateTo);
 
-    const { data: tokens } = await query;
-    const rows = tokens || [];
+    const { data: stats } = await query;
+    const rows = stats || [];
 
-    const totalCreated = rows.length;
-    const totalServed = rows.filter(t => t.status === 'SERVED').length;
-    const totalCancelled = rows.filter(t => t.status === 'CANCELLED').length;
-    const totalSkipped = rows.filter(t => t.status === 'SKIPPED').length;
+    const totalCreated = rows.reduce((acc, row) => acc + row.total_tokens, 0);
+    const totalServed = rows.reduce((acc, row) => acc + row.served_count, 0);
+    const totalCancelled = 0; // Historically not explicitly counted in daily stats table yet
+    const totalSkipped = rows.reduce((acc, row) => acc + row.skipped_count, 0);
 
-    // Average rating (only tokens with a rating)
-    const ratedTokens = rows.filter(t => t.rating !== null && t.rating > 0);
-    const avgRating = ratedTokens.length
-        ? (ratedTokens.reduce((sum, t) => sum + (t.rating || 0), 0) / ratedTokens.length).toFixed(1)
+    // Calculate Wait Time Avg
+    const waitSamples = rows.filter(r => r.avg_wait_time_minutes > 0);
+    const avgWaitMins = waitSamples.length
+        ? Math.round(waitSamples.reduce((acc, row) => acc + Number(row.avg_wait_time_minutes), 0) / waitSamples.length)
         : null;
 
-    // Average wait time in minutes (created_at → served_at)
-    const servedWithTimes = rows.filter(t => t.status === 'SERVED' && t.served_at && t.created_at);
-    const avgWaitMins = servedWithTimes.length
-        ? Math.round(servedWithTimes.reduce((sum, t) => {
-            const diff = (new Date(t.served_at!).getTime() - new Date(t.created_at).getTime()) / 60000;
-            return sum + diff;
-        }, 0) / servedWithTimes.length)
-        : null;
-
-    // Time saved: assume 20 min avg physical queue wait per served patient
     const AVG_QUEUE_WAIT_MINS = 20;
     const timeSavedMins = totalServed * AVG_QUEUE_WAIT_MINS;
     const timeSavedHours = Math.floor(timeSavedMins / 60);
-    const timeSavedRemainder = timeSavedMins % 60;
 
     return {
         totalCreated,
         totalServed,
         totalCancelled,
         totalSkipped,
-        avgRating,
+        avgRating: null, // Ratings skipped for daily performance aggregate
         avgWaitMins,
         timeSavedMins,
         timeSavedLabel: timeSavedHours > 0
-            ? `${timeSavedHours}h ${timeSavedRemainder}m`
+            ? `${timeSavedHours}h ${timeSavedMins % 60}m`
             : `${timeSavedMins}m`,
+    };
+}
+
+// Clinic-specific heavy detailed metrics
+export async function getClinicMetrics(businessId: string) {
+    if (!await isSuperAdmin()) return { error: "Unauthorized" };
+    const supabase = createAdminClient();
+
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+    // Live Today Stats
+    const { count: liveCreated } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', `${todayStr}T00:00:00`);
+    const { count: liveServed } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'SERVED').gte('created_at', `${todayStr}T00:00:00`);
+    const { count: liveSkipped } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'SKIPPED').gte('created_at', `${todayStr}T00:00:00`);
+    const { count: liveEmergency } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('is_priority', true).gte('created_at', `${todayStr}T00:00:00`);
+
+    // Historical Rolling 30 Days Trend
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const { data: trend } = await supabase.from('clinic_daily_stats')
+        .select('date, total_tokens, avg_wait_time_minutes')
+        .eq('business_id', businessId)
+        .gte('date', thirtyDaysAgo)
+        .order('date', { ascending: true });
+
+    return {
+        today: {
+            created: liveCreated || 0,
+            served: liveServed || 0,
+            skipped: liveSkipped || 0,
+            emergency: liveEmergency || 0
+        },
+        trend: trend || []
     };
 }

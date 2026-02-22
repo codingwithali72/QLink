@@ -1,7 +1,8 @@
 "use client";
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
-import { nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, undoLastAction, updateToken } from "@/app/actions/queue";
+import { nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, undoLastAction, updateToken, triggerManualCall } from "@/app/actions/queue";
+import { isValidIndianPhone } from "@/lib/phone";
 import { logout } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +21,7 @@ import { getClinicDate } from "@/lib/date";
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function ReceptionPage({ params }: { params: { clinicSlug: string } }) {
-    const { session, tokens, loading, refresh, lastUpdated, isConnected } = useClinicRealtime(params.clinicSlug);
+    const { session, tokens, loading, refresh, lastUpdated, isConnected, dailyTokenLimit } = useClinicRealtime(params.clinicSlug);
     const [actionLoading, setActionLoading] = useState(false);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
@@ -110,9 +111,34 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         return displayedTokens.filter(t => t.status === 'SERVED').length;
     }, [tokens, displayedTokens, selectedDate, todayStr]);
 
+    const activeTokensCount = useMemo(() => {
+        return tokens.filter(t => t.status !== 'SERVED' && t.status !== 'CANCELLED').length;
+    }, [tokens]);
+
+    const isLimitReached = dailyTokenLimit !== null && dailyTokenLimit > 0 && activeTokensCount >= dailyTokenLimit;
+
     // Handlers
     const handleNext = () => performAction(() => nextPatient(params.clinicSlug));
-    const handleCallManual = (tokenId: string) => performAction(() => nextPatient(params.clinicSlug, tokenId));
+
+    const handlePhoneCall = async (tokenId: string) => {
+        if (actionLoading) return;
+        setActionLoading(true);
+        try {
+            const res = await triggerManualCall(params.clinicSlug, tokenId);
+            if (res.error) {
+                alert(res.error);
+                return;
+            }
+            if (confirm(`Calling patient: ${res.phone}\nWould you like to proceed to dialer?`)) {
+                window.location.href = `tel:${res.phone}`;
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error initiating call");
+        } finally {
+            setActionLoading(false);
+        }
+    };
 
     const handleSkip = () => { if (servingToken && confirm("Skip current ticket?")) performAction(() => skipToken(params.clinicSlug, servingToken.id)); };
 
@@ -138,10 +164,37 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     const handleManualAdd = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Prevent invalid phone inputs at UI level, but allow empty/fake for emergencies
+        if (manualPhone.trim() !== "" && manualPhone !== "0000000000") {
+            if (!isValidIndianPhone(manualPhone)) {
+                alert("Please enter a valid 10-digit Indian mobile number");
+                return;
+            }
+        } else if (!manualIsPriority) {
+            alert("A valid mobile number is required for standard walk-ins");
+            return;
+        }
+
         setActionLoading(true);
         const res = await createToken(params.clinicSlug, manualPhone, manualName, manualIsPriority);
-        if (res.error) alert(res.error);
-        else {
+        if (res.error) {
+            if (res.is_duplicate) {
+                alert(`Token #${res.existing_token_number} already exists for this number in ${res.existing_status} state. Creation ignored.`);
+                setIsAddModalOpen(false);
+                setManualName("");
+                setManualPhone("");
+                setManualIsPriority(false);
+            } else if (res.limit_reached) {
+                alert(`Daily limit reached (${res.count}/${res.limit}).`);
+                setIsAddModalOpen(false);
+                setManualName("");
+                setManualPhone("");
+                setManualIsPriority(false);
+            } else {
+                alert(res.error);
+            }
+        } else {
             setIsAddModalOpen(false);
             setManualName("");
             setManualPhone("");
@@ -172,6 +225,14 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     // B4: Handle save edit
     const handleSaveEdit = async () => {
         if (!editingToken) return;
+
+        if (editingToken.phone && editingToken.phone.trim() !== "") {
+            if (!isValidIndianPhone(editingToken.phone)) {
+                alert("Please enter a valid 10-digit Indian mobile number");
+                return;
+            }
+        }
+
         setActionLoading(true);
         const res = await updateToken(params.clinicSlug, editingToken.id, editingToken.name, editingToken.phone);
         if (res.error) alert(res.error);
@@ -377,8 +438,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     <Card className="p-1 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
                         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                             <DialogTrigger asChild>
-                                <Button disabled={!isSessionActive} className="w-full h-14 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl text-lg shadow-lg">
-                                    <Plus className="w-5 h-5 mr-2" /> Add Walk-in
+                                <Button disabled={!isSessionActive || isLimitReached} className="w-full h-14 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl text-lg shadow-lg">
+                                    <Plus className="w-5 h-5 mr-2" /> {isLimitReached ? "Daily Limit Reached" : "Add Walk-in"}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="dark:bg-slate-900 dark:border-slate-800 text-slate-900 dark:text-white">
@@ -425,7 +486,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 </div>
                             ) : (
                                 visibleWaitingTokens.map((t) => (
-                                    <TokenItem key={t.id} token={t} onCancel={handleCancelToken} onCall={handleCallManual} />
+                                    <TokenItem key={t.id} token={t} onCancel={handleCancelToken} onCall={handlePhoneCall} />
                                 ))
                             )}
                         </div>

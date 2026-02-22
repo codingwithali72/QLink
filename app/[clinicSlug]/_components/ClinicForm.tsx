@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 // import { useRouter } from "next/navigation"; // DISABLED
 import { createToken } from "@/app/actions/queue";
+import { isValidIndianPhone } from "@/lib/phone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,11 +33,22 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
         setLoading(true);
         setError(null);
 
+        if (!isValidIndianPhone(phone)) {
+            setError("Enter a valid 10-digit Indian mobile number");
+            setLoading(false);
+            return;
+        }
+
         try {
             const res = await createToken(clinicSlug, phone, name);
             if (res.token) {
                 // Use window.location instead of router to avoid context issues
                 window.location.href = `/${clinicSlug}/t/${res.token.id}`;
+            } else if (res.is_duplicate) {
+                // Seamlessly redirect to existing active token
+                window.location.href = `/${clinicSlug}/t/${res.existing_token_id}`;
+            } else if (res.limit_reached) {
+                setStatusMessage("Daily token limit reached. Please contact clinic.");
             } else {
                 if (res.error === "Clinic is closed" || res.error === "Queue is currently paused") {
                     setStatusMessage(res.error === "Clinic is closed" ? "Queue is closed for today." : "Queue is currently paused.");
