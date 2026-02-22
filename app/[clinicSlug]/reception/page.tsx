@@ -129,9 +129,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 alert(res.error);
                 return;
             }
-            if (confirm(`Calling patient: ${res.phone}\nWould you like to proceed to dialer?`)) {
-                window.location.href = `tel:${res.phone}`;
-            }
+            // Launch dialer immediately. `window.confirm` breaks deep links on some mobile browsers after an async call.
+            window.location.href = `tel:${res.phone}`;
         } catch (e) {
             console.error(e);
             alert("Error initiating call");

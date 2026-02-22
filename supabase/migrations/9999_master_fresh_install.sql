@@ -154,26 +154,80 @@ DECLARE
     v_new_token_number int;
     v_token_id uuid;
     v_result json;
+    v_existing_token record;
+    v_limit int;
+    v_current_count int;
+    v_is_duplicate boolean;
+    v_today_ist date;
 BEGIN
-    -- 1. Lock the session row so no one else can modify it simultaneously.
-    PERFORM id FROM public.sessions WHERE id = p_session_id AND business_id = p_business_id FOR UPDATE;
+    -- 0. Calculate Explicit 'Asia/Kolkata' Date (Indian SMB Crash Fix)
+    v_today_ist := TIMEZONE('Asia/Kolkata', now())::date;
 
-    -- 2. Increment the strictly sequential counter
+    -- 1. Lock the session row so no one else can modify it simultaneously. (Concurrency Protection)
+    PERFORM id FROM public.sessions 
+    WHERE id = p_session_id AND business_id = p_business_id AND date = v_today_ist 
+    FOR UPDATE;
+
+    -- 2. Retrieve Daily Token Limit
+    SELECT daily_token_limit INTO v_limit 
+    FROM public.businesses 
+    WHERE id = p_business_id;
+
+    -- 3. Block creation if Daily Limit is reached (Strict Enforcement)
+    IF v_limit IS NOT NULL AND v_limit > 0 THEN
+        SELECT COUNT(id) INTO v_current_count
+        FROM public.tokens
+        WHERE session_id = p_session_id
+          AND status NOT IN ('SERVED', 'CANCELLED');
+          
+        IF v_current_count >= v_limit THEN
+            RETURN json_build_object(
+                'success', false,
+                'error', 'Daily token limit reached',
+                'limit_reached', true,
+                'limit', v_limit,
+                'count', v_current_count
+            );
+        END IF;
+    END IF;
+
+    -- 4. Check for existing ACTIVE token for this phone number in this session
+    IF p_phone IS NOT NULL AND TRIM(p_phone) != '' THEN
+        SELECT id, token_number, status INTO v_existing_token
+        FROM public.tokens
+        WHERE session_id = p_session_id 
+          AND patient_phone = p_phone
+          AND status IN ('WAITING', 'SERVING', 'SKIPPED', 'PAUSED')
+        LIMIT 1;
+
+        IF FOUND THEN
+            RETURN json_build_object(
+                'success', false,
+                'error', 'Token already exists',
+                'is_duplicate', true,
+                'existing_token_id', v_existing_token.id,
+                'existing_token_number', v_existing_token.token_number,
+                'existing_status', v_existing_token.status
+            );
+        END IF;
+    END IF;
+
+    -- 5. Increment the strictly sequential counter
     UPDATE public.sessions
     SET last_token_number = last_token_number + 1
     WHERE id = p_session_id
     RETURNING last_token_number INTO v_new_token_number;
 
-    -- 3. Insert the token safely using the new sequential number
+    -- 6. Insert the token safely using the new sequential number
     INSERT INTO public.tokens (
         business_id, session_id, patient_phone, patient_name, is_priority, token_number, created_by_staff_id
     ) VALUES (
         p_business_id, p_session_id, p_phone, p_name, p_is_priority, v_new_token_number, p_staff_id
     ) RETURNING id INTO v_token_id;
 
-    -- 4. Append to Immutable Audit Log
+    -- 7. Append to Immutable Audit Log
     INSERT INTO public.audit_logs (business_id, staff_id, token_id, action, details)
-    VALUES (p_business_id, p_staff_id, v_token_id, 'CREATED', jsonb_build_object('token_number', v_new_token_number, 'is_priority', p_is_priority));
+    VALUES (p_business_id, p_staff_id, v_token_id, 'CREATED', json_build_object('token_number', v_new_token_number, 'is_priority', p_is_priority)::jsonb);
 
     -- Return the result
     SELECT json_build_object(
