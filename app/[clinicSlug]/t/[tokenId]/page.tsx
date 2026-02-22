@@ -2,7 +2,7 @@
 
 import { cancelToken, getPublicTokenStatus, submitFeedback } from "@/app/actions/queue";
 import { Button } from "@/components/ui/button";
-import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw } from "lucide-react";
+import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw, Star } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 
 // Format Helper
@@ -128,14 +128,16 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         return <div className="p-8 text-center mt-10 text-slate-500">Ticket not found or session expired.</div>;
     }
 
-    const handleSubmitFeedback = async () => {
-        if (!rating) return;
+    const handleSubmitFeedback = async (e?: React.FormEvent, submitRating?: number) => {
+        if (e) e.preventDefault();
+        const activeRating = submitRating || rating;
+        if (!activeRating) return;
         setFeedbackLoading(true);
-        await submitFeedback(params.tokenId, rating, feedbackText);
+        await submitFeedback(params.tokenId, activeRating, feedbackText);
         setFeedbackLoading(false);
         setFeedbackSubmitted(true);
         // 4 or 5 stars → redirect to Google review page
-        if (rating >= 4) {
+        if (activeRating >= 4) {
             setTimeout(() => window.open(GOOGLE_REVIEW_URL, "_blank"), 800);
         }
     };
@@ -334,35 +336,58 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                             <h3 className="font-bold text-xl text-slate-900">Visit Complete!</h3>
                                             <p className="text-slate-500 text-sm">How was your experience today?</p>
                                         </div>
-                                        <div className="flex justify-center gap-2">
+                                        <div className="flex justify-center gap-1 sm:gap-2">
                                             {[1, 2, 3, 4, 5].map((star) => (
                                                 <button
                                                     key={star}
-                                                    onClick={() => setRating(star)}
+                                                    onClick={() => {
+                                                        setRating(star);
+                                                        // Auto-submit positive feedback
+                                                        if (star >= 4) {
+                                                            // Give a tiny UX delay so they see the star fill up before it submits
+                                                            setTimeout(() => {
+                                                                const fakeEvent = { preventDefault: () => { } } as React.FormEvent;
+                                                                handleSubmitFeedback(fakeEvent, star);
+                                                            }, 300);
+                                                        }
+                                                    }}
                                                     onMouseEnter={() => setHoverRating(star)}
                                                     onMouseLeave={() => setHoverRating(0)}
-                                                    className="text-4xl transition-transform active:scale-90 hover:scale-110"
+                                                    className="p-1 transition-transform active:scale-90 hover:scale-110 focus:outline-none"
+                                                    disabled={feedbackLoading}
                                                 >
-                                                    {star <= (hoverRating || rating) ? "⭐" : "☆"}
+                                                    <Star
+                                                        className={`w-10 h-10 sm:w-12 sm:h-12 transition-colors duration-200 ${star <= (hoverRating || rating)
+                                                            ? "fill-yellow-400 text-yellow-500"
+                                                            : "fill-transparent text-slate-300"
+                                                            }`}
+                                                    />
                                                 </button>
                                             ))}
                                         </div>
                                         {rating > 0 && rating <= 3 && (
-                                            <textarea
-                                                value={feedbackText}
-                                                onChange={e => setFeedbackText(e.target.value)}
-                                                placeholder="Tell us what we can improve..."
-                                                className="w-full p-3 text-sm border border-slate-200 rounded-xl resize-none h-24 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                                            />
+                                            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                                <textarea
+                                                    value={feedbackText}
+                                                    onChange={e => setFeedbackText(e.target.value)}
+                                                    placeholder="Tell us what we can improve..."
+                                                    className="w-full p-4 text-sm border-2 border-slate-200 rounded-xl resize-none h-28 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
+                                                />
+                                            </div>
                                         )}
-                                        {rating > 0 && (
+                                        {rating > 0 && rating <= 3 && (
                                             <Button
-                                                onClick={handleSubmitFeedback}
-                                                disabled={feedbackLoading}
-                                                className="w-full h-12 font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
+                                                onClick={(e) => handleSubmitFeedback(e, rating)}
+                                                disabled={feedbackLoading || !feedbackText.trim()}
+                                                className="w-full h-12 font-bold rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-lg shadow-blue-600/20"
                                             >
-                                                {feedbackLoading ? <Loader2 className="animate-spin w-4 h-4" /> : "Submit Feedback"}
+                                                {feedbackLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Submit Feedback"}
                                             </Button>
+                                        )}
+                                        {rating >= 4 && feedbackLoading && (
+                                            <div className="flex items-center justify-center text-slate-500 gap-2 text-sm font-medium animate-pulse">
+                                                <Loader2 className="animate-spin w-4 h-4" /> Submitting rating...
+                                            </div>
                                         )}
                                     </>
                                 )}
