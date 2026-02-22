@@ -4,6 +4,7 @@
 -- =================================================================================
 
 -- 1. CLEANUP (Drops existing tables so you can run this safely on a fresh project)
+DROP TABLE IF EXISTS "public"."clinic_daily_stats" CASCADE;
 DROP TABLE IF EXISTS "public"."message_logs" CASCADE;
 DROP TABLE IF EXISTS "public"."audit_logs" CASCADE;
 DROP TABLE IF EXISTS "public"."tokens" CASCADE;
@@ -11,6 +12,7 @@ DROP TABLE IF EXISTS "public"."sessions" CASCADE;
 DROP TABLE IF EXISTS "public"."staff_users" CASCADE;
 DROP TABLE IF EXISTS "public"."businesses" CASCADE;
 
+DROP FUNCTION IF EXISTS "public"."refresh_clinic_daily_stats" CASCADE;
 DROP FUNCTION IF EXISTS "public"."rpc_process_queue_action" CASCADE;
 DROP FUNCTION IF EXISTS "public"."create_token_atomic" CASCADE;
 DROP FUNCTION IF EXISTS "public"."next_patient_atomic" CASCADE;
@@ -26,6 +28,7 @@ CREATE TABLE "public"."businesses" (
     "address" text,
     "contact_phone" text,
     "settings" jsonb DEFAULT '{}'::jsonb,
+    "daily_token_limit" integer DEFAULT NULL,
     "is_active" boolean DEFAULT true,
     "created_at" timestamp with time zone DEFAULT now(),
     PRIMARY KEY ("id"),
@@ -101,6 +104,23 @@ CREATE TABLE "public"."message_logs" (
     PRIMARY KEY ("id")
 );
 
+CREATE TABLE "public"."clinic_daily_stats" (
+    "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+    "business_id" uuid NOT NULL REFERENCES "public"."businesses"("id") ON DELETE CASCADE,
+    "date" date NOT NULL,
+    "total_tokens" integer NOT NULL DEFAULT 0,
+    "served_count" integer NOT NULL DEFAULT 0,
+    "skipped_count" integer NOT NULL DEFAULT 0,
+    "recall_count" integer NOT NULL DEFAULT 0,
+    "emergency_count" integer NOT NULL DEFAULT 0,
+    "whatsapp_count" integer NOT NULL DEFAULT 0,
+    "sms_count" integer NOT NULL DEFAULT 0,
+    "avg_wait_time_minutes" numeric NOT NULL DEFAULT 0,
+    "updated_at" timestamp with time zone DEFAULT now(),
+    PRIMARY KEY ("id"),
+    UNIQUE ("business_id", "date")
+);
+
 -- =================================================================================
 -- 3. INDEXES FOR PERFORMANCE & REALTIME
 -- =================================================================================
@@ -109,6 +129,9 @@ CREATE INDEX idx_tokens_session ON "public"."tokens" ("session_id");
 CREATE INDEX idx_tokens_business_status ON "public"."tokens" ("business_id", "status");
 CREATE INDEX idx_sessions_business_date ON "public"."sessions" ("business_id", "date");
 CREATE INDEX idx_audit_logs_business_session ON "public"."audit_logs" ("business_id", "created_at");
+-- Index for fast analytics queries
+CREATE INDEX "idx_clinic_daily_stats_date" ON "public"."clinic_daily_stats" ("date");
+CREATE INDEX "idx_clinic_daily_stats_business" ON "public"."clinic_daily_stats" ("business_id");
 
 -- =================================================================================
 -- 4. ENABLE ROW LEVEL SECURITY (RLS)
@@ -120,6 +143,7 @@ ALTER TABLE "public"."sessions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."tokens" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."audit_logs" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."message_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."clinic_daily_stats" ENABLE ROW LEVEL SECURITY;
 
 -- Note: In a production App, you would write strict RLS policies tying `auth.uid()` to `staff_users.id`.
 -- For MVP testing speed without a complex Auth UI, we allow ANONYMOUS READS for the public tracking links,
@@ -128,6 +152,7 @@ ALTER TABLE "public"."message_logs" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public read access to businesses" ON "public"."businesses" FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to sessions" ON "public"."sessions" FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to tokens" ON "public"."tokens" FOR SELECT USING (true);
+CREATE POLICY "Allow public read access to clinic_daily_stats" ON "public"."clinic_daily_stats" FOR SELECT USING (true);
 
 -- ENABLE REALTIME FOR TOKENS & SESSIONS
 ALTER PUBLICATION supabase_realtime ADD TABLE "public"."tokens";
@@ -377,11 +402,78 @@ BEGIN
 
     ELSIF p_action = 'RESUME_SESSION' THEN
         UPDATE public.sessions SET status = 'OPEN' WHERE id = p_session_id;
-        UPDATE public.tokens SET status = COALESCE(previous_status, 'WAITING') WHERE session_id = p_session_id AND status = 'PAUSED';
+        INSERT INTO public.audit_logs (business_id, staff_id, action) VALUES (p_business_id, p_staff_id, 'SESSION_RESUMED');
         RETURN json_build_object('success', true);
 
+    ELSE
+        RETURN json_build_object('success', false, 'error', 'Invalid action');
     END IF;
 
-    RETURN json_build_object('success', false, 'error', 'Invalid action');
+END;
+$$;
+
+
+-- =================================================================================
+-- 6. ANALYTICS PRE-COMPUTATION RPC
+-- =================================================================================
+-- This function aggregates metrics for a specific date and upserts them into `clinic_daily_stats`.
+-- It avoids heavy runtime aggregations in the Admin Dashboard.
+CREATE OR REPLACE FUNCTION public.refresh_clinic_daily_stats(p_date date)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    INSERT INTO public.clinic_daily_stats (
+        business_id, date, total_tokens, served_count, skipped_count, 
+        recall_count, emergency_count, avg_wait_time_minutes, whatsapp_count, sms_count, updated_at
+    )
+    SELECT 
+        b.id AS business_id,
+        p_date AS date,
+        
+        -- Tokens aggregates
+        COALESCE(COUNT(t.id), 0) AS total_tokens,
+        COALESCE(SUM(CASE WHEN t.status = 'SERVED' THEN 1 ELSE 0 END), 0) AS served_count,
+        COALESCE(SUM(CASE WHEN t.status = 'SKIPPED' THEN 1 ELSE 0 END), 0) AS skipped_count,
+        -- Recall count derived from operations later, approximated here by audit logs or simplistically modeled
+        -- We will pull true recall counts directly from audit_logs for the day for perfection.
+        (SELECT COUNT(*) FROM public.audit_logs al WHERE al.business_id = b.id AND al.action = 'RECALL' AND (al.created_at AT TIME ZONE 'UTC')::date = p_date) AS recall_count,
+        COALESCE(SUM(CASE WHEN t.is_priority = true THEN 1 ELSE 0 END), 0) AS emergency_count,
+        
+        -- Safe average wait time interval calculation in minutes
+        COALESCE(
+            ROUND(
+                EXTRACT(EPOCH FROM AVG(
+                    CASE WHEN t.status = 'SERVED' AND t.served_at IS NOT NULL 
+                    THEN (t.served_at - t.created_at) 
+                    ELSE NULL END
+                )) / 60
+            ), 0
+        ) AS avg_wait_time_minutes,
+
+        -- Messaging Aggregates
+        (SELECT COUNT(*) FROM public.message_logs ml WHERE ml.business_id = b.id AND ml.provider = 'WHATSAPP' AND (ml.created_at AT TIME ZONE 'UTC')::date = p_date) AS whatsapp_count,
+        0 AS sms_count, -- Placeholder for future SMS provider
+        now() AS updated_at
+
+    FROM public.businesses b
+    -- Left join on sessions for the target date to link tokens
+    LEFT JOIN public.sessions s ON s.business_id = b.id AND s.date = p_date
+    LEFT JOIN public.tokens t ON t.session_id = s.id
+    
+    GROUP BY b.id, p_date
+    
+    ON CONFLICT (business_id, date) DO UPDATE 
+    SET 
+        total_tokens = EXCLUDED.total_tokens,
+        served_count = EXCLUDED.served_count,
+        skipped_count = EXCLUDED.skipped_count,
+        recall_count = EXCLUDED.recall_count,
+        emergency_count = EXCLUDED.emergency_count,
+        avg_wait_time_minutes = EXCLUDED.avg_wait_time_minutes,
+        whatsapp_count = EXCLUDED.whatsapp_count,
+        sms_count = EXCLUDED.sms_count,
+        updated_at = now();
 END;
 $$;
