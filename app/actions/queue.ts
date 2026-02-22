@@ -121,7 +121,13 @@ export async function startSession(clinicSlug: string) {
 }
 
 // 2. CREATE TOKEN
-export async function createToken(clinicSlug: string, phone: string, name: string = "", isPriority: boolean = false) {
+export async function createToken(clinicSlug: string, phone: string, name: string = "", isPriority: boolean = false, createdByStaffId?: string) {
+    // 0. SECURITY INJECTION SHIELD:
+    // If a request does NOT have a valid staff ID, it came from a public QR scan or a malicious direct API hit.
+    // Forcibly strip priority status to prevent malicious users from jumping the queue via JSON manipulation.
+    if (!createdByStaffId) {
+        isPriority = false;
+    }
     if (!clinicSlug) return { error: "Missing clinic slug" };
 
     // Allow empty phone for emergency walk-ins. Convert legacy 0000000000 to null.

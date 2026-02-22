@@ -273,18 +273,37 @@ BEGIN
         -- Safely rollback the state by reading the last state transition
         -- (In a real massive app, you'd unroll the exact audit log, but relying on previous_status is perfect for MVP).
         
-        -- A. Revert the last Serving back to Waiting
-        SELECT id, previous_status, token_number INTO v_target_token FROM public.tokens 
-        WHERE session_id = p_session_id AND status = 'SERVING' ORDER BY created_at DESC LIMIT 1;
-        
-        IF v_target_token.id IS NOT NULL AND v_target_token.previous_status IS NOT NULL THEN
-            UPDATE public.tokens SET status = v_target_token.previous_status WHERE id = v_target_token.id;
-        END IF;
+        -- INDIAN SMB CRASH FIX: The Infinite Undo Queue Fracture
+        -- Only permit an undo if the token was SERVED in the last 5 minutes.
+        -- This prevents a receptionist from panic-clicking Undo 50 times and reverting the entire day's operations.
 
         -- B. Try to resurrect the last 'SERVED' back to 'SERVING'
-        SELECT id, previous_status, token_number INTO v_target_token FROM public.tokens 
-        WHERE session_id = p_session_id AND status = 'SERVED' ORDER BY served_at DESC LIMIT 1;
+        SELECT id, previous_status, token_number, served_at INTO v_target_token FROM public.tokens 
+        WHERE session_id = p_session_id AND status = 'SERVED' 
+        ORDER BY served_at DESC LIMIT 1;
 
+        -- Hard Time Boundary Check
+        IF v_target_token.id IS NULL THEN
+            RETURN json_build_object('success', false, 'error', 'Nothing to undo.');
+        END IF;
+
+        IF extract(epoch from (now() - v_target_token.served_at)) > 300 THEN
+            RETURN json_build_object('success', false, 'error', 'Undo expired. Can only undo actions from the last 5 minutes.');
+        END IF;
+
+        -- A. Revert the currently 'SERVING' token back to 'WAITING' to make room
+        DECLARE
+            v_current_waiting RECORD;
+        BEGIN
+            SELECT id, previous_status, token_number INTO v_current_waiting FROM public.tokens 
+            WHERE session_id = p_session_id AND status = 'SERVING' ORDER BY created_at DESC LIMIT 1;
+            
+            IF v_current_waiting.id IS NOT NULL AND v_current_waiting.previous_status IS NOT NULL THEN
+                UPDATE public.tokens SET status = v_current_waiting.previous_status WHERE id = v_current_waiting.id;
+            END IF;
+        END;
+
+        -- Now actually resurrect the target back to SERVING
         IF v_target_token.id IS NOT NULL AND (v_target_token.previous_status = 'SERVING' OR v_target_token.previous_status IS NOT NULL) THEN
             UPDATE public.tokens SET status = 'SERVING', served_at = NULL WHERE id = v_target_token.id;
             UPDATE public.sessions SET now_serving_number = v_target_token.token_number WHERE id = p_session_id;

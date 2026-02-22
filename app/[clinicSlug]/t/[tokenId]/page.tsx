@@ -71,11 +71,29 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         }
     }, [params.tokenId, isOffline]);
 
-    // Setup Polling
+    // Setup Polling & Background Hydration
     useEffect(() => {
-        fetchStatus(); // initial fetch
-        const interval = setInterval(fetchStatus, 10000); // Poll every 10 seconds
-        return () => clearInterval(interval);
+        // 1. Initial Load
+        fetchStatus();
+
+        // 2. Continuous Polling (Every 10s)
+        const interval = setInterval(fetchStatus, 10000);
+
+        // 3. Indian SMB Survival Fix: The "Pocket Lock" Refresh
+        // Mobile browsers (iOS/Android) suspend JS intervals when the screen is locked.
+        // We must manually trigger a fetch the *exact. millisecond* the screen turns back on.
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                console.log("Phone unlocked/tab focused. Force hydrating queue state.");
+                fetchStatus();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [fetchStatus]);
 
     useEffect(() => {

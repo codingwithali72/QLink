@@ -4,12 +4,12 @@
 -- =================================================================================
 -- 1. ADD DAILY TOKEN LIMIT TO BUSINESSES
 -- =================================================================================
-ALTER TABLE public.businesses ADD COLUMN daily_token_limit integer DEFAULT NULL;
+ALTER TABLE public.businesses ADD COLUMN IF NOT EXISTS daily_token_limit integer DEFAULT NULL;
 
 -- =================================================================================
 -- 2. CREATE CLINIC DAILY STATS TABLE (For Admin Analytics)
 -- =================================================================================
-CREATE TABLE public.clinic_daily_stats (
+CREATE TABLE IF NOT EXISTS public.clinic_daily_stats (
     id uuid NOT NULL DEFAULT gen_random_uuid(),
     business_id uuid NOT NULL REFERENCES public.businesses(id) ON DELETE CASCADE,
     date date NOT NULL,
@@ -27,12 +27,21 @@ CREATE TABLE public.clinic_daily_stats (
 );
 
 -- Index for fast analytics queries
-CREATE INDEX idx_clinic_daily_stats_date ON public.clinic_daily_stats (date);
-CREATE INDEX idx_clinic_daily_stats_business ON public.clinic_daily_stats (business_id);
+CREATE INDEX IF NOT EXISTS idx_clinic_daily_stats_date ON public.clinic_daily_stats (date);
+CREATE INDEX IF NOT EXISTS idx_clinic_daily_stats_business ON public.clinic_daily_stats (business_id);
 
 -- Enable RLS
 ALTER TABLE public.clinic_daily_stats ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read access to clinic_daily_stats" ON public.clinic_daily_stats FOR SELECT USING (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'clinic_daily_stats' AND policyname = 'Allow public read access to clinic_daily_stats'
+    ) THEN
+        CREATE POLICY "Allow public read access to clinic_daily_stats" ON public.clinic_daily_stats FOR SELECT USING (true);
+    END IF;
+END
+$$;
 
 
 -- =================================================================================
@@ -55,14 +64,24 @@ DECLARE
     v_token_id uuid;
     v_result json;
     v_existing_token record;
-    v_business_limit int;
-    v_active_token_count int;
+    v_limit int; -- Renamed from v_business_limit
+    v_current_count int; -- Renamed from v_active_token_count
+    v_is_duplicate boolean; -- Added
+    v_today_ist date; -- Added
 BEGIN
+    -- 0. Calculate Explicit 'Asia/Kolkata' Date (Indian SMB Crash Fix)
+    -- CURRENT_DATE natively uses UTC. Without this, operations at 5:29 AM and 5:31 AM
+    -- IST would split into two separate database sessions seamlessly, destroying the queue.
+    v_today_ist := TIMEZONE('Asia/Kolkata', now())::date;
+
     -- 1. Lock the session row so no one else can modify it simultaneously. (Concurrency Protection)
-    PERFORM id FROM public.sessions WHERE id = p_session_id AND business_id = p_business_id FOR UPDATE;
+    -- We also ensure that the session we are locking explicitly belongs to TODAY in India.
+    PERFORM id FROM public.sessions 
+    WHERE id = p_session_id AND business_id = p_business_id AND date = v_today_ist 
+    FOR UPDATE;
 
     -- 2. Retrieve Daily Token Limit
-    SELECT daily_token_limit INTO v_business_limit 
+    SELECT daily_token_limit INTO v_limit 
     FROM public.businesses 
     WHERE id = p_business_id;
 
