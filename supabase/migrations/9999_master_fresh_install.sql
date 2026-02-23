@@ -111,11 +111,14 @@ CREATE TABLE "public"."clinic_daily_stats" (
     "total_tokens" integer NOT NULL DEFAULT 0,
     "served_count" integer NOT NULL DEFAULT 0,
     "skipped_count" integer NOT NULL DEFAULT 0,
+    "cancelled_count" integer NOT NULL DEFAULT 0,
     "recall_count" integer NOT NULL DEFAULT 0,
     "emergency_count" integer NOT NULL DEFAULT 0,
+    "active_tokens" integer NOT NULL DEFAULT 0,
     "whatsapp_count" integer NOT NULL DEFAULT 0,
     "sms_count" integer NOT NULL DEFAULT 0,
     "avg_wait_time_minutes" numeric NOT NULL DEFAULT 0,
+    "avg_rating" numeric DEFAULT NULL,
     "updated_at" timestamp with time zone DEFAULT now(),
     PRIMARY KEY ("id"),
     UNIQUE ("business_id", "date")
@@ -132,6 +135,12 @@ CREATE INDEX idx_audit_logs_business_session ON "public"."audit_logs" ("business
 -- Index for fast analytics queries
 CREATE INDEX "idx_clinic_daily_stats_date" ON "public"."clinic_daily_stats" ("date");
 CREATE INDEX "idx_clinic_daily_stats_business" ON "public"."clinic_daily_stats" ("business_id");
+-- Partial unique index: prevents duplicate ACTIVE tokens for the same phone in a session.
+-- This is the database-level race-condition guard. The partial index only constrains
+-- rows where the patient is still active; once served/cancelled the constraint lifts.
+CREATE UNIQUE INDEX "idx_tokens_active_phone_unique"
+    ON "public"."tokens" ("session_id", "patient_phone")
+    WHERE status IN ('WAITING', 'SERVING', 'SKIPPED', 'RECALLED', 'PAUSED');
 
 -- =================================================================================
 -- 4. ENABLE ROW LEVEL SECURITY (RLS)
@@ -162,106 +171,142 @@ ALTER PUBLICATION supabase_realtime ADD TABLE "public"."sessions";
 -- 5. ATOMIC QUEUE FUNCTIONS (THE BRAINS OF QLINK)
 -- =================================================================================
 
--- A. CREATE TOKEN ATOMICALLY (Prevents sequence collisions)
+-- A. CREATE TOKEN ATOMICALLY (Prevents sequence collisions + enforces all limits)
+-- FIXED: variable name bug, wrong count semantics, RECALLED in active states,
+--        unique_violation EXCEPTION handler for partial-index race condition.
 CREATE OR REPLACE FUNCTION public.create_token_atomic(
     p_business_id uuid,
-    p_session_id uuid,
-    p_phone text,
-    p_name text,
+    p_session_id  uuid,
+    p_phone       text,
+    p_name        text,
     p_is_priority boolean DEFAULT false,
-    p_staff_id uuid DEFAULT NULL
+    p_staff_id    uuid    DEFAULT NULL
 )
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    v_new_token_number int;
-    v_token_id uuid;
-    v_result json;
-    v_existing_token record;
-    v_limit int;
-    v_current_count int;
-    v_is_duplicate boolean;
-    v_today_ist date;
+    v_new_token_number  int;
+    v_token_id          uuid;
+    v_result            json;
+    v_existing_token    record;
+    v_limit             int;   -- daily_token_limit from businesses
+    v_issued_count      int;   -- ALL tokens ever issued in session (capacity)
+    v_today_ist         date;  -- IST date to prevent UTC/IST midnight split
 BEGIN
-    -- 0. Calculate Explicit 'Asia/Kolkata' Date (Indian SMB Crash Fix)
+    -- 0. Compute IST date
     v_today_ist := TIMEZONE('Asia/Kolkata', now())::date;
 
-    -- 1. Lock the session row so no one else can modify it simultaneously. (Concurrency Protection)
-    PERFORM id FROM public.sessions 
-    WHERE id = p_session_id AND business_id = p_business_id AND date = v_today_ist 
+    -- 1. Lock the session row FIRST (before any reads — this is critical)
+    --    Serializes all concurrent calls; no two callers pass step 2 simultaneously.
+    PERFORM id
+    FROM public.sessions
+    WHERE id          = p_session_id
+      AND business_id = p_business_id
+      AND date        = v_today_ist
+      AND status      IN ('OPEN', 'PAUSED')
     FOR UPDATE;
 
-    -- 2. Retrieve Daily Token Limit
-    SELECT daily_token_limit INTO v_limit 
-    FROM public.businesses 
-    WHERE id = p_business_id;
+    IF NOT FOUND THEN
+        RETURN json_build_object(
+            'success', false,
+            'error',   'Session not found or already closed'
+        );
+    END IF;
 
-    -- 3. Block creation if Daily Limit is reached (Strict Enforcement)
+    -- 2. Read daily token limit
+    SELECT daily_token_limit INTO v_limit
+    FROM   public.businesses
+    WHERE  id = p_business_id;
+
+    -- 3. Enforce CAPACITY limit (FIX: count ALL tokens issued, not just active)
+    --    daily_token_limit = total seats available today. Once 50 are issued,
+    --    the 51st is refused even if 40 have already been served.
     IF v_limit IS NOT NULL AND v_limit > 0 THEN
-        SELECT COUNT(id) INTO v_current_count
-        FROM public.tokens
-        WHERE session_id = p_session_id
-          AND status NOT IN ('SERVED', 'CANCELLED');
-          
-        IF v_current_count >= v_limit THEN
+        SELECT COUNT(id) INTO v_issued_count
+        FROM   public.tokens
+        WHERE  session_id = p_session_id;  -- no status filter
+
+        IF v_issued_count >= v_limit THEN
             RETURN json_build_object(
-                'success', false,
-                'error', 'Daily token limit reached',
+                'success',       false,
+                'error',         'Daily token limit reached. No more tokens available today.',
                 'limit_reached', true,
-                'limit', v_limit,
-                'count', v_current_count
+                'limit',         v_limit,
+                'count',         v_issued_count
             );
         END IF;
     END IF;
 
-    -- 4. Check for existing ACTIVE token for this phone number in this session
+    -- 4. Block duplicate ACTIVE token for same phone (FIX: RECALLED now included)
     IF p_phone IS NOT NULL AND TRIM(p_phone) != '' THEN
         SELECT id, token_number, status INTO v_existing_token
-        FROM public.tokens
-        WHERE session_id = p_session_id 
-          AND patient_phone = p_phone
-          AND status IN ('WAITING', 'SERVING', 'SKIPPED', 'PAUSED')
+        FROM   public.tokens
+        WHERE  session_id    = p_session_id
+          AND  patient_phone = p_phone
+          AND  status        IN ('WAITING', 'SERVING', 'SKIPPED', 'RECALLED', 'PAUSED')
         LIMIT 1;
 
         IF FOUND THEN
             RETURN json_build_object(
-                'success', false,
-                'error', 'Token already exists',
-                'is_duplicate', true,
-                'existing_token_id', v_existing_token.id,
+                'success',               false,
+                'error',                 'You already have an active token in this session.',
+                'is_duplicate',          true,
+                'existing_token_id',     v_existing_token.id,
                 'existing_token_number', v_existing_token.token_number,
-                'existing_status', v_existing_token.status
+                'existing_status',       v_existing_token.status
             );
         END IF;
     END IF;
 
-    -- 5. Increment the strictly sequential counter
+    -- 5. Atomically increment session counter
     UPDATE public.sessions
-    SET last_token_number = last_token_number + 1
-    WHERE id = p_session_id
+    SET    last_token_number = last_token_number + 1
+    WHERE  id = p_session_id
     RETURNING last_token_number INTO v_new_token_number;
 
-    -- 6. Insert the token safely using the new sequential number
+    -- 6. Insert the new token
     INSERT INTO public.tokens (
-        business_id, session_id, patient_phone, patient_name, is_priority, token_number, created_by_staff_id
+        business_id, session_id, patient_phone, patient_name,
+        is_priority, token_number, created_by_staff_id
     ) VALUES (
-        p_business_id, p_session_id, p_phone, p_name, p_is_priority, v_new_token_number, p_staff_id
+        p_business_id, p_session_id, p_phone, p_name,
+        p_is_priority, v_new_token_number, p_staff_id
     ) RETURNING id INTO v_token_id;
 
-    -- 7. Append to Immutable Audit Log
+    -- 7. Immutable audit entry
     INSERT INTO public.audit_logs (business_id, staff_id, token_id, action, details)
-    VALUES (p_business_id, p_staff_id, v_token_id, 'CREATED', json_build_object('token_number', v_new_token_number, 'is_priority', p_is_priority)::jsonb);
+    VALUES (
+        p_business_id, p_staff_id, v_token_id, 'CREATED',
+        json_build_object('token_number', v_new_token_number, 'is_priority', p_is_priority)::jsonb
+    );
 
-    -- Return the result
-    SELECT json_build_object(
-        'success', true,
-        'token_id', v_token_id,
+    RETURN json_build_object(
+        'success',      true,
+        'token_id',     v_token_id,
         'token_number', v_new_token_number
-    ) INTO v_result;
+    );
 
-    RETURN v_result;
+EXCEPTION
+    -- Catch partial-index unique_violation (race condition: two simultaneous inserts
+    -- for the same phone can both pass the IF check before either inserts).
+    WHEN unique_violation THEN
+        SELECT id, token_number, status INTO v_existing_token
+        FROM   public.tokens
+        WHERE  session_id    = p_session_id
+          AND  patient_phone = p_phone
+          AND  status        IN ('WAITING', 'SERVING', 'SKIPPED', 'RECALLED', 'PAUSED')
+        LIMIT 1;
+
+        RETURN json_build_object(
+            'success',               false,
+            'error',                 'You already have an active token in this session.',
+            'is_duplicate',          true,
+            'existing_token_id',     v_existing_token.id,
+            'existing_token_number', v_existing_token.token_number,
+            'existing_status',       v_existing_token.status
+        );
 END;
 $$;
 
@@ -414,10 +459,8 @@ $$;
 
 
 -- =================================================================================
--- 6. ANALYTICS PRE-COMPUTATION RPC
+-- 6. ANALYTICS PRE-COMPUTATION RPC (UPDATED: includes new columns)
 -- =================================================================================
--- This function aggregates metrics for a specific date and upserts them into `clinic_daily_stats`.
--- It avoids heavy runtime aggregations in the Admin Dashboard.
 CREATE OR REPLACE FUNCTION public.refresh_clinic_daily_stats(p_date date)
 RETURNS void
 LANGUAGE plpgsql
@@ -425,55 +468,95 @@ SECURITY DEFINER
 AS $$
 BEGIN
     INSERT INTO public.clinic_daily_stats (
-        business_id, date, total_tokens, served_count, skipped_count, 
-        recall_count, emergency_count, avg_wait_time_minutes, whatsapp_count, sms_count, updated_at
+        business_id, date,
+        total_tokens, served_count, skipped_count, cancelled_count,
+        recall_count, emergency_count, active_tokens,
+        avg_wait_time_minutes, avg_rating,
+        whatsapp_count, sms_count, updated_at
     )
-    SELECT 
-        b.id AS business_id,
-        p_date AS date,
-        
-        -- Tokens aggregates
-        COALESCE(COUNT(t.id), 0) AS total_tokens,
-        COALESCE(SUM(CASE WHEN t.status = 'SERVED' THEN 1 ELSE 0 END), 0) AS served_count,
-        COALESCE(SUM(CASE WHEN t.status = 'SKIPPED' THEN 1 ELSE 0 END), 0) AS skipped_count,
-        -- Recall count derived from operations later, approximated here by audit logs or simplistically modeled
-        -- We will pull true recall counts directly from audit_logs for the day for perfection.
-        (SELECT COUNT(*) FROM public.audit_logs al WHERE al.business_id = b.id AND al.action = 'RECALL' AND (al.created_at AT TIME ZONE 'UTC')::date = p_date) AS recall_count,
-        COALESCE(SUM(CASE WHEN t.is_priority = true THEN 1 ELSE 0 END), 0) AS emergency_count,
-        
-        -- Safe average wait time interval calculation in minutes
-        COALESCE(
-            ROUND(
-                EXTRACT(EPOCH FROM AVG(
-                    CASE WHEN t.status = 'SERVED' AND t.served_at IS NOT NULL 
-                    THEN (t.served_at - t.created_at) 
-                    ELSE NULL END
-                )) / 60
-            ), 0
-        ) AS avg_wait_time_minutes,
+    SELECT
+        b.id    AS business_id,
+        p_date  AS date,
 
-        -- Messaging Aggregates
-        (SELECT COUNT(*) FROM public.message_logs ml WHERE ml.business_id = b.id AND ml.provider = 'WHATSAPP' AND (ml.created_at AT TIME ZONE 'UTC')::date = p_date) AS whatsapp_count,
-        0 AS sms_count, -- Placeholder for future SMS provider
-        now() AS updated_at
+        COALESCE(COUNT(t.id), 0)                                                                       AS total_tokens,
+        COALESCE(SUM(CASE WHEN t.status = 'SERVED'    THEN 1 ELSE 0 END), 0)                          AS served_count,
+        COALESCE(SUM(CASE WHEN t.status = 'SKIPPED'   THEN 1 ELSE 0 END), 0)                          AS skipped_count,
+        COALESCE(SUM(CASE WHEN t.status = 'CANCELLED' THEN 1 ELSE 0 END), 0)                          AS cancelled_count,
+
+        -- Recall count from audit_logs (action name is 'RECALLED' in rpc_process_queue_action)
+        (SELECT COUNT(*) FROM public.audit_logs al
+         WHERE al.business_id = b.id AND al.action = 'RECALLED'
+           AND (al.created_at AT TIME ZONE 'Asia/Kolkata')::date = p_date)                            AS recall_count,
+
+        COALESCE(SUM(CASE WHEN t.is_priority = true THEN 1 ELSE 0 END), 0)                            AS emergency_count,
+        COALESCE(SUM(CASE WHEN t.status IN ('WAITING','SERVING','SKIPPED','RECALLED','PAUSED')
+                          THEN 1 ELSE 0 END), 0)                                                       AS active_tokens,
+
+        -- Average wait time (served tokens only)
+        COALESCE(ROUND(EXTRACT(EPOCH FROM AVG(
+            CASE WHEN t.status = 'SERVED' AND t.served_at IS NOT NULL
+                 THEN (t.served_at - t.created_at) ELSE NULL END
+        )) / 60), 0)                                                                                   AS avg_wait_time_minutes,
+
+        -- Average rating (NULL if no ratings exist)
+        CASE WHEN COUNT(t.rating) > 0 THEN ROUND(AVG(t.rating), 2) ELSE NULL END                     AS avg_rating,
+
+        (SELECT COUNT(*) FROM public.message_logs ml
+         WHERE ml.business_id = b.id AND ml.provider = 'WHATSAPP'
+           AND (ml.created_at AT TIME ZONE 'Asia/Kolkata')::date = p_date)                            AS whatsapp_count,
+        0                                                                                              AS sms_count,
+        now()                                                                                          AS updated_at
 
     FROM public.businesses b
-    -- Left join on sessions for the target date to link tokens
     LEFT JOIN public.sessions s ON s.business_id = b.id AND s.date = p_date
-    LEFT JOIN public.tokens t ON t.session_id = s.id
-    
+    LEFT JOIN public.tokens   t ON t.session_id  = s.id
     GROUP BY b.id, p_date
-    
-    ON CONFLICT (business_id, date) DO UPDATE 
-    SET 
-        total_tokens = EXCLUDED.total_tokens,
-        served_count = EXCLUDED.served_count,
-        skipped_count = EXCLUDED.skipped_count,
-        recall_count = EXCLUDED.recall_count,
-        emergency_count = EXCLUDED.emergency_count,
+
+    ON CONFLICT (business_id, date) DO UPDATE SET
+        total_tokens          = EXCLUDED.total_tokens,
+        served_count          = EXCLUDED.served_count,
+        skipped_count         = EXCLUDED.skipped_count,
+        cancelled_count       = EXCLUDED.cancelled_count,
+        recall_count          = EXCLUDED.recall_count,
+        emergency_count       = EXCLUDED.emergency_count,
+        active_tokens         = EXCLUDED.active_tokens,
         avg_wait_time_minutes = EXCLUDED.avg_wait_time_minutes,
-        whatsapp_count = EXCLUDED.whatsapp_count,
-        sms_count = EXCLUDED.sms_count,
-        updated_at = now();
+        avg_rating            = EXCLUDED.avg_rating,
+        whatsapp_count        = EXCLUDED.whatsapp_count,
+        sms_count             = EXCLUDED.sms_count,
+        updated_at            = now();
 END;
 $$;
+
+-- =================================================================================
+-- 7. LIVE-UPDATE TRIGGER ON TOKENS → clinic_daily_stats
+-- Incrementally refreshes today's stats row on every token insert/update.
+-- =================================================================================
+CREATE OR REPLACE FUNCTION public.fn_update_clinic_daily_stats_on_token_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_business_id uuid;
+    v_date        date;
+BEGIN
+    SELECT s.business_id, s.date
+    INTO   v_business_id, v_date
+    FROM   public.sessions s
+    WHERE  s.id = COALESCE(NEW.session_id, OLD.session_id);
+
+    IF v_business_id IS NULL THEN RETURN NEW; END IF;
+    IF v_date != TIMEZONE('Asia/Kolkata', now())::date THEN RETURN NEW; END IF;
+
+    PERFORM public.refresh_clinic_daily_stats(v_date);
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_update_clinic_stats_on_token ON public.tokens;
+CREATE TRIGGER trg_update_clinic_stats_on_token
+AFTER INSERT OR UPDATE OF status, rating, served_at, cancelled_at
+ON public.tokens
+FOR EACH ROW
+EXECUTE FUNCTION public.fn_update_clinic_daily_stats_on_token_change();

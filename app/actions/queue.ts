@@ -174,24 +174,10 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
             }
         }
 
-        // --- PHONE NUMBER DAILY LIMIT (Abuse/Duplicate Prevention) ---
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const settings = business.settings as any;
-        const phoneLimit = settings?.max_tokens_per_phone_per_day ?? 1;
-
-        if (cleanPhone) {
-            const todayStr = getClinicDate();
-            const { count: phoneCount } = await supabase.from('tokens')
-                .select('id', { count: 'exact', head: true })
-                .eq('business_id', business.id)
-                .eq('patient_phone', cleanPhone)
-                .gte('created_at', `${todayStr}T00:00:00`)
-                .neq('status', 'CANCELLED');
-
-            if ((phoneCount || 0) >= phoneLimit) {
-                return { error: `This phone number has already reached the limit of ${phoneLimit} token(s) today.` };
-            }
-        }
+        // Active-token deduplication and daily limit are enforced INSIDE the
+        // create_token_atomic RPC via FOR UPDATE + count + partial unique index.
+        // No pre-check here — pre-checks outside the transaction are race-prone
+        // and were showing the wrong error ("once per day" instead of redirecting).
 
         // RPC
         const { data, error } = await supabase.rpc('create_token_atomic', {

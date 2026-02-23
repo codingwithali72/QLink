@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw, Pencil, AlertTriangle } from "lucide-react";
+import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw, Pencil, AlertTriangle, Phone } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo } from "react";
@@ -21,8 +21,21 @@ import { getClinicDate } from "@/lib/date";
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function ReceptionPage({ params }: { params: { clinicSlug: string } }) {
-    const { session, tokens, loading, refresh, lastUpdated, isConnected, dailyTokenLimit } = useClinicRealtime(params.clinicSlug);
-    const [actionLoading, setActionLoading] = useState(false);
+    const { session, tokens, loading, refresh, lastUpdated, isConnected, dailyTokenLimit, setTokens, setSession } = useClinicRealtime(params.clinicSlug);
+
+    // ── Per-action loading flags ─────────────────────────────────────────────
+    // Each action has its own flag so one in-flight request doesn't block others.
+    const [nextLoading, setNextLoading] = useState(false);
+    const [skipLoading, setSkipLoading] = useState(false);
+    const [pauseLoading, setPauseLoading] = useState(false);
+    const [addLoading, setAddLoading] = useState(false);
+    // Per-token Call loading — only the specific token being called shows a spinner
+    const [callLoadingTokenId, setCallLoadingTokenId] = useState<string | null>(null);
+    // Call confirmation dialog state
+    const [callConfirm, setCallConfirm] = useState<{ tokenId: string; phone: string; tokenLabel: string } | null>(null);
+
+    // Legacy alias: true if any heavy action is running (used only for Add form submit)
+    const actionLoading = nextLoading || skipLoading || pauseLoading || addLoading;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
 
@@ -70,22 +83,31 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     const displayedTokens = historyTokens;
 
+    // ── Generic action wrapper with optimistic UI support ───────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const performAction = async (actionFn: () => Promise<any>) => {
-        if (actionLoading) return;
-        setActionLoading(true);
+    const performAction = async (
+        actionFn: () => Promise<any>,
+        setLoading: (v: boolean) => void,
+        optimisticUpdate?: () => void,
+        rollback?: () => void
+    ) => {
+        setLoading(true);
+        // Apply optimistic state immediately so UI feels instant
+        if (optimisticUpdate) optimisticUpdate();
         try {
             const result = await actionFn();
             if (result && result.error) {
+                // Roll back optimistic state if server rejected the action
+                if (rollback) rollback();
                 alert(`Error: ${result.error}`);
-            } else {
-                refresh();
             }
+            // Do NOT call refresh() on success — realtime subscription fires automatically
         } catch (e) {
+            if (rollback) rollback();
             console.error(e);
             alert("Unexpected Error");
         } finally {
-            setActionLoading(false);
+            setLoading(false);
         }
     };
 
@@ -117,29 +139,73 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     const isLimitReached = dailyTokenLimit !== null && dailyTokenLimit > 0 && activeTokensCount >= dailyTokenLimit;
 
-    // Handlers
-    const handleNext = () => performAction(() => nextPatient(params.clinicSlug));
+    // ── Action handlers ──────────────────────────────────────────────────────
 
-    const handlePhoneCall = async (tokenId: string) => {
-        if (actionLoading) return;
-        setActionLoading(true);
+    const handleNext = () => {
+        // Optimistic: mark current serving as SERVED, advance next WAITING to SERVING
+        const snapshot = tokens; // capture for rollback
+        performAction(
+            () => nextPatient(params.clinicSlug),
+            setNextLoading,
+            () => {
+                setTokens(prev => {
+                    const next = [...prev];
+                    // Mark current SERVING as SERVED
+                    const servingIdx = next.findIndex(t => t.status === 'SERVING');
+                    if (servingIdx !== -1) next[servingIdx] = { ...next[servingIdx], status: 'SERVED' };
+                    // Find next WAITING (priority first, then sequential)
+                    const waitingTokens = next
+                        .filter(t => t.status === 'WAITING')
+                        .sort((a, b) => {
+                            if (a.isPriority && !b.isPriority) return -1;
+                            if (!a.isPriority && b.isPriority) return 1;
+                            return a.tokenNumber - b.tokenNumber;
+                        });
+                    if (waitingTokens.length > 0) {
+                        const nextIdx = next.findIndex(t => t.id === waitingTokens[0].id);
+                        if (nextIdx !== -1) next[nextIdx] = { ...next[nextIdx], status: 'SERVING' };
+                    }
+                    return next;
+                });
+            },
+            () => setTokens(snapshot) // rollback to snapshot on error
+        );
+    };
+
+    // ── CALL BUTTON HANDLER (completely separate from queue logic) ────────────
+    // Step 1: Fetch the phone number, show confirmation dialog.
+    // Step 2: Only when confirmed, open the native dialer via <a> tag.
+    // Queue state is NEVER touched here. No status changes, no session changes.
+    const handlePhoneCallInitiate = async (tokenId: string) => {
+        if (callLoadingTokenId) return; // already initiating a call
+        setCallLoadingTokenId(tokenId);
         try {
             const res = await triggerManualCall(params.clinicSlug, tokenId);
-            if (res.error) {
-                alert(res.error);
-                return;
-            }
-            // Launch dialer immediately. `window.confirm` breaks deep links on some mobile browsers after an async call.
-            window.location.href = `tel:${res.phone}`;
+            if (res.error) { alert(res.error); return; }
+            // Find the token label for the confirmation dialog
+            const t = tokens.find(x => x.id === tokenId);
+            const label = t ? formatToken(t.tokenNumber, t.isPriority) : 'patient';
+            setCallConfirm({ tokenId, phone: res.phone as string, tokenLabel: label });
         } catch (e) {
             console.error(e);
-            alert("Error initiating call");
+            alert("Error fetching phone number");
         } finally {
-            setActionLoading(false);
+            setCallLoadingTokenId(null);
         }
     };
 
-    const handleSkip = () => { if (servingToken && confirm("Skip current ticket?")) performAction(() => skipToken(params.clinicSlug, servingToken.id)); };
+
+    const handleSkip = () => {
+        if (!servingToken) return;
+        if (!confirm("Skip current ticket?")) return;
+        const snapshot = tokens;
+        performAction(
+            () => skipToken(params.clinicSlug, servingToken.id),
+            setSkipLoading,
+            () => setTokens(prev => prev.map(t => t.id === servingToken.id ? { ...t, status: 'SKIPPED' } : t)),
+            () => setTokens(snapshot)
+        );
+    };
 
     const handleEmergencyClick = () => {
         setManualIsPriority(true);
@@ -147,18 +213,42 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         setManualPhone("0000000000");
         setIsAddModalOpen(true);
     };
-    const handleUndo = () => { if (confirm("Undo the last action?")) performAction(() => undoLastAction(params.clinicSlug)); };
-    const handlePauseToggle = () => { if (session) performAction(() => session.status === 'OPEN' ? pauseQueue(params.clinicSlug) : resumeQueue(params.clinicSlug)); };
+    const handleUndo = () => {
+        if (confirm("Undo the last action?")) performAction(() => undoLastAction(params.clinicSlug), setNextLoading);
+    };
+    const handlePauseToggle = () => {
+        if (!session) return;
+        performAction(
+            () => session.status === 'OPEN' ? pauseQueue(params.clinicSlug) : resumeQueue(params.clinicSlug),
+            setPauseLoading
+        );
+    };
     const handleCloseQueue = () => {
         const answer = prompt('Type CLOSE to confirm ending today\'s queue:');
-        if (answer?.trim().toUpperCase() === 'CLOSE') performAction(() => closeQueue(params.clinicSlug));
+        if (answer?.trim().toUpperCase() === 'CLOSE') performAction(() => closeQueue(params.clinicSlug), setPauseLoading);
     };
-    const handleStartSession = () => performAction(() => startSession(params.clinicSlug));
+    const handleStartSession = () => performAction(() => startSession(params.clinicSlug), setPauseLoading);
 
-    const handleRecall = (id: string) => { if (confirm("Recall this ticket?")) performAction(() => recallToken(params.clinicSlug, id)); };
+    const handleRecall = (id: string) => {
+        if (!confirm("Recall this ticket?")) return;
+        const snapshot = tokens;
+        performAction(
+            () => recallToken(params.clinicSlug, id),
+            setNextLoading, // reuse nextLoading — recall is a queue-advance variant
+            () => setTokens(prev => prev.map(t => t.id === id ? { ...t, status: 'WAITING', isPriority: true } : t)),
+            () => setTokens(snapshot)
+        );
+    };
 
     const handleCancelToken = (id: string) => {
-        if (confirm("Cancel this token?")) performAction(() => cancelToken(params.clinicSlug, id));
+        if (!confirm("Cancel this token?")) return;
+        const snapshot = tokens;
+        performAction(
+            () => cancelToken(params.clinicSlug, id),
+            setSkipLoading,
+            () => setTokens(prev => prev.map(t => t.id === id ? { ...t, status: 'CANCELLED' } : t)),
+            () => setTokens(snapshot)
+        );
     };
 
     const handleManualAdd = async (e: React.FormEvent) => {
@@ -175,7 +265,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             return;
         }
 
-        setActionLoading(true);
+        setAddLoading(true);
         const res = await createToken(params.clinicSlug, manualPhone, manualName, manualIsPriority);
         if (res.error) {
             if (res.is_duplicate) {
@@ -200,7 +290,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             setManualIsPriority(false);
             refresh();
         }
-        setActionLoading(false);
+        setAddLoading(false);
     };
 
     // B1: Stall detection — track when serving token changes
@@ -232,11 +322,11 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             }
         }
 
-        setActionLoading(true);
+        setAddLoading(true);
         const res = await updateToken(params.clinicSlug, editingToken.id, editingToken.name, editingToken.phone);
         if (res.error) alert(res.error);
         else { setEditingToken(null); refresh(); }
-        setActionLoading(false);
+        setAddLoading(false);
     };
 
 
@@ -351,12 +441,12 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         {/* NEXT BUTTON (Big) */}
                         <Button
                             onClick={handleNext}
-                            disabled={actionLoading || !isSessionActive || (waitingTokens.length === 0 && !servingToken)}
+                            disabled={nextLoading || !isSessionActive || (waitingTokens.length === 0 && !servingToken)}
                             className={cn("col-span-2 h-20 md:h-24 text-xl md:text-2xl font-black rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:grayscale",
                                 "bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
                             )}
                         >
-                            {actionLoading ? <Loader2 className="animate-spin w-8 h-8" /> : (
+                            {nextLoading ? <Loader2 className="animate-spin w-8 h-8" /> : (
                                 <div className="flex items-center gap-2 md:gap-3">
                                     <PlayCircle className="w-6 h-6 md:w-8 md:h-8 text-blue-600" />
                                     <span>{waitingTokens.length === 0 && servingToken ? "FINISH" : "NEXT"}</span>
@@ -368,10 +458,10 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         <Button
                             variant="outline"
                             onClick={handleSkip}
-                            disabled={!servingToken || actionLoading || !isSessionActive}
+                            disabled={!servingToken || skipLoading || !isSessionActive}
                             className="h-20 md:h-24 flex flex-col items-center justify-center gap-1 md:gap-2 rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-300"
                         >
-                            <SkipForward className="w-5 h-5 md:w-6 md:h-6 text-slate-500" />
+                            {skipLoading ? <Loader2 className="animate-spin w-5 h-5" /> : <SkipForward className="w-5 h-5 md:w-6 md:h-6 text-slate-500" />}
                             <span className="font-bold text-base md:text-lg">SKIP</span>
                         </Button>
 
@@ -394,7 +484,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 <Button
                                     variant="outline"
                                     onClick={handleUndo}
-                                    disabled={actionLoading}
+                                    disabled={nextLoading}
                                     className="h-16 font-bold rounded-2xl border-2 dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-50"
                                 >
                                     <RotateCcw className="mr-2 w-5 h-5" /> UNDO
@@ -403,6 +493,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 <Button
                                     variant="outline"
                                     onClick={handlePauseToggle}
+                                    disabled={pauseLoading}
                                     className={cn("h-16 font-bold rounded-2xl border-2 dark:bg-slate-800 dark:border-slate-700",
                                         session?.status === 'OPEN' ? "text-slate-600 dark:text-slate-300 hover:bg-slate-50" : "bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400"
                                     )}
@@ -437,7 +528,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     <Card className="p-1 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
                         <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                             <DialogTrigger asChild>
-                                <Button disabled={!isSessionActive || isLimitReached} className="w-full h-14 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl text-lg shadow-lg">
+                                <Button disabled={!isSessionActive || isLimitReached || addLoading} className="w-full h-14 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl text-lg shadow-lg">
                                     <Plus className="w-5 h-5 mr-2" /> {isLimitReached ? "Daily Limit Reached" : "Add Walk-in"}
                                 </Button>
                             </DialogTrigger>
@@ -485,7 +576,13 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 </div>
                             ) : (
                                 visibleWaitingTokens.map((t) => (
-                                    <TokenItem key={t.id} token={t} onCancel={handleCancelToken} onCall={handlePhoneCall} />
+                                    <TokenItem
+                                        key={t.id}
+                                        token={t}
+                                        onCancel={handleCancelToken}
+                                        onCall={handlePhoneCallInitiate}
+                                        isCallLoading={callLoadingTokenId === t.id}
+                                    />
                                 ))
                             )}
                         </div>
@@ -661,6 +758,36 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             <Button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" disabled={actionLoading} onClick={handleSaveEdit}>
                                 {actionLoading ? <Loader2 className="animate-spin w-4 h-4" /> : "Save Changes"}
                             </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CALL CONFIRMATION DIALOG */}
+            {callConfirm && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setCallConfirm(null)}>
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+                        <div className="text-center">
+                            <div className="w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center mx-auto mb-3">
+                                <Phone className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <h3 className="font-bold text-slate-900 dark:text-white text-lg">Call Patient?</h3>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Token {callConfirm.tokenLabel}</p>
+                            <p className="font-mono font-bold text-slate-900 dark:text-white text-xl mt-2">{callConfirm.phone}</p>
+                            <p className="text-[10px] text-slate-400 mt-1">Queue position will not change.</p>
+                        </div>
+                        <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1" onClick={() => setCallConfirm(null)}>Cancel</Button>
+                            {/* Use <a> tag for native dialer — avoids window.location.href page-nav side effects on mobile */}
+                            <a
+                                href={`tel:${callConfirm.phone}`}
+                                className="flex-1"
+                                onClick={() => setCallConfirm(null)}
+                            >
+                                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                                    <Phone className="w-4 h-4 mr-2" /> Dial Now
+                                </Button>
+                            </a>
                         </div>
                     </div>
                 </div>

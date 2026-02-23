@@ -94,35 +94,20 @@ export function useClinicRealtime(clinicSlug: string) {
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'sessions', filter: `business_id=eq.${businessId}` },
-                () => {
-                    console.log('🔄 Session change detected, refreshing...');
-                    debouncedFetch();
-                }
+                () => { debouncedFetch(); }
             )
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'tokens' },
-                () => {
-                    console.log('🔄 Token change detected, refreshing...');
-                    debouncedFetch();
-                }
+                // FIX: filter by business_id so we only receive this clinic's token events,
+                // not every clinic across the whole table.
+                { event: '*', schema: 'public', table: 'tokens', filter: `business_id=eq.${businessId}` },
+                () => { debouncedFetch(); }
             )
             .subscribe((status) => {
                 if (isUnmounting) return;
-
-                // Set connected indicator
                 setIsConnected(status === 'SUBSCRIBED');
-
-                // CF5 FIX: Session Hydration on Reconnect
-                // If a tablet loses WiFi for 30 seconds, the WebSocket missed token inserts.
-                // When status hits 'SUBSCRIBED' (either first load OR a reconnect event),
-                // we FORCE a hard database fetch to completely catch up state.
-                if (status === 'SUBSCRIBED') {
-                    console.log('🟢 Realtime connected/reconnected. Force syncing state.');
-                    fetchData();
-                } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-                    console.log(`🔴 Realtime ${status}`);
-                }
+                // Force full sync on connect/reconnect to catch any missed events during WiFi loss
+                if (status === 'SUBSCRIBED') fetchData();
             });
 
         return () => {
@@ -138,8 +123,10 @@ export function useClinicRealtime(clinicSlug: string) {
         if (!businessId) return;
 
         let failCount = 0;
-        const BASE_INTERVAL = 3000;
-        const MAX_INTERVAL = 30000;
+        // Realtime handles instant updates; polling is a fallback only.
+        // 8s base (was 3s) reduces unnecessary network traffic without impacting responsiveness.
+        const BASE_INTERVAL = 8000;
+        const MAX_INTERVAL = 60000;
 
         fetchData(); // Initial load
         setIsConnected(true);
@@ -208,7 +195,9 @@ export function useClinicRealtime(clinicSlug: string) {
     //     loadLocal();
     // }, [readFromLocal]);
 
-    return { session, tokens, loading, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit };
+    // Export setTokens/setSession for optimistic UI updates in the calling component.
+    // The page applies local state immediately, then realtime subscription reconciles with truth.
+    return { session, tokens, loading, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit, setTokens, setSession };
 }
 
 // Mappers
