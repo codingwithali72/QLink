@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { queueWhatsAppMessage } from "@/lib/whatsapp";
 import { normalizeIndianPhone } from "@/lib/phone";
-import { encryptPhone, hashPhone } from "@/lib/crypto";
+import { encryptPhone, hashPhone, decryptPhone } from "@/lib/crypto";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
@@ -44,7 +44,7 @@ async function getBusinessBySlug(slug: string) {
     const { data, error } = await supabase.from('businesses').select('id, name, settings, is_active').eq('slug', slug).single();
     if (error || !data) return null;
     // Billing bypass protection: suspended clinics cannot perform any queue operations
-    if (!data.is_active) return null;
+    if (!data.is_active) throw new Error("Clinic temporarily disabled");
     return data;
 }
 
@@ -174,6 +174,15 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
 
         const session = await getActiveSession(business.id);
         if (!session) return { error: "Queue is CLOSED. Ask reception to start session." };
+
+        // --- PUBLIC QR INTAKE CHECK ---
+        if (!actualStaffId && business.settings) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const settings = business.settings as any;
+            if (settings.qr_intake_enabled === false) {
+                return { error: "QR intake is currently disabled for this clinic. Please see the receptionist." };
+            }
+        }
 
         // --- RATE LIMITING (Public QR Joiner Block) ---
         if (!actualStaffId) {
@@ -619,11 +628,20 @@ export async function getDashboardData(businessId: string) {
             .eq('session_id', session.id)
             .order('token_number', { ascending: true });
 
-        const safeTokens = (tokens || []).map(t => ({
-            ...t,
-            // Mask the phone number for realtime users - only unmask explicitly via triggerManualCall
-            patient_phone: t.patient_phone ? `${t.patient_phone.slice(0, 3)}****${t.patient_phone.slice(-3)}` : null
-        }));
+        const safeTokens = (tokens || []).map(t => {
+            let decryptedPhone = t.patient_phone;
+            if (t.patient_phone_encrypted) {
+                try {
+                    decryptedPhone = decryptPhone(t.patient_phone_encrypted);
+                } catch {
+                    decryptedPhone = "[decryption_error]";
+                }
+            }
+            return {
+                ...t,
+                patient_phone: decryptedPhone
+            };
+        });
 
         return { session, tokens: safeTokens, dailyTokenLimit: business?.daily_token_limit || null };
     } catch (e) {
@@ -652,23 +670,33 @@ export async function getTokensForDate(clinicSlug: string, date: string) {
 
         const { data } = await supabase
             .from('tokens')
-            .select('id, token_number, patient_name, patient_phone, status, is_priority, rating, feedback, created_at, served_at, cancelled_at, created_by_staff_id')
+            .select('id, token_number, patient_name, patient_phone, patient_phone_encrypted, status, is_priority, rating, feedback, created_at, served_at, cancelled_at, created_by_staff_id')
             .eq('session_id', session.id)
             .order('token_number', { ascending: true });
 
         // Map to camelCase for consistent use in the UI
-        const tokens = (data || []).map((t: any) => ({ // eslint-disable-line
-            id: t.id,
-            tokenNumber: t.token_number,
-            customerName: t.patient_name,
-            customerPhone: t.patient_phone ? `${t.patient_phone.slice(0, 3)}****${t.patient_phone.slice(-3)}` : null, // MASKED for security, unmask securely via triggerManualCall
-            status: t.status,
-            isPriority: t.is_priority,
-            rating: t.rating,
-            feedback: t.feedback,
-            createdAt: t.created_at,
-            servedAt: t.served_at,
-        }));
+        const tokens = (data || []).map((t: any) => { // eslint-disable-line
+            let decryptedPhone = t.patient_phone;
+            if (t.patient_phone_encrypted) {
+                try {
+                    decryptedPhone = decryptPhone(t.patient_phone_encrypted);
+                } catch {
+                    decryptedPhone = "[decryption_error]";
+                }
+            }
+            return {
+                id: t.id,
+                tokenNumber: t.token_number,
+                customerName: t.patient_name,
+                customerPhone: decryptedPhone,
+                status: t.status,
+                isPriority: t.is_priority,
+                rating: t.rating,
+                feedback: t.feedback,
+                createdAt: t.created_at,
+                servedAt: t.served_at,
+            };
+        });
 
         return { tokens };
     } catch (e) {

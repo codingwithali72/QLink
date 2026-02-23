@@ -1,7 +1,8 @@
 "use client";
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
-import { nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, undoLastAction, updateToken, triggerManualCall } from "@/app/actions/queue";
+import { nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, undoLastAction, updateToken } from "@/app/actions/queue";
+import { exportPatientList } from "@/app/actions/export";
 import { isValidIndianPhone } from "@/lib/phone";
 import { logout } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw, Pencil, AlertTriangle, Phone } from "lucide-react";
+import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw, Pencil, AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo } from "react";
@@ -29,11 +30,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const [skipLoading, setSkipLoading] = useState(false);
     const [pauseLoading, setPauseLoading] = useState(false);
     const [addLoading, setAddLoading] = useState(false);
-    // Per-token Call loading — only the specific token being called shows a spinner
-    const [callLoadingTokenId, setCallLoadingTokenId] = useState<string | null>(null);
-    // Call confirmation dialog state
-    const [callConfirm, setCallConfirm] = useState<{ tokenId: string; phone: string; tokenLabel: string } | null>(null);
-
     // Legacy alias: true if any heavy action is running (used only for Add form submit)
     const actionLoading = nextLoading || skipLoading || pauseLoading || addLoading;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -180,29 +176,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             () => setTokens(snapshot) // rollback to snapshot on error
         );
     };
-
-    // ── CALL BUTTON HANDLER (completely separate from queue logic) ────────────
-    // Step 1: Fetch the phone number, show confirmation dialog.
-    // Step 2: Only when confirmed, open the native dialer via <a> tag.
-    // Queue state is NEVER touched here. No status changes, no session changes.
-    const handlePhoneCallInitiate = async (tokenId: string) => {
-        if (callLoadingTokenId) return; // already initiating a call
-        setCallLoadingTokenId(tokenId);
-        try {
-            const res = await triggerManualCall(params.clinicSlug, tokenId);
-            if (res.error) { alert(res.error); return; }
-            // Find the token label for the confirmation dialog
-            const t = tokens.find(x => x.id === tokenId);
-            const label = t ? formatToken(t.tokenNumber, t.isPriority) : 'patient';
-            setCallConfirm({ tokenId, phone: res.phone as string, tokenLabel: label });
-        } catch (e) {
-            console.error(e);
-            alert("Error fetching phone number");
-        } finally {
-            setCallLoadingTokenId(null);
-        }
-    };
-
 
     const handleSkip = () => {
         if (!servingToken) return;
@@ -589,8 +562,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                         key={t.id}
                                         token={t}
                                         onCancel={handleCancelToken}
-                                        onCall={handlePhoneCallInitiate}
-                                        isCallLoading={callLoadingTokenId === t.id}
                                     />
                                 ))
                             )}
@@ -632,17 +603,21 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 <div className="p-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 flex flex-col gap-2">
                                     <div className="flex justify-between items-center">
                                         <div className="flex gap-2">
-                                            <Button variant="outline" size="sm" onClick={() => {
-                                                const csvContent = "data:text/csv;charset=utf-8,"
-                                                    + "Token,Name,Phone,Status,Priority\n"
-                                                    + displayedTokens.map(t => `${t.tokenNumber},${t.customerName || ''},${t.customerPhone || ''},${t.status},${t.isPriority}`).join("\n");
-                                                const encodedUri = encodeURI(csvContent);
-                                                const link = document.createElement("a");
-                                                link.setAttribute("href", encodedUri);
-                                                link.setAttribute("download", `session_log_${selectedDate}.csv`);
-                                                document.body.appendChild(link);
-                                                link.click();
-                                                document.body.removeChild(link);
+                                            <Button variant="outline" size="sm" onClick={async () => {
+                                                const res = await exportPatientList(params.clinicSlug, selectedDate, selectedDate);
+                                                if (res.error) {
+                                                    alert(res.error);
+                                                    return;
+                                                }
+                                                if (res.csv) {
+                                                    const encodedUri = encodeURI("data:text/csv;charset=utf-8," + res.csv);
+                                                    const link = document.createElement("a");
+                                                    link.setAttribute("href", encodedUri);
+                                                    link.setAttribute("download", `session_log_${selectedDate}.csv`);
+                                                    document.body.appendChild(link);
+                                                    link.click();
+                                                    document.body.removeChild(link);
+                                                }
                                             }}>
                                                 Download CSV
                                             </Button>
@@ -772,35 +747,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 </div>
             )}
 
-            {/* CALL CONFIRMATION DIALOG */}
-            {callConfirm && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setCallConfirm(null)}>
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
-                        <div className="text-center">
-                            <div className="w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center mx-auto mb-3">
-                                <Phone className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <h3 className="font-bold text-slate-900 dark:text-white text-lg">Call Patient?</h3>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Token {callConfirm.tokenLabel}</p>
-                            <p className="font-mono font-bold text-slate-900 dark:text-white text-xl mt-2">{callConfirm.phone}</p>
-                            <p className="text-[10px] text-slate-400 mt-1">Queue position will not change.</p>
-                        </div>
-                        <div className="flex gap-3">
-                            <Button variant="outline" className="flex-1" onClick={() => setCallConfirm(null)}>Cancel</Button>
-                            {/* Use <a> tag for native dialer — avoids window.location.href page-nav side effects on mobile */}
-                            <a
-                                href={`tel:${callConfirm.phone}`}
-                                className="flex-1"
-                                onClick={() => setCallConfirm(null)}
-                            >
-                                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold">
-                                    <Phone className="w-4 h-4 mr-2" /> Dial Now
-                                </Button>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

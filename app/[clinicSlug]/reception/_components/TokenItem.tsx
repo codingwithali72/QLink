@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { XCircle, Phone, Loader2 } from "lucide-react";
+import { XCircle, Phone } from "lucide-react";
 import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { Token } from "@/types/firestore";
@@ -7,7 +7,6 @@ import { Token } from "@/types/firestore";
 interface TokenItemProps {
     token: Token;
     onCancel: (id: string) => void;
-    onCall?: (id: string) => void;
     // Per-token call loading — only THIS token's Call button shows a spinner,
     // not a global flag that would freeze NEXT/SKIP/ADD.
     isCallLoading?: boolean;
@@ -15,7 +14,7 @@ interface TokenItemProps {
 
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
-export const TokenItem = memo(function TokenItem({ token, onCancel, onCall, isCallLoading }: TokenItemProps) {
+export const TokenItem = memo(function TokenItem({ token, onCancel }: TokenItemProps) {
     return (
         <div className={cn(
             "p-3 rounded-xl flex items-center justify-between group transition-colors",
@@ -43,20 +42,16 @@ export const TokenItem = memo(function TokenItem({ token, onCancel, onCall, isCa
             </div>
 
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                {onCall && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onCall(token.id)}
-                        // Only disable THIS button during its own in-flight call — not all buttons globally
-                        disabled={isCallLoading}
-                        className="h-8 text-xs font-bold text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/40 disabled:opacity-60"
-                    >
-                        {isCallLoading
-                            ? <Loader2 className="w-3 h-3 animate-spin" />
-                            : <><Phone className="w-3 h-3 mr-1" />Call</>
-                        }
-                    </Button>
+                {token.customerPhone && (
+                    <a href={`tel:${token.customerPhone}`}>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs font-bold text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/40"
+                        >
+                            <Phone className="w-3 h-3 mr-1" />Call
+                        </Button>
+                    </a>
                 )}
                 <Button
                     variant="ghost"

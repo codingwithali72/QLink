@@ -7,7 +7,7 @@
  * - Only clinic-owned data can be exported.
  * - Exports are logged in export_logs (immutable audit trail).
  * - Phone numbers are decrypted server-side only at export time.
- * - Receptionists cannot export — only staff with role OWNER or SUPER_ADMIN.
+ * - Receptionists can export but it is auditable by the clinic OWNER or SUPER_ADMIN.
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -41,6 +41,8 @@ export interface ExportRow {
     created_at: string;
     served_at: string | null;
     source: string | null;
+    rating: number | null;
+    feedback: string | null;
 }
 
 export async function exportPatientList(
@@ -54,9 +56,9 @@ export async function exportPatientList(
     const staff = await getStaffWithRole(supabase);
     if (!staff) return { error: "Unauthorized" };
 
-    // 2. RBAC gate: OWNER or SUPER_ADMIN only
-    if (!["OWNER", "SUPER_ADMIN"].includes(staff.role)) {
-        return { error: "Access denied. Export requires OWNER or SUPER_ADMIN role." };
+    // 2. RBAC gate: OWNER, SUPER_ADMIN, RECEPTIONIST
+    if (!["OWNER", "SUPER_ADMIN", "RECEPTIONIST"].includes(staff.role)) {
+        return { error: "Access denied. Export requires OWNER, SUPER_ADMIN, or RECEPTIONIST role." };
     }
 
     // 3. Resolve the clinic and verify ownership
@@ -83,6 +85,8 @@ export async function exportPatientList(
             patient_phone_encrypted,
             status,
             is_priority,
+            rating,
+            feedback,
             created_at,
             served_at,
             source,
@@ -117,6 +121,8 @@ export async function exportPatientList(
             created_at: t.created_at,
             served_at: t.served_at,
             source: t.source,
+            rating: t.rating,
+            feedback: t.feedback,
         };
     });
 
@@ -147,7 +153,7 @@ export async function exportPatientList(
     });
 
     // 8. Build CSV
-    const headers = ["token_number", "patient_name", "patient_phone", "status", "is_priority", "created_at", "served_at", "source"];
+    const headers = ["token_number", "patient_name", "patient_phone", "status", "is_priority", "created_at", "served_at", "source", "rating", "feedback"];
     const csvLines = [
         headers.join(","),
         ...rows.map((r) =>
@@ -160,6 +166,8 @@ export async function exportPatientList(
                 r.created_at,
                 r.served_at || "",
                 r.source || "",
+                r.rating || "",
+                `"${(r.feedback || "").replace(/"/g, '""')}"`
             ].join(",")
         ),
     ];

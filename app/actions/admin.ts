@@ -257,11 +257,12 @@ export async function getAdminStats() {
     // 1. Get Businesses
     const { data: businesses } = await supabase.from('businesses').select('*').order('created_at', { ascending: false });
 
-    const today = new Date().toISOString().split('T')[0];
-    const { count: activeSessions } = await supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', today).eq('status', 'OPEN');
-    const { count: todayTokens } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).gte('created_at', today);
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const istStart = `${todayStr}T00:00:00+05:30`;
+    const { count: activeSessions } = await supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', todayStr).eq('status', 'OPEN');
+    const { count: todayTokens } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).gte('created_at', istStart);
     const { count: totalMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true });
-    const { count: failedMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true }).gte('created_at', today).in('status', ['FAILED', 'PERMANENTLY_FAILED']);
+    const { count: failedMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true }).gte('created_at', istStart).in('status', ['FAILED', 'PERMANENTLY_FAILED']);
     const { count: activeQueues } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).in('status', ['WAITING', 'SERVING']);
 
     return {
@@ -322,12 +323,13 @@ export async function getClinicMetrics(businessId: string) {
     const supabase = createAdminClient();
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const istStart = `${todayStr}T00:00:00+05:30`;
 
     // Live Today Stats
-    const { count: liveCreated } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', `${todayStr}T00:00:00`);
-    const { count: liveServed } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'SERVED').gte('created_at', `${todayStr}T00:00:00`);
-    const { count: liveSkipped } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'SKIPPED').gte('created_at', `${todayStr}T00:00:00`);
-    const { count: liveEmergency } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('is_priority', true).gte('created_at', `${todayStr}T00:00:00`);
+    const { count: liveCreated } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', istStart);
+    const { count: liveServed } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'SERVED').gte('created_at', istStart);
+    const { count: liveSkipped } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'SKIPPED').gte('created_at', istStart);
+    const { count: liveEmergency } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('is_priority', true).gte('created_at', istStart);
 
     // Historical Rolling 30 Days Trend
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
