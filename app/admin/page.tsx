@@ -11,14 +11,46 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getClinicDate } from "@/lib/date";
 
+export interface Business {
+    id: string;
+    name: string;
+    slug: string;
+    is_active: boolean;
+    created_at: string;
+    contact_phone: string;
+    daily_token_limit?: number;
+    settings?: {
+        whatsapp_enabled?: boolean;
+        qr_intake_enabled?: boolean;
+        daily_token_limit?: number;
+        daily_message_limit?: number;
+        [key: string]: unknown;
+    };
+}
+
+export interface AdminStats {
+    activeSessions: number;
+    todayTokens: number;
+    totalMessages: number;
+    businesses: Business[];
+    failedMessagesToday?: number;
+    activeQueueTokens?: number;
+}
+
 export default function AdminPage() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [stats, setStats] = useState<any>(null);
+    const [stats, setStats] = useState<AdminStats | null>(null);
     const [loading, setLoading] = useState(true);
 
     // Analytics State
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [analytics, setAnalytics] = useState<any>(null);
+    interface Analytics {
+        totalCreated: number;
+        totalServed: number;
+        totalCancelled: number;
+        avgRating: string | null;
+        avgWaitMins: number | null;
+        timeSavedLabel: string;
+    }
+    const [analytics, setAnalytics] = useState<Analytics | null>(null);
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
     const [datePreset, setDatePreset] = useState<'today' | '7days' | 'alltime'>('today');
 
@@ -34,7 +66,7 @@ export default function AdminPage() {
         else if (preset === '7days') { from = sevenDaysAgo; }
         else { from = undefined; to = undefined; }
         const res = await getAnalytics(from, to);
-        if (!res.error) setAnalytics(res);
+        if (!res.error) setAnalytics(res as unknown as Analytics);
         setAnalyticsLoading(false);
     }
 
@@ -42,8 +74,20 @@ export default function AdminPage() {
     const [viewingClinicMetricsId, setViewingClinicMetricsId] = useState<string | null>(null);
     const [viewingClinicName, setViewingClinicName] = useState<string | null>(null);
     const [viewingClinicLimit, setViewingClinicLimit] = useState<number>(0);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [clinicMetrics, setClinicMetrics] = useState<any>(null);
+    interface TrendDay {
+        date: string;
+        total_tokens: number;
+        avg_wait_time_minutes: number;
+        served_count?: number;
+    }
+
+    interface ClinicMetrics {
+        today: { created: number; served: number; skipped: number; emergency: number; };
+        trend: TrendDay[];
+        avgRating: string | null;
+        timeSavedLabel: string;
+    }
+    const [clinicMetrics, setClinicMetrics] = useState<ClinicMetrics | null>(null);
     const [clinicMetricsLoading, setClinicMetricsLoading] = useState(false);
 
     async function loadClinicMetrics(businessId: string, name: string, limit: number) {
@@ -52,7 +96,7 @@ export default function AdminPage() {
         setViewingClinicLimit(limit || 0);
         setClinicMetricsLoading(true);
         const res = await getClinicMetrics(businessId);
-        if (!res.error) setClinicMetrics(res);
+        if (!res.error) setClinicMetrics(res as unknown as ClinicMetrics);
         setClinicMetricsLoading(false);
     }
 
@@ -67,10 +111,15 @@ export default function AdminPage() {
     const [actionLoading, setActionLoading] = useState(false);
 
     // Settings Modal State
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [editingClinic, setEditingClinic] = useState<any>(null);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [clinicSettings, setClinicSettings] = useState<any>({});
+    const [editingClinic, setEditingClinic] = useState<Business | null>(null);
+    interface ClinicSettings {
+        whatsapp_enabled?: boolean;
+        qr_intake_enabled?: boolean;
+        daily_token_limit?: number;
+        daily_message_limit?: number;
+        [key: string]: unknown;
+    }
+    const [clinicSettings, setClinicSettings] = useState<ClinicSettings>({});
     const [settingsSaving, setSettingsSaving] = useState(false);
 
     useEffect(() => {
@@ -83,7 +132,7 @@ export default function AdminPage() {
         setLoading(true);
         const res = await getAdminStats();
         if (res.error) alert(res.error);
-        else setStats(res);
+        else setStats(res as unknown as AdminStats);
         setLoading(false);
     }
 
@@ -332,8 +381,7 @@ export default function AdminPage() {
                                 </div>
                             )}
 
-                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                            {stats.businesses?.map((b: any) => (
+                            {stats.businesses && stats.businesses.map((b) => (
                                 <div key={b.id} className="group relative overflow-hidden bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-4 sm:p-5 hover:bg-white/10 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-1">
@@ -391,7 +439,7 @@ export default function AdminPage() {
                                             size="sm"
                                             title="View Analytics"
                                             className="h-9 px-3 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
-                                            onClick={() => loadClinicMetrics(b.id, b.name, b.daily_token_limit || b.settings?.daily_token_limit)}
+                                            onClick={() => loadClinicMetrics(b.id, b.name, b.daily_token_limit || (b.settings?.daily_token_limit as number) || 0)}
                                         >
                                             <ActivitySquare className="w-4 h-4" />
                                         </Button>
@@ -490,6 +538,7 @@ export default function AdminPage() {
                                 className="bg-indigo-600 hover:bg-indigo-500"
                                 disabled={settingsSaving}
                                 onClick={async () => {
+                                    if (!editingClinic) return;
                                     setSettingsSaving(true);
                                     await updateBusinessSettings(editingClinic.id, clinicSettings);
                                     setSettingsSaving(false);
@@ -556,8 +605,7 @@ export default function AdminPage() {
                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3">Rolling 30 Days Trend</h3>
                                 {clinicMetrics.trend && clinicMetrics.trend.length > 0 ? (
                                     <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                        {clinicMetrics.trend.map((day: any) => (
+                                        {clinicMetrics.trend.map((day) => (
                                             <div key={day.date} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/30">
                                                 <div className="font-mono text-sm text-slate-300">{day.date}</div>
                                                 <div className="flex gap-6 text-sm">

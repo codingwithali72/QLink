@@ -63,9 +63,19 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const [searchTerm, setSearchTerm] = useState("");
 
     // History State
+    interface Token {
+        id: string;
+        tokenNumber: number;
+        isPriority: boolean;
+        status: string;
+        customerName?: string | null;
+        customerPhone?: string | null;
+        feedback?: string | null;
+    }
+
     const todayStr = getClinicDate();
     const [selectedDate, setSelectedDate] = useState(todayStr);
-    const [historyTokens, setHistoryTokens] = useState<any[]>([]); // eslint-disable-line
+    const [historyTokens, setHistoryTokens] = useState<Token[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
 
     // Fetch History/Log Data
@@ -84,10 +94,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const displayedTokens = historyTokens;
 
     // ── Generic action wrapper with optimistic UI support ───────────────────
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const performAction = async (
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        actionFn: () => Promise<any>,
+        actionFn: () => Promise<{ error?: string;[key: string]: unknown }>,
         setLoading: (v: boolean) => void,
         optimisticUpdate?: () => void,
         rollback?: () => void
