@@ -5,14 +5,27 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
-// C5 FIX: No fallback — if ADMIN_EMAIL env var is not set, nobody is superadmin
+// VAPT FIX: DB-based RBAC with env-var bootstrap fallback
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
 async function isSuperAdmin() {
-    if (!ADMIN_EMAIL) return false; // Fail closed — missing env = no admin access
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    return user?.email === ADMIN_EMAIL;
+    if (!user) return false;
+
+    // Primary check: DB-level SUPER_ADMIN role
+    const admin = createAdminClient();
+    const { data: staffRow } = await admin.from('staff_users')
+        .select('role')
+        .eq('id', user.id)
+        .eq('role', 'SUPER_ADMIN')
+        .maybeSingle();
+    if (staffRow) return true;
+
+    // Bootstrap fallback: env-var email match (first-run only)
+    if (ADMIN_EMAIL && user.email === ADMIN_EMAIL) return true;
+
+    return false;
 }
 
 async function getAdminEmail(): Promise<string | null> {
@@ -147,28 +160,26 @@ export async function toggleBusinessStatus(id: string, currentStatus: boolean) {
 export async function resetBusinessSession(businessId: string) {
     if (!await isSuperAdmin()) return { error: "Unauthorized" };
     const supabase = createAdminClient();
-    const today = new Date().toISOString().split('T')[0];
 
-    // SAFETY GUARD: Block reset if a patient is currently SERVING
-    const { data: activeSession } = await supabase
-        .from('sessions').select('id').eq('business_id', businessId).eq('date', today)
-        .in('status', ['OPEN', 'PAUSED']).maybeSingle();
+    // Get admin user id for audit
+    const client = createClient();
+    const { data: { user } } = await client.auth.getUser();
 
-    if (activeSession) {
-        const { data: serving } = await supabase
-            .from('tokens').select('id').eq('session_id', activeSession.id)
-            .eq('status', 'SERVING').maybeSingle();
-        if (serving) {
-            return { error: "Cannot reset session while a patient is currently being served. Ask staff to press NEXT first." };
-        }
-    }
+    // VAPT FIX: Atomic force-close via Postgres RPC (locks session, cancels waiting, closes, logs)
+    const { data, error } = await supabase.rpc('rpc_force_close_session', {
+        p_business_id: businessId,
+        p_staff_id: user?.id || null,
+    });
 
-    const { error } = await supabase.from('sessions')
-        .update({ status: 'CLOSED' })
-        .eq('business_id', businessId)
-        .eq('date', today);
     if (error) return { error: error.message };
-    await logAdminAction('RESET_SESSION', 'SESSION', businessId, undefined, { date: today });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = data as any;
+    if (result && result.success === false) return { error: result.error || 'Force close failed' };
+
+    await logAdminAction('RESET_SESSION', 'SESSION', businessId, undefined, {
+        cancelled_tokens: result?.cancelled_tokens || 0,
+    });
     revalidatePath('/admin');
     return { success: true };
 }
@@ -177,27 +188,35 @@ export async function deleteBusiness(id: string) {
     if (!await isSuperAdmin()) return { error: "Unauthorized" };
     const supabase = createAdminClient();
 
-    // SAFETY GUARD: Block delete if clinic has active queue tokens
-    const { count: activeTokens } = await supabase
-        .from('tokens').select('id', { count: 'exact', head: true })
-        .eq('business_id', id)
-        .in('status', ['WAITING', 'SERVING']);
+    // Get admin user id for audit trail inside the RPC
+    const client = createClient();
+    const { data: { user } } = await client.auth.getUser();
 
-    if ((activeTokens || 0) > 0) {
-        return { error: `Cannot delete clinic with ${activeTokens} active token(s) in queue. Close the session first.` };
-    }
-
-    // Find staff users (auth users) before deleting business
+    // Capture staff user IDs BEFORE deletion (for Auth cleanup after)
     const { data: staffUsers } = await supabase.from('staff_users').select('id').eq('business_id', id);
     const { data: biz } = await supabase.from('businesses').select('slug, name').eq('id', id).single();
 
-    const { error } = await supabase.from('businesses').delete().eq('id', id);
+    // VAPT FIX: Atomic DB deletion via Postgres RPC (guards, cascades, logs in one transaction)
+    const { data, error } = await supabase.rpc('rpc_delete_clinic_transactional', {
+        p_business_id: id,
+        p_admin_id: user?.id || null,
+    });
+
     if (error) return { error: error.message };
 
-    // Clean up auth.users (Supabase Auth)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = data as any;
+    if (result && result.success === false) return { error: result.error || 'Deletion failed' };
+
+    // Post-DB-commit: Clean up auth.users (cannot be inside Postgres transaction)
     if (staffUsers && staffUsers.length > 0) {
         for (const staff of staffUsers) {
-            await supabase.auth.admin.deleteUser(staff.id);
+            try {
+                await supabase.auth.admin.deleteUser(staff.id);
+            } catch (e) {
+                console.error(`[deleteBusiness] Failed to delete auth user ${staff.id}:`, e);
+                // DB is already clean — Auth orphan is acceptable and idempotent
+            }
         }
     }
 

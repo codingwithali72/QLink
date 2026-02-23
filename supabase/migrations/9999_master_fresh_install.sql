@@ -20,6 +20,8 @@ DROP FUNCTION IF EXISTS "public"."refresh_clinic_daily_stats" CASCADE;
 DROP FUNCTION IF EXISTS "public"."rpc_process_queue_action" CASCADE;
 DROP FUNCTION IF EXISTS "public"."create_token_atomic" CASCADE;
 DROP FUNCTION IF EXISTS "public"."next_patient_atomic" CASCADE;
+DROP FUNCTION IF EXISTS "public"."rpc_force_close_session" CASCADE;
+DROP FUNCTION IF EXISTS "public"."rpc_delete_clinic_transactional" CASCADE;
 
 -- =================================================================================
 -- 2. CREATE CORE TABLES
@@ -36,6 +38,7 @@ CREATE TABLE "public"."businesses" (
     "retention_days" integer NOT NULL DEFAULT 30,
     "consent_text_version" text NOT NULL DEFAULT 'v1.0-2026-02-24',
     "is_active" boolean DEFAULT true,
+    "status" text NOT NULL DEFAULT 'ACTIVE', -- ACTIVE, SUSPENDED
     "created_at" timestamp with time zone DEFAULT now(),
     PRIMARY KEY ("id"),
     UNIQUE ("slug")
@@ -625,3 +628,89 @@ AFTER INSERT OR UPDATE OF status, rating, served_at, cancelled_at
 ON public.tokens
 FOR EACH ROW
 EXECUTE FUNCTION public.fn_update_clinic_daily_stats_on_token_change();
+
+-- =================================================================================
+-- 8. VAPT HARDENING RPCs (Atomic force-close and delete)
+-- =================================================================================
+
+-- Atomic Session Force Close
+CREATE OR REPLACE FUNCTION public.rpc_force_close_session(
+    p_business_id uuid,
+    p_staff_id uuid
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_session_id uuid;
+    v_today date;
+    v_cancelled_count int := 0;
+BEGIN
+    v_today := TIMEZONE('Asia/Kolkata', now())::date;
+
+    SELECT id INTO v_session_id
+    FROM public.sessions
+    WHERE business_id = p_business_id
+      AND date = v_today
+      AND status IN ('OPEN', 'PAUSED')
+    FOR UPDATE;
+
+    IF v_session_id IS NULL THEN
+        RETURN json_build_object('success', false, 'error', 'No active session found for today.');
+    END IF;
+
+    WITH cancelled AS (
+        UPDATE public.tokens
+        SET status = 'CANCELLED', previous_status = status, cancelled_at = now()
+        WHERE session_id = v_session_id AND status = 'WAITING'
+        RETURNING id
+    )
+    SELECT count(*) INTO v_cancelled_count FROM cancelled;
+
+    UPDATE public.sessions
+    SET status = 'CLOSED', closed_at = now()
+    WHERE id = v_session_id;
+
+    INSERT INTO public.system_audit_logs (
+        clinic_id, actor_id, actor_role, action_type, entity_type, entity_id, metadata
+    ) VALUES (
+        p_business_id, p_staff_id, 'SUPER_ADMIN', 'SESSION_FORCE_CLOSED', 'session', v_session_id,
+        jsonb_build_object('tokens_cancelled', v_cancelled_count)
+    );
+
+    RETURN json_build_object('success', true, 'session_id', v_session_id, 'cancelled_tokens', v_cancelled_count);
+END;
+$$;
+
+-- Atomic Clinic Deletion
+CREATE OR REPLACE FUNCTION public.rpc_delete_clinic_transactional(
+    p_business_id uuid,
+    p_admin_id uuid
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_active_tokens int;
+BEGIN
+    SELECT count(*) INTO v_active_tokens
+    FROM public.tokens
+    WHERE business_id = p_business_id AND status IN ('WAITING', 'SERVING');
+
+    IF v_active_tokens > 0 THEN
+        RETURN json_build_object('success', false, 'error', 'Cannot delete clinic with active queue tokens. Close session first.');
+    END IF;
+
+    DELETE FROM public.businesses WHERE id = p_business_id;
+
+    INSERT INTO public.system_audit_logs (
+        actor_id, actor_role, action_type, entity_type, entity_id
+    ) VALUES (
+        p_admin_id, 'SUPER_ADMIN', 'DELETE_CLINIC', 'business', p_business_id
+    );
+
+    RETURN json_build_object('success', true);
+END;
+$$;
