@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from "@/lib/supabase/admin";
+import { encryptPhone, hashPhone } from "@/lib/crypto";
 // Note: action imports in route handlers are tricky if they use cookies(), so we will implement basic REST natively.
 
 // Helper to authenticate
@@ -42,11 +43,23 @@ export async function POST(
             return NextResponse.json({ error: 'Queue is currently closed or paused' }, { status: 400 });
         }
 
+        let phoneEncrypted: string | null = null;
+        let phoneHash: string | null = null;
+
+        try {
+            phoneEncrypted = encryptPhone(phone);
+            phoneHash = hashPhone(phone);
+        } catch (cryptoErr) {
+            console.error('[API createToken] Encryption key not configured, storing plaintext:', cryptoErr);
+        }
+
         const { data, error } = await supabase.rpc('create_token_atomic', {
             p_business_id: params.clinicId,
             p_session_id: session.id,
             p_name: name || "Guest",
-            p_phone: phone,
+            p_phone: phoneEncrypted ? null : phone,
+            p_phone_encrypted: phoneEncrypted,
+            p_phone_hash: phoneHash,
             p_is_priority: !!is_priority,
             p_staff_id: null // API creation
         });

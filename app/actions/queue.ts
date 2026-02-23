@@ -18,6 +18,27 @@ async function getAuthenticatedUser() {
     return user;
 }
 
+// DPDP MULTI-TENANT ISOLATION FIX
+// Exploit: Auth users could pass any clinicSlug to modify queues they don't own.
+// Fix: Strictly verify that the authenticated user belongs to the target business_id
+async function verifyClinicAccess(businessId: string): Promise<boolean> {
+    const user = await getAuthenticatedUser();
+    if (!user) return false;
+
+    // Super Admin bypass
+    if (user.email === process.env.ADMIN_EMAIL) return true;
+
+    const supabase = createAdminClient();
+    const { data: staff } = await supabase
+        .from('staff_users')
+        .select('id')
+        .eq('id', user.id)
+        .eq('business_id', businessId)
+        .maybeSingle();
+
+    return !!staff;
+}
+
 async function getBusinessBySlug(slug: string) {
     const supabase = createAdminClient();
     const { data, error } = await supabase.from('businesses').select('id, name, settings, is_active').eq('slug', slug).single();
@@ -321,6 +342,8 @@ export async function updateToken(clinicSlug: string, tokenId: string, name: str
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Business not found" };
 
+        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized: You do not have access to this clinic." };
+
         const { error } = await supabase
             .from('tokens')
             .update({ patient_name: name || null, patient_phone: cleanPhone || null })
@@ -348,6 +371,8 @@ export async function triggerManualCall(clinicSlug: string, tokenId: string) {
         const supabase = createAdminClient();
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Clinic not found" };
+
+        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized: You do not have access to this clinic." };
 
         const { data: token } = await supabase
             .from('tokens')
@@ -497,6 +522,8 @@ async function processQueueAction(slug: string, action: string, tokenId?: string
         const user = await getAuthenticatedUser();
         if (!user) return { error: "Unauthorized: staff login required" };
 
+        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized: You do not have access to this clinic." };
+
         // For RESUME_SESSION, look for a PAUSED session too
         let session = await getActiveSession(business.id);
         if (!session && action === 'RESUME_SESSION') {
@@ -537,6 +564,8 @@ async function updateSessionStatus(slug: string, status: 'OPEN' | 'CLOSED' | 'PA
         const business = await getBusinessBySlug(slug);
         if (!business) throw new Error("Business not found");
 
+        if (!await verifyClinicAccess(business.id)) throw new Error("Unauthorized: You do not have access to this clinic.");
+
         const today = getClinicDate();
         const { error } = await supabase.from('sessions')
             .update({ status })
@@ -555,6 +584,8 @@ async function updateSessionStatus(slug: string, status: 'OPEN' | 'CLOSED' | 'PA
 
 
 export async function getDashboardData(businessId: string) {
+    if (!await verifyClinicAccess(businessId)) return { session: null, tokens: [], dailyTokenLimit: null, error: "Unauthorized" };
+
     const supabase = createAdminClient();
     try {
         const today = getClinicDate();
@@ -604,6 +635,8 @@ export async function getTokensForDate(clinicSlug: string, date: string) {
     try {
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Business not found" };
+
+        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized: You do not have access to this clinic." };
 
         const { data: session } = await supabase
             .from('sessions')

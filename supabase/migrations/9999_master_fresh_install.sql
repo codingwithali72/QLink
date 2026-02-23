@@ -226,17 +226,11 @@ REVOKE UPDATE, DELETE ON "public"."system_audit_logs" FROM authenticated;
 REVOKE UPDATE, DELETE ON "public"."system_audit_logs" FROM anon;
 
 -- Note: In a production App, you would write strict RLS policies tying `auth.uid()` to `staff_users.id`.
--- For MVP testing speed without a complex Auth UI, we allow ANONYMOUS READS for the public tracking links,
--- and rely on the Next.js Server Actions (using Service Role Key) to bypass RLS for writes.
+-- QLink exclusively uses Next.js Server Actions (with the Service Role Key) to bypass RLS for secure reads/writes.
+-- Public anon read access is EXPLICITLY DISABLED to prevent database dumping/scraping.
 
-CREATE POLICY "Allow public read access to businesses" ON "public"."businesses" FOR SELECT USING (true);
-CREATE POLICY "Allow public read access to sessions" ON "public"."sessions" FOR SELECT USING (true);
-CREATE POLICY "Allow public read access to tokens" ON "public"."tokens" FOR SELECT USING (true);
-CREATE POLICY "Allow public read access to clinic_daily_stats" ON "public"."clinic_daily_stats" FOR SELECT USING (true);
-
--- ENABLE REALTIME FOR TOKENS & SESSIONS
-ALTER PUBLICATION supabase_realtime ADD TABLE "public"."tokens";
-ALTER PUBLICATION supabase_realtime ADD TABLE "public"."sessions";
+-- REALTIME REMOVED IN FAVOR OF POLLING
+-- ALTER PUBLICATION supabase_realtime ADD TABLE "public"."tokens";
 
 -- =================================================================================
 -- 5. ATOMIC QUEUE FUNCTIONS (THE BRAINS OF QLINK)
