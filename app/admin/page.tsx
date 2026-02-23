@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw, Trash2, BarChart2, Clock, Star, TrendingUp, Settings, ActivitySquare } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getClinicDate } from "@/lib/date";
 
@@ -57,7 +57,7 @@ export default function AdminPage() {
     const today = getClinicDate();
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-    async function fetchAnalytics(preset: 'today' | '7days' | 'alltime') {
+    const fetchAnalytics = useCallback(async (preset: 'today' | '7days' | 'alltime') => {
         setAnalyticsLoading(true);
         setDatePreset(preset);
         let from: string | undefined;
@@ -68,7 +68,7 @@ export default function AdminPage() {
         const res = await getAnalytics(from, to);
         if (!res.error) setAnalytics(res as unknown as Analytics);
         setAnalyticsLoading(false);
-    }
+    }, [today, sevenDaysAgo]);
 
     // Clinic Specific Metrics State
     const [viewingClinicMetricsId, setViewingClinicMetricsId] = useState<string | null>(null);
@@ -125,8 +125,7 @@ export default function AdminPage() {
     useEffect(() => {
         fetchStats();
         fetchAnalytics('today');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [fetchAnalytics]);
 
     async function fetchStats() {
         setLoading(true);
@@ -381,7 +380,7 @@ export default function AdminPage() {
                                 </div>
                             )}
 
-                            {stats.businesses && stats.businesses.map((b) => (
+                            {stats.businesses && stats.businesses.map((b: Business) => (
                                 <div key={b.id} className="group relative overflow-hidden bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-4 sm:p-5 hover:bg-white/10 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-1">
@@ -605,7 +604,7 @@ export default function AdminPage() {
                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3">Rolling 30 Days Trend</h3>
                                 {clinicMetrics.trend && clinicMetrics.trend.length > 0 ? (
                                     <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                                        {clinicMetrics.trend.map((day) => (
+                                        {clinicMetrics.trend.map((day: TrendDay) => (
                                             <div key={day.date} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/30">
                                                 <div className="font-mono text-sm text-slate-300">{day.date}</div>
                                                 <div className="flex gap-6 text-sm">
