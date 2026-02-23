@@ -21,7 +21,7 @@ import { getClinicDate } from "@/lib/date";
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function ReceptionPage({ params }: { params: { clinicSlug: string } }) {
-    const { session, tokens, loading, refresh, lastUpdated, isConnected, dailyTokenLimit, setTokens, setSession } = useClinicRealtime(params.clinicSlug);
+    const { session, tokens, loading, refresh, lastUpdated, isConnected, dailyTokenLimit, setTokens } = useClinicRealtime(params.clinicSlug);
 
     // ── Per-action loading flags ─────────────────────────────────────────────
     // Each action has its own flag so one in-flight request doesn't block others.
@@ -86,6 +86,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     // ── Generic action wrapper with optimistic UI support ───────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const performAction = async (
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         actionFn: () => Promise<any>,
         setLoading: (v: boolean) => void,
         optimisticUpdate?: () => void,

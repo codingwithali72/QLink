@@ -1,8 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const WHATSAPP_API_URL = "https://graph.facebook.com/v17.0";
-const CRON_SECRET = process.env.CRON_SECRET;
 const MAX_RETRIES = 3;
 
 export async function GET(request: NextRequest) {
@@ -14,8 +12,6 @@ export async function GET(request: NextRequest) {
 
     try {
         const supabase = createAdminClient();
-        const { PHONE_NUMBER_ID, ACCESS_TOKEN } = process.env;
-
         // Fetch PENDING + FAILED/EXCEPTION messages eligible for retry
         const { data: pendingMessages, error: fetchError } = await supabase
             .from("message_logs")

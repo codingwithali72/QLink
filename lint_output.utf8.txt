@@ -1,0 +1,48 @@
+﻿
+> qless@0.1.0 lint
+> next lint
+
+node.exe : 
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~
+    + CategoryInfo          :  
+   NotSpecified: (:String) []  
+  , RemoteException
+    + FullyQualifiedErrorId :  
+   NativeCommandError
+ 
+./app/actions/queue.ts
+138:118  Error: 
+'clientStaffId' is defined but 
+never used.  @typescript-eslint
+/no-unused-vars
+
+./app/api/v1/jobs/process-messa
+ges/route.ts
+4:7  Error: 'WHATSAPP_API_URL' 
+is assigned a value but never 
+used.  @typescript-eslint/no-un
+used-vars
+5:7  Error: 'CRON_SECRET' is 
+assigned a value but never 
+used.  @typescript-eslint/no-un
+used-vars
+17:17  Error: 
+'PHONE_NUMBER_ID' is assigned 
+a value but never used.  @types
+cript-eslint/no-unused-vars
+17:34  Error: 'ACCESS_TOKEN' 
+is assigned a value but never 
+used.  @typescript-eslint/no-un
+used-vars
+
+info  - Need to disable some 
+ESLint rules? Learn more here: 
+https://nextjs.org/docs/basic-f
+eatures/eslint#disabling-rules

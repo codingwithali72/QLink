@@ -135,7 +135,7 @@ export async function startSession(clinicSlug: string) {
 }
 
 // 2. CREATE TOKEN
-export async function createToken(clinicSlug: string, phone: string, name: string = "", isPriority: boolean = false, clientStaffId?: string) {
+export async function createToken(clinicSlug: string, phone: string, name: string = "", isPriority: boolean = false) {
     if (!clinicSlug) return { error: "Missing clinic slug" };
 
     const supabase = createAdminClient();
