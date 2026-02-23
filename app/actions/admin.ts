@@ -277,7 +277,7 @@ export async function getAdminStats() {
     const { data: businesses } = await supabase.from('businesses').select('*').is('deleted_at', null).order('created_at', { ascending: false });
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const istStart = `${todayStr}T00:00:00+05:30`;
+    const istStart = new Date(`${todayStr}T00:00:00+05:30`).toISOString();
     const { count: activeSessions } = await supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', todayStr).eq('status', 'OPEN');
     const { count: todayTokens } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).gte('created_at', istStart);
     const { count: totalMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true });
@@ -342,7 +342,7 @@ export async function getClinicMetrics(businessId: string) {
     const supabase = createAdminClient();
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const istStart = `${todayStr}T00:00:00+05:30`;
+    const istStart = new Date(`${todayStr}T00:00:00+05:30`).toISOString();
 
     // Live Today Stats
     const { count: liveCreated } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', istStart);
