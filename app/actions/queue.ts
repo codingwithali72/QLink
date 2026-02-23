@@ -105,6 +105,9 @@ export async function startSession(clinicSlug: string) {
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Clinic not found" };
 
+        // RBAC: Only staff from this clinic can start its session
+        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized: You do not have access to this clinic." };
+
         const today = getClinicDate();
 
         // Check if session exists

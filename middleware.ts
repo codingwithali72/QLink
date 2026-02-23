@@ -17,14 +17,20 @@ export async function middleware(request: NextRequest) {
                     return request.cookies.get(name)?.value
                 },
                 set(name: string, value: string, options: CookieOptions) {
-                    // FORCE SESSION COOKIE
+                    // FORCE SESSION COOKIE with strict security flags
                     // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     const { maxAge, expires, ...sessionOptions } = options;
+
+                    const secureOptions = {
+                        ...sessionOptions,
+                        httpOnly: true,     // SECURITY: prevent JS access to session cookie
+                        sameSite: 'strict' as const, // SECURITY: prevent CSRF
+                    };
 
                     request.cookies.set({
                         name,
                         value,
-                        ...sessionOptions,
+                        ...secureOptions,
                     })
                     response = NextResponse.next({
                         request: {
@@ -34,7 +40,7 @@ export async function middleware(request: NextRequest) {
                     response.cookies.set({
                         name,
                         value,
-                        ...sessionOptions,
+                        ...secureOptions,
                     })
                 },
                 remove(name: string, options: CookieOptions) {

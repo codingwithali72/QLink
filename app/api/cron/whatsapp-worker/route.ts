@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendWhatsApp } from '@/lib/whatsapp';
+import { decryptPhone } from '@/lib/crypto';
 
 // Vercel Cron or Edge trigger to flush PENDING messages
 export async function GET(req: Request) {
@@ -8,7 +9,8 @@ export async function GET(req: Request) {
         const authHeader = req.headers.get('authorization');
         const cronSecret = process.env.CRON_SECRET;
 
-        if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${cronSecret}`) {
+        // Always enforce CRON_SECRET when it's set (not just in production)
+        if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
@@ -37,10 +39,46 @@ export async function GET(req: Request) {
         let successCount = 0;
         let failCount = 0;
 
-        // 3. Process each message (Awaited sequentially to respect Meta rate limits safely, but scalable off UI thread)
+        // 3. Process each message — decrypts phone from tokens table (DPDP compliant)
         for (const log of pendingLogs) {
-            const payload = log.provider_response as { phone?: string, components?: any[] };
-            if (!payload || !payload.phone || !payload.components) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const payload = log.provider_response as { components?: any[], token_id?: string, phone_hash?: string, phone?: string };
+            if (!payload || !payload.components) {
+                await supabase.from('message_logs').update({ status: 'FAILED' }).eq('id', log.id);
+                failCount++;
+                continue;
+            }
+
+            // DPDP: Resolve phone from encrypted tokens table, not from JSONB payload
+            // Supports both new (token_id lookup) and legacy (direct phone) payloads
+            let resolvedPhone: string | null = null;
+            const lookupTokenId = payload.token_id || log.token_id;
+
+            if (lookupTokenId) {
+                try {
+                    const { data: tokenRow } = await supabase
+                        .from('tokens')
+                        .select('patient_phone_encrypted, patient_phone')
+                        .eq('id', lookupTokenId)
+                        .maybeSingle();
+
+                    if (tokenRow?.patient_phone_encrypted) {
+                        resolvedPhone = decryptPhone(tokenRow.patient_phone_encrypted);
+                    } else if (tokenRow?.patient_phone) {
+                        // Legacy plaintext fallback (for tokens created before encryption)
+                        resolvedPhone = tokenRow.patient_phone;
+                    }
+                } catch (decryptErr) {
+                    console.error(`[wa-worker] Failed to decrypt phone for token ${lookupTokenId}:`, decryptErr);
+                }
+            }
+
+            // Last-resort: direct phone in payload (legacy support — will be removed once all rows migrated)
+            if (!resolvedPhone && payload.phone) {
+                resolvedPhone = payload.phone;
+            }
+
+            if (!resolvedPhone) {
                 await supabase.from('message_logs').update({ status: 'FAILED' }).eq('id', log.id);
                 failCount++;
                 continue;
@@ -49,7 +87,7 @@ export async function GET(req: Request) {
             try {
                 // sendWhatsApp internally updates status = SENT / FAILED based on response.
                 await sendWhatsApp(
-                    payload.phone,
+                    resolvedPhone,
                     log.message_type,
                     payload.components,
                     log.business_id,

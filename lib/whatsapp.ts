@@ -1,5 +1,6 @@
 
 import { createAdminClient } from "./supabase/admin";
+import { hashPhone } from "./crypto";
 
 const WHATSAPP_API_URL = "https://graph.facebook.com/v17.0"; // Or latest version
 
@@ -64,14 +65,29 @@ async function logMessage(businessId: string, tokenId: string | undefined, statu
 }
 
 // Queue system to decouple HTTP request from User action
+// DPDP FIX: phone is NOT stored in provider_response. Instead we store the tokenId
+// which allows the async worker to safely retrieve the encrypted phone from tokens table.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function queueWhatsAppMessage(businessId: string, tokenId: string, templateName: string, phone: string, components: any[]) {
     const supabase = createAdminClient();
+
+    // Store HMAC hash of phone + components. The worker uses token_id to look up
+    // the encrypted phone and decrypt it at send time — never stored in plaintext here.
+    let phoneHash: string | null = null;
+    try {
+        phoneHash = hashPhone(phone);
+    } catch {
+        // Fallback: if crypto keys not set, store masked phone for debugging only
+        phoneHash = phone.replace(/\d(?=\d{4})/g, "*");
+    }
+
     await supabase.from("message_logs").insert({
         business_id: businessId,
         token_id: tokenId,
         message_type: templateName,
         status: "PENDING",
-        provider_response: { phone, components } // Store payload for the async worker
+        // Store phone_hash (not plaintext) + components for the async worker
+        // Worker retrieves actual phone via: tokens.patient_phone_encrypted → decryptPhone()
+        provider_response: { phone_hash: phoneHash, token_id: tokenId, components }
     });
 }
