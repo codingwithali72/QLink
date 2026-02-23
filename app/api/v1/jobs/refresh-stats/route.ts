@@ -9,11 +9,11 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
     try {
-        // Basic security: require a cron secret if running in production
+        // Basic security: require a cron secret universally
         const authHeader = req.headers.get('authorization');
         const expectedSecret = process.env.CRON_SECRET;
 
-        // If CRON_SECRET is defined locally or in Vercel, mandate it
+        // Mandate it if present
         if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }

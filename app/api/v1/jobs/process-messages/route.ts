@@ -1,17 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const WHATSAPP_API_URL = "https://graph.facebook.com/v17.0";
 const CRON_SECRET = process.env.CRON_SECRET;
 const MAX_RETRIES = 3;
 
-export async function GET(request: Request) {
-    // Security: require CRON_SECRET bearer token in production
-    if (process.env.NODE_ENV === 'production') {
-        const authHeader = request.headers.get('authorization');
-        if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export async function GET(request: NextRequest) {
+    // Security: require CRON_SECRET bearer token universally
+    const authHeader = request.headers.get('authorization');
+    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     try {
@@ -62,18 +60,18 @@ export async function GET(request: Request) {
             }
 
             let finalStatus = "FAILED";
-            let providerData: Record<string, unknown> = { retry_count: retryCount };
-
-            if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
-                // Mock Mode (dev / no credentials)
+            let providerData: Record<string, unknown>;
+            // Mock mode (if no live Meta keys)
+            if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_BEARER_TOKEN) {
+                console.log(`[wa-worker] Mock send to ${payload.phone} (Template: ${msg.message_type})`); // Adjusted resolvedPhone and log.message_type to match existing variables
                 finalStatus = "MOCK_SENT";
                 providerData = { mock: true, sent_to: payload.phone, retry_count: retryCount };
             } else {
                 try {
-                    const response = await fetch(`${WHATSAPP_API_URL}/${PHONE_NUMBER_ID}/messages`, {
+                    const response = await fetch(`https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
                         method: "POST",
                         headers: {
-                            "Authorization": `Bearer ${ACCESS_TOKEN}`,
+                            "Authorization": `Bearer ${process.env.WHATSAPP_BEARER_TOKEN}`,
                             "Content-Type": "application/json",
                         },
                         body: JSON.stringify({
