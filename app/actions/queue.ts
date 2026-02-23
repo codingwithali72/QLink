@@ -111,14 +111,25 @@ export async function startSession(clinicSlug: string) {
 }
 
 // 2. CREATE TOKEN
-export async function createToken(clinicSlug: string, phone: string, name: string = "", isPriority: boolean = false, createdByStaffId?: string) {
-    // 0. SECURITY INJECTION SHIELD:
-    // If a request does NOT have a valid staff ID, it came from a public QR scan or a malicious direct API hit.
-    // Forcibly strip priority status to prevent malicious users from jumping the queue via JSON manipulation.
-    if (!createdByStaffId) {
+export async function createToken(clinicSlug: string, phone: string, name: string = "", isPriority: boolean = false, clientStaffId?: string) {
+    if (!clinicSlug) return { error: "Missing clinic slug" };
+
+    const supabase = createAdminClient();
+    const user = await getAuthenticatedUser();
+    const actualStaffId = user?.id || null;
+
+    // 0. SECURITY INJECTION SHIELD & INPUT SANITIZATION
+    // DPDP VAPT Fix: Do not trust client-provided staff IDs. Only authenticated
+    // staff sessions (JWT) can set isPriority = true.
+    if (!actualStaffId) {
         isPriority = false;
     }
-    if (!clinicSlug) return { error: "Missing clinic slug" };
+
+    // Input sanitization: Trim, restrict to 50 chars, strip dangerous HTML chars
+    const safeName = name
+        .trim()
+        .substring(0, 50)
+        .replace(/[<>]/g, ''); // Basic XSS mitigation before DB entry
 
     // Allow empty phone for emergency walk-ins. Convert legacy 0000000000 to null.
     const isEmergencyFake = phone === "0000000000" || phone.trim() === "";
@@ -133,9 +144,6 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         return { error: "Valid 10-digit Indian mobile number required" };
     }
 
-    const supabase = createAdminClient();
-    const user = await getAuthenticatedUser();
-
     try {
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Clinic not found" };
@@ -143,10 +151,8 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         const session = await getActiveSession(business.id);
         if (!session) return { error: "Queue is CLOSED. Ask reception to start session." };
 
-        const createdByStaffId = user?.id || null;
-
         // --- RATE LIMITING (Public QR Joiner Block) ---
-        if (!createdByStaffId) {
+        if (!actualStaffId) {
             const reqHeaders = headers();
             const ip = reqHeaders.get("x-forwarded-for") || reqHeaders.get("x-real-ip") || "unknown_ip";
 
@@ -191,10 +197,10 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         const { data, error } = await supabase.rpc('create_token_atomic', {
             p_business_id: business.id,
             p_session_id: session.id,
-            p_name: name || "Guest",
+            p_name: safeName || "Guest",
             p_phone: phoneEncrypted ? null : cleanPhone,  // NULL when encrypted
             p_is_priority: isPriority,
-            p_staff_id: createdByStaffId,
+            p_staff_id: actualStaffId,
             p_phone_encrypted: phoneEncrypted,
             p_phone_hash: phoneHash,
         });
@@ -232,10 +238,10 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         // Consent logging (DPDP — log every token creation with consent metadata)
         // QR source = patient gave explicit UI consent (checkbox)
         // Receptionist source = implied in-person consent
-        const reqHeaders = createdByStaffId ? null : headers();
+        const reqHeaders = actualStaffId ? null : headers();
         const ip = reqHeaders?.get("x-forwarded-for") || reqHeaders?.get("x-real-ip") || null;
         const ua = reqHeaders?.get("user-agent") || null;
-        const source = createdByStaffId ? 'receptionist' : 'qr';
+        const source = actualStaffId ? 'receptionist' : 'qr';
 
         if (phoneHash || cleanPhone) {
             await supabase.from('patient_consent_logs').insert({
@@ -254,7 +260,7 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
 
         // Audit
         // If created by staff, log 'ADD_TOKEN'. If public, log 'JOIN_QR'.
-        await logAudit(business.id, createdByStaffId ? 'ADD_TOKEN' : 'JOIN_QR', { token_no: token.token_number, priority: isPriority });
+        await logAudit(business.id, actualStaffId ? 'ADD_TOKEN' : 'JOIN_QR', { token_no: token.token_number, priority: isPriority });
 
         // WhatsApp (Decoupled to Background Queue to avoid blocking DB transactions on High API latency)
         if (cleanPhone) {

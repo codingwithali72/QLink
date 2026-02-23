@@ -96,12 +96,13 @@ export async function createBusiness(name: string, slug: string, phone: string, 
         contact_phone: phone,
         daily_token_limit: 200,
         settings: {
-            plan: 'FREE',
+            features: ['queue_management'],
             qr_intake_enabled: true,
             max_active_tokens: 50,
             daily_message_limit: 300,
             whatsapp_enabled: true,
-            retention_days: 90,
+            // DPDP & System limits
+            retention_days: Math.max(1, Math.min(90, 365)),
             billing_status: 'ACTIVE',
         }
     }).select('id').single();
@@ -210,10 +211,20 @@ export async function updateBusinessSettings(id: string, settings: Record<string
     if (!await isSuperAdmin()) return { error: "Unauthorized" };
     const supabase = createAdminClient();
 
-    // Extract limits to update root column
+    // Limit extraction and strict bounding (VAPT Fix)
     const rootUpdates: Record<string, unknown> = {};
     if ('daily_token_limit' in settings) {
-        rootUpdates.daily_token_limit = settings.daily_token_limit;
+        // Prevent overflow / zero locks: Clamp between 1 and 5000
+        const rawLimit = Number(settings.daily_token_limit);
+        rootUpdates.daily_token_limit = isNaN(rawLimit) ? 50 : Math.max(1, Math.min(rawLimit, 5000));
+        settings.daily_token_limit = rootUpdates.daily_token_limit; // reflect in merged settings
+    }
+
+    if ('retention_days' in settings) {
+        // DPDP check: Clamp retention safely
+        const rawRet = Number(settings.retention_days);
+        rootUpdates.retention_days = isNaN(rawRet) ? 30 : Math.max(1, Math.min(rawRet, 365));
+        settings.retention_days = rootUpdates.retention_days;
     }
 
     // Merge with existing settings (do not overwrite unrelated keys)
