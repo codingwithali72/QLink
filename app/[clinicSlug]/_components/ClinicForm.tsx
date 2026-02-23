@@ -7,7 +7,7 @@ import { isValidIndianPhone } from "@/lib/phone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Lock, StopCircle, Phone } from "lucide-react";
+import { Loader2, Lock, StopCircle, Phone, ShieldCheck } from "lucide-react";
 
 export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
     const [loading, setLoading] = useState(false);
@@ -16,6 +16,9 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isOffline, setIsOffline] = useState(false);
+    // DPDP: explicit consent must be given before token creation
+    const [consentGiven, setConsentGiven] = useState(false);
+    const [consentError, setConsentError] = useState(false);
 
     useEffect(() => {
         const handleOnline = () => setIsOffline(false);
@@ -30,8 +33,16 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError(null);
+        setConsentError(false);
+
+        // DPDP mandatory gate: block token creation without explicit consent
+        if (!consentGiven) {
+            setConsentError(true);
+            return;
+        }
+
+        setLoading(true);
 
         if (!isValidIndianPhone(phone)) {
             setError("Enter a valid 10-digit Indian mobile number");
@@ -40,7 +51,7 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
         }
 
         try {
-            const res = await createToken(clinicSlug, phone, name);
+            const res = await createToken(clinicSlug, phone, name, false);
             if (res.token) {
                 // Use window.location instead of router to avoid context issues
                 window.location.href = `/${clinicSlug}/t/${res.token.id}`;
@@ -125,7 +136,43 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
 
             {error && <p className="text-red-500 text-sm">{error}</p>}
 
-            <Button type="submit" size="lg" className="w-full h-12 text-lg bg-black hover:bg-slate-800 text-white" disabled={loading}>
+            {/* DPDP Consent Checkbox — mandatory before token creation */}
+            <div className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${consentError
+                ? 'border-red-300 bg-red-50'
+                : consentGiven
+                    ? 'border-green-200 bg-green-50'
+                    : 'border-slate-200 bg-slate-50'
+                }`}>
+                <input
+                    type="checkbox"
+                    id="consent"
+                    checked={consentGiven}
+                    onChange={(e) => {
+                        setConsentGiven(e.target.checked);
+                        if (e.target.checked) setConsentError(false);
+                    }}
+                    className="mt-0.5 h-4 w-4 accent-blue-600 cursor-pointer flex-shrink-0"
+                />
+                <label htmlFor="consent" className="text-xs text-slate-600 leading-relaxed cursor-pointer">
+                    <ShieldCheck className="inline w-3.5 h-3.5 mr-1 text-blue-500 align-middle" />
+                    I consent to QLink and this clinic processing my mobile number and name
+                    {' '}solely for queue management, in accordance with the{' '}
+                    <span className="font-semibold text-slate-800">DPDP Act 2023</span>.
+                    My data will be deleted after 30 days.
+                </label>
+            </div>
+            {consentError && (
+                <p className="text-red-500 text-xs -mt-2">
+                    Please check the consent box above to continue.
+                </p>
+            )}
+
+            <Button
+                type="submit"
+                size="lg"
+                className="w-full h-12 text-lg bg-black hover:bg-slate-800 text-white"
+                disabled={loading}
+            >
                 {loading ? <Loader2 className="animate-spin mr-2" /> : "Get Token"}
             </Button>
         </form>

@@ -4,6 +4,10 @@
 -- =================================================================================
 
 -- 1. CLEANUP (Drops existing tables so you can run this safely on a fresh project)
+DROP TABLE IF EXISTS "public"."consent_text_versions" CASCADE;
+DROP TABLE IF EXISTS "public"."export_logs" CASCADE;
+DROP TABLE IF EXISTS "public"."system_audit_logs" CASCADE;
+DROP TABLE IF EXISTS "public"."patient_consent_logs" CASCADE;
 DROP TABLE IF EXISTS "public"."clinic_daily_stats" CASCADE;
 DROP TABLE IF EXISTS "public"."message_logs" CASCADE;
 DROP TABLE IF EXISTS "public"."audit_logs" CASCADE;
@@ -29,6 +33,8 @@ CREATE TABLE "public"."businesses" (
     "contact_phone" text,
     "settings" jsonb DEFAULT '{}'::jsonb,
     "daily_token_limit" integer DEFAULT NULL,
+    "retention_days" integer NOT NULL DEFAULT 30,
+    "consent_text_version" text NOT NULL DEFAULT 'v1.0-2026-02-24',
     "is_active" boolean DEFAULT true,
     "created_at" timestamp with time zone DEFAULT now(),
     PRIMARY KEY ("id"),
@@ -68,18 +74,74 @@ CREATE TABLE "public"."tokens" (
     "previous_status" text, -- Used for UNDO operations
     "is_priority" boolean DEFAULT false,
     "patient_name" text,
-    "patient_phone" text,
+    "patient_phone" text,                  -- DEPRECATED: plaintext (backcompat only)
+    "patient_phone_encrypted" text,         -- AES-256-GCM ciphertext (DPDP)
+    "patient_phone_hash" text,              -- HMAC-SHA256 for dedup index (DPDP)
     "source" text DEFAULT 'QR',
     "rating" integer,
     "feedback" text,
     "created_by_staff_id" uuid,
-    "offline_sync_id" text, -- Used for resolving PWA conflicts
+    "offline_sync_id" text,
     "created_at" timestamp with time zone DEFAULT now(),
     "served_at" timestamp with time zone,
     "cancelled_at" timestamp with time zone,
     PRIMARY KEY ("id"),
-    UNIQUE ("session_id", "token_number") -- Strict sequence constraint
+    UNIQUE ("session_id", "token_number")
 );
+
+CREATE TABLE "public"."patient_consent_logs" (
+    "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+    "clinic_id" uuid NOT NULL REFERENCES "public"."businesses"("id") ON DELETE CASCADE,
+    "phone_hash" text NOT NULL,
+    "consent_text_version" text NOT NULL,
+    "consent_given" boolean NOT NULL DEFAULT true,
+    "source" text NOT NULL,
+    "ip_address" text,
+    "user_agent" text,
+    "session_id" uuid,
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+    PRIMARY KEY ("id")
+);
+
+CREATE TABLE "public"."export_logs" (
+    "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+    "clinic_id" uuid NOT NULL REFERENCES "public"."businesses"("id") ON DELETE CASCADE,
+    "staff_id" uuid,
+    "export_type" text NOT NULL,
+    "record_count" integer NOT NULL DEFAULT 0,
+    "date_from" date,
+    "date_to" date,
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+    PRIMARY KEY ("id")
+);
+
+CREATE TABLE "public"."system_audit_logs" (
+    "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+    "clinic_id" uuid,
+    "actor_id" uuid,
+    "actor_role" text NOT NULL DEFAULT 'SYSTEM',
+    "action_type" text NOT NULL,
+    "entity_type" text NOT NULL,
+    "entity_id" uuid,
+    "metadata" jsonb NOT NULL DEFAULT '{}',
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+    PRIMARY KEY ("id")
+);
+
+CREATE TABLE "public"."consent_text_versions" (
+    "version" text NOT NULL,
+    "text_content" text NOT NULL,
+    "effective_at" timestamp with time zone NOT NULL DEFAULT now(),
+    "created_by" text,
+    PRIMARY KEY ("version")
+);
+
+INSERT INTO "public"."consent_text_versions" (version, text_content, created_by)
+VALUES (
+    'v1.0-2026-02-24',
+    'I consent to QLink and the clinic processing my mobile number and first name solely for queue management and appointment communication, in accordance with the Digital Personal Data Protection Act 2023. My data will not be shared with third parties and will be deleted after 30 days.',
+    'system'
+) ON CONFLICT (version) DO NOTHING;
 
 CREATE TABLE "public"."audit_logs" (
     "id" uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -153,6 +215,15 @@ ALTER TABLE "public"."tokens" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."audit_logs" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."message_logs" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."clinic_daily_stats" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."patient_consent_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."export_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."system_audit_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."consent_text_versions" ENABLE ROW LEVEL SECURITY;
+
+-- Immutability: system_audit_logs is append-only
+REVOKE UPDATE, DELETE ON "public"."system_audit_logs" FROM PUBLIC;
+REVOKE UPDATE, DELETE ON "public"."system_audit_logs" FROM authenticated;
+REVOKE UPDATE, DELETE ON "public"."system_audit_logs" FROM anon;
 
 -- Note: In a production App, you would write strict RLS policies tying `auth.uid()` to `staff_users.id`.
 -- For MVP testing speed without a complex Auth UI, we allow ANONYMOUS READS for the public tracking links,

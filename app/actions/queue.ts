@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { queueWhatsAppMessage } from "@/lib/whatsapp";
 import { normalizeIndianPhone } from "@/lib/phone";
+import { encryptPhone, hashPhone } from "@/lib/crypto";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
@@ -37,7 +38,6 @@ import { getClinicDate } from "@/lib/date";
 async function getActiveSession(businessId: string) {
     const supabase = createAdminClient();
     const today = getClinicDate();
-    console.log('[getActiveSession] businessId:', businessId, 'today:', today);
 
     const { data, error } = await supabase
         .from('sessions')
@@ -51,16 +51,6 @@ async function getActiveSession(businessId: string) {
 
     if (error) {
         console.error('[getActiveSession] Supabase error:', JSON.stringify(error));
-    }
-    if (!data) {
-        // Debug: check what sessions actually exist for today
-        const { data: allSessions } = await supabase
-            .from('sessions')
-            .select('id, status, date, business_id')
-            .eq('business_id', businessId)
-            .order('created_at', { ascending: false })
-            .limit(5);
-        console.error('[getActiveSession] No OPEN/PAUSED session found. All recent sessions:', JSON.stringify(allSessions));
     }
     return data;
 }
@@ -179,14 +169,34 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         // No pre-check here — pre-checks outside the transaction are race-prone
         // and were showing the wrong error ("once per day" instead of redirecting).
 
-        // RPC
+        // Encrypt phone for storage (DPDP requirement)
+        // - patient_phone_encrypted: AES-256-GCM ciphertext stored
+        // - patient_phone_hash: HMAC-SHA256 for deduplication index
+        // - p_phone: NULL for new encrypted writes (backward compat field)
+        let phoneEncrypted: string | null = null;
+        let phoneHash: string | null = null;
+
+        if (cleanPhone) {
+            try {
+                phoneEncrypted = encryptPhone(cleanPhone);
+                phoneHash = hashPhone(cleanPhone);
+            } catch (cryptoErr) {
+                // If encryption env vars are not set (dev without keys), fall back to plaintext
+                // Log the error but do not break token creation
+                console.error('[createToken] Encryption key not configured, storing plaintext:', cryptoErr);
+            }
+        }
+
+        // RPC — pass encrypted form; p_phone is NULL for encrypted path
         const { data, error } = await supabase.rpc('create_token_atomic', {
             p_business_id: business.id,
             p_session_id: session.id,
             p_name: name || "Guest",
-            p_phone: cleanPhone,
+            p_phone: phoneEncrypted ? null : cleanPhone,  // NULL when encrypted
             p_is_priority: isPriority,
-            p_staff_id: createdByStaffId
+            p_staff_id: createdByStaffId,
+            p_phone_encrypted: phoneEncrypted,
+            p_phone_hash: phoneHash,
         });
 
         if (error) throw error;
@@ -218,6 +228,29 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         }
 
         const token = { id: result.token_id, token_number: result.token_number };
+
+        // Consent logging (DPDP — log every token creation with consent metadata)
+        // QR source = patient gave explicit UI consent (checkbox)
+        // Receptionist source = implied in-person consent
+        const reqHeaders = createdByStaffId ? null : headers();
+        const ip = reqHeaders?.get("x-forwarded-for") || reqHeaders?.get("x-real-ip") || null;
+        const ua = reqHeaders?.get("user-agent") || null;
+        const source = createdByStaffId ? 'receptionist' : 'qr';
+
+        if (phoneHash || cleanPhone) {
+            await supabase.from('patient_consent_logs').insert({
+                clinic_id: business.id,
+                phone_hash: phoneHash || hashPhone(cleanPhone || 'emergency'),
+                consent_text_version: 'v1.0-2026-02-24',
+                consent_given: true,
+                source,
+                ip_address: ip,
+                user_agent: ua,
+                session_id: session.id,
+            }).then(({ error: consentErr }) => {
+                if (consentErr) console.error('[createToken] Consent log failed:', consentErr);
+            });
+        }
 
         // Audit
         // If created by staff, log 'ADD_TOKEN'. If public, log 'JOIN_QR'.
@@ -366,9 +399,16 @@ export async function getPublicTokenStatus(tokenId: string) {
         const supabase = createAdminClient();
 
         // Fetch the token with its session
+        // DPDP: explicitly list only non-PII columns — patient_phone and patient_name
+        // are NOT included here. The public tracking page never needs them.
         const { data: token, error: tokenError } = await supabase
             .from('tokens')
-            .select('*, sessions!inner(status, date, business_id)')
+            .select(`
+                id, token_number, status, is_priority,
+                created_at, served_at, cancelled_at,
+                session_id, business_id, rating,
+                sessions!inner( status, date, business_id )
+            `)
             .eq('id', tokenId)
             .maybeSingle();
 
@@ -410,12 +450,13 @@ export async function getPublicTokenStatus(tokenId: string) {
                 token: {
                     id: token.id,
                     token_number: token.token_number,
-                    patient_name: token.patient_name,
+                    // patient_name intentionally excluded — public page shows no PII
                     status: token.status,
                     is_priority: token.is_priority,
                     created_at: token.created_at,
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     session_status: (token as any).sessions?.status || 'CLOSED',
+                    rating: token.rating,
                 },
                 tokens_ahead: tokensAhead,
                 current_serving: currentServing,
