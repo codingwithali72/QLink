@@ -39,6 +39,7 @@ CREATE TABLE "public"."businesses" (
     "consent_text_version" text NOT NULL DEFAULT 'v1.0-2026-02-24',
     "is_active" boolean DEFAULT true,
     "status" text NOT NULL DEFAULT 'ACTIVE', -- ACTIVE, SUSPENDED
+    "deleted_at" timestamp with time zone,
     "created_at" timestamp with time zone DEFAULT now(),
     PRIMARY KEY ("id"),
     UNIQUE ("slug")
@@ -703,7 +704,10 @@ BEGIN
         RETURN json_build_object('success', false, 'error', 'Cannot delete clinic with active queue tokens. Close session first.');
     END IF;
 
-    DELETE FROM public.businesses WHERE id = p_business_id;
+    -- VAPT FIX: Changed to Soft Delete to protect against accidental 100-clinic annihilation
+    UPDATE public.businesses
+    SET deleted_at = now(), is_active = false, status = 'DELETED'
+    WHERE id = p_business_id;
 
     INSERT INTO public.system_audit_logs (
         actor_id, actor_role, action_type, entity_type, entity_id

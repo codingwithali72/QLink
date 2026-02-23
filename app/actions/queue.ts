@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 import { queueWhatsAppMessage } from "@/lib/whatsapp";
 import { normalizeIndianPhone } from "@/lib/phone";
 import { encryptPhone, hashPhone, decryptPhone } from "@/lib/crypto";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
@@ -41,8 +42,9 @@ async function verifyClinicAccess(businessId: string): Promise<boolean> {
 
 async function getBusinessBySlug(slug: string) {
     const supabase = createAdminClient();
-    const { data, error } = await supabase.from('businesses').select('id, name, settings, is_active').eq('slug', slug).single();
+    const { data, error } = await supabase.from('businesses').select('id, name, settings, is_active, deleted_at').eq('slug', slug).single();
     if (error || !data) return null;
+    if (data.deleted_at) throw new Error("Clinic not found");
     // Billing bypass protection: suspended clinics cannot perform any queue operations
     if (!data.is_active) throw new Error("Clinic temporarily disabled");
     return data;
@@ -141,6 +143,15 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
     const supabase = createAdminClient();
     const user = await getAuthenticatedUser();
     const actualStaffId = user?.id || null;
+
+    // DPDP VAPT Fix: Only authenticated staff can bypass rate limits
+    if (!actualStaffId) {
+        const ip = headers().get('x-forwarded-for') || headers().get('x-real-ip') || 'unknown-ip';
+        const rateLimit = checkRateLimit(ip, 5, 2 * 60 * 1000); // 5 tokens per IP per 2 mins
+        if (!rateLimit.success) {
+            return { error: "Too many requests. Please wait a moment." };
+        }
+    }
 
     // 0. SECURITY INJECTION SHIELD & INPUT SANITIZATION
     // DPDP VAPT Fix: Do not trust client-provided staff IDs. Only authenticated

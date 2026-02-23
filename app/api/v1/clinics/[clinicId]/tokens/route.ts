@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptPhone, hashPhone } from "@/lib/crypto";
-// Note: action imports in route handlers are tricky if they use cookies(), so we will implement basic REST natively.
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // Helper to authenticate
 async function authenticateAPIRequest(req: Request) {
@@ -18,6 +18,16 @@ export async function POST(
 ) {
     if (!await authenticateAPIRequest(req)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // IP-based Rate Limiting (5 requests per 2 mins per IP)
+    const ip = req.headers.get('x-forwarded-for') || 'api-unknown-ip';
+    const rateLimit = checkRateLimit(ip, 5, 2 * 60 * 1000);
+    if (!rateLimit.success) {
+        return NextResponse.json({ error: 'Too many requests. Please slow down.' }, {
+            status: 429,
+            headers: { 'Retry-After': Math.ceil((rateLimit.reset - Date.now()) / 1000).toString() }
+        });
     }
 
     try {

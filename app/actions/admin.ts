@@ -273,8 +273,8 @@ export async function getAdminStats() {
 
     const supabase = createAdminClient();
 
-    // 1. Get Businesses
-    const { data: businesses } = await supabase.from('businesses').select('*').order('created_at', { ascending: false });
+    // 1. Get Businesses (exclude soft-deleted)
+    const { data: businesses } = await supabase.from('businesses').select('*').is('deleted_at', null).order('created_at', { ascending: false });
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const istStart = `${todayStr}T00:00:00+05:30`;
