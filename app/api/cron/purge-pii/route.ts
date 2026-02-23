@@ -11,6 +11,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * Protection: CRON_SECRET header must match env var.
  * This prevents public invocation; only Vercel's cron runner sends the secret.
  */
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
     const cronSecret = process.env.CRON_SECRET;
 

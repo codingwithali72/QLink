@@ -4,6 +4,8 @@ import { sendWhatsApp } from '@/lib/whatsapp';
 import { decryptPhone } from '@/lib/crypto';
 
 // Vercel Cron or Edge trigger to flush PENDING messages
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
     try {
         const authHeader = req.headers.get('authorization');
