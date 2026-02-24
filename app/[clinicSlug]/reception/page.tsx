@@ -417,61 +417,50 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     <div className="xl:col-span-8 space-y-8 lg:space-y-10">
 
                         {/* HERO CARD: Now Serving */}
-                        <Card className="relative overflow-hidden border-border/60 shadow-medium bg-card/50 backdrop-blur-2xl h-64 sm:h-80 flex flex-col items-center justify-center p-8 rounded-[2.5rem] group border-b-[6px] border-b-primary/40">
-                            <div className="absolute top-0 right-0 p-12 opacity-5 scale-150 rotate-12 group-hover:rotate-0 transition-transform duration-700 pointer-events-none"><Users className="w-64 h-64" /></div>
-                            <div className="absolute top-10 left-10 flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                                <span className="text-muted-foreground uppercase tracking-[0.2em] text-[10px] font-black opacity-80">Telemetry: Live View</span>
-                            </div>
-
+                        <Card className="bg-card border-border/60 p-6 sm:p-10 flex flex-col items-center justify-center text-center min-h-[300px]">
                             {servingToken ? (
-                                <div className="text-center z-10 animate-in zoom-in-95 duration-500">
-                                    <p className="text-primary font-black uppercase tracking-[0.3em] text-[11px] mb-4 opacity-80">Currently Attending</p>
-                                    <h2 className="text-8xl sm:text-9xl font-black text-foreground tracking-tighter drop-shadow-sm select-none">
+                                <div className="animate-in zoom-in-95 duration-500">
+                                    <div className="flex items-center justify-center gap-2 mb-4">
+                                        <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Now Serving</span>
+                                    </div>
+                                    <h2 className="text-8xl sm:text-9xl font-black text-foreground tracking-tighter">
                                         {formatToken(servingToken.tokenNumber, servingToken.isPriority)}
                                     </h2>
                                     <div className="mt-6 space-y-1">
-                                        <p className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">{servingToken.customerName}</p>
-                                        <p className="text-muted-foreground font-mono text-xs sm:text-sm font-bold opacity-60 flex items-center justify-center gap-2">
+                                        <p className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">{servingToken.customerName}</p>
+                                        <p className="text-muted-foreground font-mono text-sm font-bold opacity-60">
                                             {servingToken.customerPhone}
                                         </p>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="text-center z-10 py-10">
-                                    <div className="w-20 h-20 bg-secondary/50 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-border/40">
+                                <div className="text-center py-10">
+                                    <div className="w-16 h-16 bg-secondary/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
                                         <Loader2 className="w-8 h-8 text-muted-foreground/30" />
                                     </div>
-                                    <h2 className="text-4xl font-black text-muted-foreground/40 tracking-tighter uppercase select-none italic">Standby</h2>
-                                    <p className="mt-2 text-xs font-black text-muted-foreground/60 tracking-widest uppercase">Waiting for first token initiation</p>
+                                    <h2 className="text-4xl font-bold text-muted-foreground/40 uppercase italic">Standby</h2>
+                                    <p className="mt-2 text-xs font-bold text-muted-foreground/60 tracking-widest uppercase">Waiting for first token</p>
                                 </div>
                             )}
 
-                            <div className="absolute bottom-10 left-10 hidden sm:flex items-center gap-3 text-[9px] text-muted-foreground/40 font-black uppercase tracking-[0.2em]">
+                            <div className="absolute bottom-6 left-6 hidden sm:flex items-center gap-2 text-[10px] text-muted-foreground/40 font-bold uppercase">
                                 <RefreshCw className={cn("w-3 h-3", !isConnected && "animate-spin")} /> {lastUpdated?.toLocaleTimeString()}
                             </div>
                         </Card>
 
                         {/* CONTROL DECK */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
-                            {/* NEXT BUTTON (Big) */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {/* NEXT BUTTON */}
                             <Button
                                 onClick={handleNext}
                                 disabled={nextLoading || !isSessionActive || (waitingTokens.length === 0 && !servingToken)}
-                                className={cn(
-                                    "col-span-2 h-24 sm:h-32 text-2xl font-black rounded-[2rem] shadow-2xl transition-all active:scale-95 disabled:opacity-30 border-[1px]",
-                                    "bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20"
-                                )}
+                                className="col-span-2 h-24 text-2xl font-bold rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:scale-95"
                             >
-                                {nextLoading ? <Loader2 className="animate-spin w-10 h-10 opacity-50" /> : (
-                                    <div className="flex items-center gap-4">
-                                        <div className="p-2 sm:p-3 bg-white/20 rounded-2xl">
-                                            <PlayCircle className="w-8 h-8 sm:w-10 sm:h-10 text-white fill-white/20" />
-                                        </div>
-                                        <div className="text-left">
-                                            <div className="text-[10px] uppercase tracking-widest opacity-60 font-black mb-1">Queue Evolution</div>
-                                            <span className="tracking-tighter">{waitingTokens.length === 0 && servingToken ? "COMPLETE" : "PROCEED"}</span>
-                                        </div>
+                                {nextLoading ? <Loader2 className="animate-spin w-8 h-8" /> : (
+                                    <div className="flex items-center gap-3">
+                                        <PlayCircle className="w-8 h-8 text-white" />
+                                        <span>{waitingTokens.length === 0 && servingToken ? "FINISH" : "NEXT PATIENT"}</span>
                                     </div>
                                 )}
                             </Button>
@@ -481,21 +470,21 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 variant="outline"
                                 onClick={handleSkip}
                                 disabled={!servingToken || skipLoading || !isSessionActive}
-                                className="h-24 sm:h-32 flex flex-col items-center justify-center gap-2 rounded-[2rem] border-2 border-border/60 bg-card hover:bg-secondary transition-all hover:border-primary/40 group active:scale-95"
+                                className="h-24 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border/60 hover:bg-secondary active:scale-95"
                             >
-                                {skipLoading ? <Loader2 className="animate-spin w-6 h-6 text-primary/40" /> : <SkipForward className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground group-hover:text-primary transition-colors" />}
-                                <span className="font-black text-xs sm:text-sm tracking-widest uppercase opacity-70 group-hover:opacity-100">Skip</span>
+                                {skipLoading ? <Loader2 className="animate-spin w-6 h-6" /> : <SkipForward className="w-6 h-6 text-muted-foreground" />}
+                                <span className="font-bold text-xs uppercase tracking-widest">Skip</span>
                             </Button>
 
-                            {/* EMERGENCY */}
+                            {/* SOS */}
                             <Button
                                 variant="destructive"
                                 onClick={handleEmergencyClick}
                                 disabled={actionLoading || !isSessionActive}
-                                className="h-24 sm:h-32 flex flex-col items-center justify-center gap-2 rounded-[2rem] shadow-xl shadow-rose-500/10 bg-rose-600 hover:bg-rose-700 transition-all border-b-4 border-rose-800 active:translate-y-1 active:border-b-0"
+                                className="h-24 flex flex-col items-center justify-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-lg shadow-rose-500/20"
                             >
-                                <AlertOctagon className="w-6 h-6 sm:w-8 sm:h-8 animate-pulse" />
-                                <span className="font-black text-xs sm:text-sm tracking-widest uppercase">SOS</span>
+                                <AlertTriangle className="w-6 h-6" />
+                                <span className="font-bold text-xs uppercase tracking-widest">Urgent</span>
                             </Button>
                         </div>
 
@@ -597,17 +586,14 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         </div>
 
                         {/* Waiting List Section */}
-                        <div className="flex flex-col flex-1 min-h-[500px]">
-                            <div className="flex items-center justify-between mb-4 px-2">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Waiting Chamber</h3>
-                                </div>
-                                <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-none font-black px-3 rounded-lg">{waitingTokens.length}</Badge>
+                        <div className="flex flex-col flex-1">
+                            <div className="flex items-center justify-between mb-3 px-1">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Waiting List</h3>
+                                <Badge variant="secondary">{waitingTokens.length}</Badge>
                             </div>
 
-                            <Card className="flex-1 bg-card/50 backdrop-blur-md border-border/60 rounded-[2rem] shadow-soft overflow-hidden flex flex-col">
-                                <div className="overflow-y-auto flex-1 p-4 space-y-3 custom-scrollbar">
+                            <Card className="flex-1 bg-card border-border/60 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+                                <div className="overflow-y-auto flex-1 p-2 space-y-2">
                                     {visibleWaitingTokens.length === 0 ? (
                                         <div className="h-full flex flex-col items-center justify-center text-center p-10 opacity-40">
                                             <div className="w-16 h-16 bg-secondary/50 rounded-[2rem] flex items-center justify-center mb-4">
@@ -648,37 +634,31 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             </Card>
                         </div>
 
-                        {/* Session Log / Intelligence Log */}
-                        <div className="space-y-4">
+                        {/* Session Log */}
+                        <div className="space-y-3">
                             <div
-                                className="group flex items-center justify-between p-6 bg-card border border-border/60 rounded-3xl cursor-pointer hover:bg-secondary/50 transition-all shadow-soft"
+                                className="flex items-center justify-between p-4 bg-card border border-border/60 rounded-2xl cursor-pointer hover:bg-secondary/50 transition-all font-bold"
                                 onClick={() => setIsLogOpen(!isLogOpen)}
                             >
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 bg-secondary/80 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110">
-                                        <BarChart2 className="w-5 h-5 text-primary/60" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm font-black text-foreground tracking-tight">Diagnostic Logs</h3>
-                                        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest mt-0.5">{displayedTokens.length} Entries Recorded</p>
-                                    </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                    <Users className="w-4 h-4 text-muted-foreground" />
+                                    <span>Session Log</span>
+                                    <Badge variant="secondary" className="ml-2 font-mono">{displayedTokens.length}</Badge>
                                 </div>
-                                <div className="p-1.5 bg-secondary/50 rounded-xl">
-                                    {isLogOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                                </div>
+                                {isLogOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                             </div>
 
                             {isLogOpen && (
-                                <Card className="bg-card border-border/60 rounded-3xl shadow-xl overflow-hidden animate-in slide-in-from-top-4 duration-300">
-                                    <div className="p-4 border-b border-border/60 bg-secondary/20 space-y-4">
-                                        <div className="flex gap-4">
+                                <Card className="bg-card border-border/60 rounded-2xl shadow-lg overflow-hidden animate-in slide-in-from-top-2">
+                                    <div className="p-3 border-b border-border/60 bg-secondary/10 space-y-3">
+                                        <div className="flex gap-2">
                                             <div className="relative flex-1">
-                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40" />
+                                                <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground/40" />
                                                 <Input
-                                                    placeholder="Search patient or phone..."
+                                                    placeholder="Search..."
                                                     value={searchTerm}
                                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                                    className="pl-9 h-11 bg-background border-border shadow-none rounded-xl text-sm"
+                                                    className="pl-9 h-10 bg-background border-border"
                                                 />
                                             </div>
                                             <Input
@@ -686,11 +666,11 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                 value={selectedDate}
                                                 max={todayStr}
                                                 onChange={(e) => setSelectedDate(e.target.value)}
-                                                className="w-40 h-11 bg-background border-border shadow-none rounded-xl text-xs font-bold"
+                                                className="w-36 h-10 bg-background border-border text-xs font-bold"
                                             />
                                         </div>
-                                        <div className="flex items-center justify-between px-1">
-                                            <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/5 rounded-lg" onClick={async () => {
+                                        <div className="flex items-center justify-between">
+                                            <Button variant="outline" size="sm" className="h-8 text-xs font-bold" onClick={async () => {
                                                 const res = await exportPatientList(params.clinicSlug, selectedDate, selectedDate);
                                                 if (res.error) { showToast(res.error, 'error'); return; }
                                                 if (res.csv) {
@@ -705,59 +685,50 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                     link.click();
                                                     document.body.removeChild(link);
                                                     URL.revokeObjectURL(url);
-                                                    showToast("CSV Intelligence Exported");
+                                                    showToast("CSV Exported");
                                                 }
                                             }}>
-                                                <RefreshCw className="w-3 h-3 mr-2" /> Export to Data Sink
+                                                Download CSV
                                             </Button>
-                                            <span className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">Today: {totalServedCount} Served</span>
+                                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Served: {totalServedCount}</span>
                                         </div>
                                     </div>
 
-                                    <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+                                    <div className="max-h-[350px] overflow-y-auto">
                                         {historyLoading ? (
-                                            <div className="py-20 flex flex-col items-center justify-center gap-4 opacity-40">
-                                                <Loader2 className="animate-spin w-8 h-8 text-primary" />
-                                                <span className="text-[10px] font-black uppercase tracking-widest">Retrieving Logs...</span>
-                                            </div>
+                                            <div className="py-10 flex justify-center"><Loader2 className="animate-spin w-6 h-6 text-primary" /></div>
                                         ) : (
-                                            <table className="w-full text-left border-collapse">
-                                                <thead className="bg-secondary/40 sticky top-0 z-20">
+                                            <table className="w-full text-left text-sm">
+                                                <thead className="bg-secondary/20 sticky top-0 z-10 border-b border-border/40">
                                                     <tr>
-                                                        <th className="px-6 py-4 text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 w-24">Token</th>
-                                                        <th className="px-6 py-4 text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">Patient Meta</th>
-                                                        <th className="px-6 py-4 text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 text-right">Verification</th>
+                                                        <th className="px-4 py-3 font-bold uppercase text-[10px] text-muted-foreground">Tkn</th>
+                                                        <th className="px-4 py-3 font-bold uppercase text-[10px] text-muted-foreground">Patient</th>
+                                                        <th className="px-4 py-3 font-bold uppercase text-[10px] text-muted-foreground">Phone</th>
+                                                        <th className="px-4 py-3 font-bold uppercase text-[10px] text-muted-foreground">Feedback</th>
+                                                        <th className="px-4 py-3 font-bold uppercase text-[10px] text-muted-foreground text-right">Status</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-border/40">
+                                                <tbody className="divide-y divide-border/20">
                                                     {displayedTokens
                                                         .filter(t =>
                                                             (t.customerName?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
                                                             (t.customerPhone || "").includes(searchTerm)
                                                         )
                                                         .map((t) => (
-                                                            <tr key={t.id} className="hover:bg-secondary/30 transition-colors group">
-                                                                <td className="px-6 py-4">
-                                                                    <div className="h-10 w-10 bg-secondary/80 rounded-xl flex items-center justify-center font-black text-xs text-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                                                                        {formatToken(t.tokenNumber, t.isPriority)}
-                                                                    </div>
+                                                            <tr key={t.id} className="hover:bg-secondary/10 transition-colors">
+                                                                <td className="px-4 py-3 font-mono font-bold">{formatToken(t.tokenNumber, t.isPriority)}</td>
+                                                                <td className="px-4 py-3 truncate max-w-[120px] font-medium">{t.customerName || '—'}</td>
+                                                                <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{t.customerPhone || '—'}</td>
+                                                                <td className="px-4 py-3 text-xs italic text-muted-foreground max-w-[150px] truncate">
+                                                                    {t.feedback ? <span className="text-orange-600">"{t.feedback}"</span> : "—"}
                                                                 </td>
-                                                                <td className="px-6 py-4">
-                                                                    <div className="font-black text-sm text-foreground tracking-tight">{t.customerName || 'Anonymous User'}</div>
-                                                                    {t.customerPhone && <div className="text-[10px] text-muted-foreground/60 font-mono mt-1">{t.customerPhone}</div>}
-                                                                    {t.feedback && (
-                                                                        <div className="mt-2 text-[10px] italic text-amber-600/80 dark:text-amber-400/80 leading-relaxed bg-amber-500/5 p-2 rounded-lg border border-amber-500/10">
-                                                                            &ldquo;{t.feedback}&rdquo;
-                                                                        </div>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-6 py-4 text-right">
-                                                                    <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest py-0.5 px-2 border-0",
-                                                                        t.status === 'SERVING' ? "bg-emerald-500/10 text-emerald-600" :
-                                                                            t.status === 'WAITING' ? "bg-blue-500/10 text-blue-600" :
-                                                                                t.status === 'SKIPPED' ? "bg-amber-500/10 text-amber-600" :
-                                                                                    t.status === 'CANCELLED' ? "bg-rose-500/10 text-rose-600 line-through opacity-50" :
-                                                                                        "bg-secondary/80 text-muted-foreground/60"
+                                                                <td className="px-4 py-3 text-right">
+                                                                    <Badge variant="outline" className={cn("text-[9px] uppercase border-0",
+                                                                        t.status === 'SERVING' ? "bg-emerald-50 text-emerald-600" :
+                                                                            t.status === 'WAITING' ? "bg-blue-50 text-blue-600" :
+                                                                                t.status === 'SKIPPED' ? "bg-amber-50 text-amber-600" :
+                                                                                    t.status === 'CANCELLED' ? "bg-rose-50 text-rose-600 line-through opacity-60" :
+                                                                                        "bg-secondary text-muted-foreground"
                                                                     )}>
                                                                         {t.status}
                                                                     </Badge>
