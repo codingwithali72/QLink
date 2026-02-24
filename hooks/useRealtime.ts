@@ -72,6 +72,14 @@ export function useClinicRealtime(clinicSlug: string) {
         }, 100);
     }, [fetchData]);
 
+    // Initial load
+    useEffect(() => {
+        if (!isSynced && clinicSlug) {
+            fetchData();
+        }
+    }, [isSynced, clinicSlug, fetchData]);
+
+
     // Realtime subscription setup
     useEffect(() => {
         if (!businessId) return;
