@@ -349,6 +349,87 @@ export async function submitFeedback(tokenId: string, rating: number, feedbackTe
     }
 }
 
+// PATIENT SELF-CANCEL
+// Section 5 fix: patient can cancel their own WAITING token without staff auth.
+// Security invariants enforced here (no client-side trust):
+//   1. Token must be WAITING (not SERVING, SERVED, CANCELLED, SKIPPED)
+//   2. Token must belong to the supplied clinicSlug  (cross-clinic prevention)
+//   3. Session for that clinic must be ACTIVE (OPEN or PAUSED)
+//   4. Phone must match the token's stored hash or plaintext (ownership proof)
+//   5. No staff_id required — unauthenticated patient action
+export async function patientCancelToken(clinicSlug: string, tokenId: string, phone: string) {
+    if (!clinicSlug || !tokenId || !phone) return { error: "Missing required fields" };
+
+    const cleanPhone = normalizeIndianPhone(phone);
+    if (!cleanPhone) return { error: "Valid 10-digit Indian mobile number required" };
+
+    try {
+        const supabase = createAdminClient();
+
+        // 1. Resolve clinic — reuse getBusinessBySlug which also checks is_active / deleted_at
+        const business = await getBusinessBySlug(clinicSlug);
+        if (!business) return { error: "Clinic not found" };
+
+        // 2. Fetch the token — join through session to enforce clinic ownership at DB level
+        const { data: token } = await supabase
+            .from('tokens')
+            .select('id, status, patient_phone, patient_phone_hash, session_id, business_id')
+            .eq('id', tokenId)
+            .eq('business_id', business.id)   // cross-clinic guard
+            .maybeSingle();
+
+        if (!token) return { error: "Token not found" };
+
+        // 3. Verify session is still active (prevents cancellations on closed sessions)
+        const { data: session } = await supabase
+            .from('sessions')
+            .select('status')
+            .eq('id', token.session_id)
+            .maybeSingle();
+
+        if (!session || !['OPEN', 'PAUSED'].includes(session.status)) {
+            return { error: "Session is no longer active" };
+        }
+
+        // 4. Token must be in WAITING state (not already served/cancelled/serving)
+        if (token.status !== 'WAITING') {
+            return { error: `Cannot cancel a token with status: ${token.status}` };
+        }
+
+        // 5. Phone ownership check — try hash first (DPDP encrypted path), then plaintext (legacy)
+        let phoneMatches = false;
+        if (token.patient_phone_hash) {
+            const { hashPhone } = await import('@/lib/crypto');
+            phoneMatches = hashPhone(cleanPhone) === token.patient_phone_hash;
+        } else if (token.patient_phone) {
+            phoneMatches = token.patient_phone === cleanPhone;
+        }
+
+        if (!phoneMatches) {
+            return { error: "Phone number does not match this token" };
+        }
+
+        // 6. Perform the cancellation
+        const { error: cancelError } = await supabase
+            .from('tokens')
+            .update({ status: 'CANCELLED', previous_status: token.status, cancelled_at: new Date().toISOString() })
+            .eq('id', tokenId)
+            .eq('status', 'WAITING'); // double-guard: prevents race condition
+
+        if (cancelError) throw cancelError;
+
+        // 7. Audit log (staff_id null = patient action)
+        await logAudit(business.id, 'PATIENT_SELF_CANCEL', { token_id: tokenId, phone_last4: cleanPhone.slice(-4) });
+
+        return { success: true };
+    } catch (e) {
+        console.error("Patient Cancel Error:", e);
+        return { error: (e as Error).message };
+    }
+}
+
+
+
 // B4 FIX: Edit token patient name / phone after creation
 export async function updateToken(clinicSlug: string, tokenId: string, name: string, phone: string) {
     if (!tokenId || !clinicSlug) return { error: "Missing data" };

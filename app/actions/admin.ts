@@ -324,32 +324,44 @@ export async function getAnalytics(dateFrom?: string, dateTo?: string) {
     const { data: stats } = await query;
     const rows = stats || [];
 
-    const totalCreated = rows.reduce((acc, row) => acc + row.total_tokens, 0);
-    const totalServed = rows.reduce((acc, row) => acc + row.served_count, 0);
-    const totalCancelled = 0; // Historically not explicitly counted in daily stats table yet
-    const totalSkipped = rows.reduce((acc, row) => acc + row.skipped_count, 0);
+    const totalCreated = rows.reduce((acc, row) => acc + (row.total_tokens || 0), 0);
+    const totalServed = rows.reduce((acc, row) => acc + (row.served_count || 0), 0);
+    // FIX: read from DB column — was hardcoded to 0
+    const totalCancelled = rows.reduce((acc, row) => acc + (row.cancelled_count || 0), 0);
+    const totalSkipped = rows.reduce((acc, row) => acc + (row.skipped_count || 0), 0);
 
-    // Calculate Wait Time Avg
-    const waitSamples = rows.filter(r => r.avg_wait_time_minutes > 0);
-    const avgWaitMins = waitSamples.length
-        ? Math.round(waitSamples.reduce((acc, row) => acc + Number(row.avg_wait_time_minutes), 0) / waitSamples.length)
+    // FIX: Weighted average wait time (weight by served_count per day)
+    // Simple mean-of-means is wrong when days have unequal volumes.
+    // e.g. Day1: 100 served, 5 min avg — Day2: 2 served, 60 min avg → weighted avg ≈ 6 min (correct), simple avg = 32 min (wrong)
+    const weightedWaitTotal = rows.reduce((acc, row) => {
+        const served = row.served_count || 0;
+        const avg = Number(row.avg_wait_time_minutes) || 0;
+        return acc + (served * avg);
+    }, 0);
+    const avgWaitMins = totalServed > 0
+        ? Math.round(weightedWaitTotal / totalServed)
         : null;
 
-    const AVG_QUEUE_WAIT_MINS = 20;
-    const timeSavedMins = totalServed * AVG_QUEUE_WAIT_MINS;
-    const timeSavedHours = Math.floor(timeSavedMins / 60);
+    // FIX: Time saved = total served × measured avg wait (not fake 20-min constant).
+    // If no avg wait data, fall back to null to avoid fake numbers.
+    const timeSavedMins = (avgWaitMins !== null && totalServed > 0)
+        ? totalServed * avgWaitMins
+        : null;
+    const timeSavedHours = timeSavedMins !== null ? Math.floor(timeSavedMins / 60) : null;
 
     return {
         totalCreated,
         totalServed,
         totalCancelled,
         totalSkipped,
-        avgRating: null, // Ratings skipped for daily performance aggregate
+        avgRating: null, // Ratings not aggregated at platform level for performance
         avgWaitMins,
         timeSavedMins,
-        timeSavedLabel: timeSavedHours > 0
-            ? `${timeSavedHours}h ${timeSavedMins % 60}m`
-            : `${timeSavedMins}m`,
+        timeSavedLabel: timeSavedMins === null
+            ? '—'
+            : timeSavedHours !== null && timeSavedHours > 0
+                ? `${timeSavedHours}h ${timeSavedMins % 60}m`
+                : `${timeSavedMins}m`,
     };
 }
 
