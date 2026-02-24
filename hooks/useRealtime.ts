@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Session, Token } from "@/types/firestore";
 import { useOfflineSync } from "./useOfflineSync";
@@ -18,10 +18,11 @@ export function useClinicRealtime(clinicSlug: string) {
     const [isConnected, setIsConnected] = useState(false);
     const [businessId, setBusinessId] = useState<string | null>(null);
     const [dailyTokenLimit, setDailyTokenLimit] = useState<number | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     const [isSynced, setIsSynced] = useState(false);
 
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
     const pollingInterval = useRef<NodeJS.Timeout | null>(null);
     const fetchTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -31,6 +32,15 @@ export function useClinicRealtime(clinicSlug: string) {
 
         try {
             const res = await getDashboardData(clinicSlug);
+
+            if (res.error) {
+                setError(res.error);
+                setIsConnected(false);
+                setLoading(false);
+                setIsSynced(true);
+                return;
+            }
+
             setDailyTokenLimit(res.dailyTokenLimit);
             if (res.businessId && !businessId) {
                 setBusinessId(res.businessId);
@@ -53,13 +63,17 @@ export function useClinicRealtime(clinicSlug: string) {
                 setTokens([]);
             }
 
+            setError(null);
             setLastUpdated(new Date());
             setIsConnected(true);
             setLoading(false);
             setIsSynced(true);
-        } catch (error) {
-            console.error("Dashboard Fetch Error:", error);
+        } catch (err: any) {
+            console.error("Dashboard Fetch Error:", err);
+            setError(err.message || "Failed to fetch dashboard data");
             setIsConnected(false);
+            setLoading(false);
+            setIsSynced(true);
         }
     }, [clinicSlug, businessId]);
 
@@ -196,7 +210,7 @@ export function useClinicRealtime(clinicSlug: string) {
 
     // Export setTokens/setSession for optimistic UI updates in the calling component.
     // The page applies local state immediately, then realtime subscription reconciles with truth.
-    return { session, tokens, loading, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit, setTokens, setSession };
+    return { session, tokens, loading, error, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit, setTokens, setSession };
 }
 
 // Mappers

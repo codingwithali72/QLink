@@ -23,7 +23,7 @@ import { getClinicDate } from "@/lib/date";
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function ReceptionPage({ params }: { params: { clinicSlug: string } }) {
-    const { session, tokens, loading, refresh, lastUpdated, isConnected, dailyTokenLimit, setTokens } = useClinicRealtime(params.clinicSlug);
+    const { session, tokens, loading, error, refresh, lastUpdated, isConnected, dailyTokenLimit, setTokens } = useClinicRealtime(params.clinicSlug);
 
     // ── Per-action loading flags ─────────────────────────────────────────────
     // Each action has its own flag so one in-flight request doesn't block others.
@@ -323,6 +323,21 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
     if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><Loader2 className="animate-spin text-slate-400 w-8 h-8" /></div>;
+
+    if (error) {
+        return (
+            <div className="h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 text-center">
+                <AlertOctagon className="w-12 h-12 text-red-500 mb-4" />
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Dashboard Error</h2>
+                <p className="text-slate-500 dark:text-slate-400 mb-2">{error}</p>
+                <p className="text-xs text-slate-400 mb-6 font-mono">Clinic: {params.clinicSlug}</p>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => (window as any).location.reload()}>Refresh Page</Button>
+                    <Button variant="ghost" onClick={() => logout()}>Logout & Re-login</Button>
+                </div>
+            </div>
+        );
+    }
 
     const isSessionActive = session?.status === 'OPEN' || session?.status === 'PAUSED';
 
