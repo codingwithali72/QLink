@@ -49,7 +49,7 @@ export async function exportPatientList(
     clinicSlug: string,
     dateFrom: string,  // ISO date string: '2026-02-01'
     dateTo: string,    // ISO date string: '2026-02-24'
-): Promise<{ data?: ExportRow[]; csv?: string; error?: string }> {
+): Promise<{ data?: ExportRow[]; csv?: string; clinicName?: string; error?: string }> {
     const supabase = createAdminClient();
 
     // 1. Authenticate and check role
@@ -172,7 +172,7 @@ export async function exportPatientList(
         ),
     ];
 
-    return { data: rows, csv: csvLines.join("\n") };
+    return { data: rows, csv: csvLines.join("\n"), clinicName: business.name };
 }
 
 // ── Export audit logs (meta-audit) ────────────────────────────────────────────

@@ -13,7 +13,8 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw, Pencil, AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { TokenItem } from "./_components/TokenItem";
 import { getClinicDate } from "@/lib/date";
@@ -33,7 +34,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     // Legacy alias: true if any heavy action is running (used only for Add form submit)
     const actionLoading = nextLoading || skipLoading || pauseLoading || addLoading;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [darkMode, setDarkMode] = useState(false);
+
+    const { theme, setTheme } = useTheme();
+    const isDarkMode = theme === 'dark';
 
     // B1: Stalled queue detection — track how long since last NEXT
     const [servingChangedAt, setServingChangedAt] = useState<Date | null>(null);
@@ -42,12 +45,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     // B4: Inline token edit
     const [editingToken, setEditingToken] = useState<{ id: string; name: string; phone: string } | null>(null);
-
-    // Toggle Dark Mode
-    useEffect(() => {
-        if (darkMode) document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-    }, [darkMode]);
 
     // Manual Token Form
     const [manualName, setManualName] = useState("");
@@ -89,9 +86,15 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     const displayedTokens = historyTokens;
 
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+    };
+
     // ── Generic action wrapper with optimistic UI support ───────────────────
     const performAction = async (
-        actionFn: () => Promise<{ error?: string;[key: string]: unknown }>,
+        actionFn: () => Promise<{ error?: string;[key: string]: any }>,
         setLoading: (v: boolean) => void,
         optimisticUpdate?: () => void,
         rollback?: () => void
@@ -104,13 +107,12 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             if (result && result.error) {
                 // Roll back optimistic state if server rejected the action
                 if (rollback) rollback();
-                alert(`Error: ${result.error}`);
+                showToast(result.error, 'error');
             }
-            // Do NOT call refresh() on success — realtime subscription fires automatically
         } catch (e) {
             if (rollback) rollback();
             console.error(e);
-            alert("Unexpected Error");
+            showToast("Unexpected Error", 'error');
         } finally {
             setLoading(false);
         }
@@ -146,7 +148,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     // ── Action handlers ──────────────────────────────────────────────────────
 
-    const handleNext = () => {
+    const handleNext = useCallback(() => {
         // Optimistic: mark current serving as SERVED, advance next WAITING to SERVING
         const snapshot = tokens; // capture for rollback
         performAction(
@@ -155,10 +157,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             () => {
                 setTokens(prev => {
                     const next = [...prev];
-                    // Mark current SERVING as SERVED
                     const servingIdx = next.findIndex(t => t.status === 'SERVING');
                     if (servingIdx !== -1) next[servingIdx] = { ...next[servingIdx], status: 'SERVED' };
-                    // Find next WAITING (priority first, then sequential)
                     const waitingTokens = next
                         .filter(t => t.status === 'WAITING')
                         .sort((a, b) => {
@@ -173,13 +173,12 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     return next;
                 });
             },
-            () => setTokens(snapshot) // rollback to snapshot on error
+            () => setTokens(snapshot)
         );
-    };
+    }, [tokens, params.clinicSlug, performAction]);
 
-    const handleSkip = () => {
+    const handleSkip = useCallback(() => {
         if (!servingToken) return;
-        if (!confirm("Skip current ticket?")) return;
         const snapshot = tokens;
         performAction(
             () => skipToken(params.clinicSlug, servingToken.id),
@@ -187,7 +186,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             () => setTokens(prev => prev.map(t => t.id === servingToken.id ? { ...t, status: 'SKIPPED' } : t)),
             () => setTokens(snapshot)
         );
-    };
+    }, [servingToken, tokens, params.clinicSlug, performAction]);
 
     const handleEmergencyClick = () => {
         setManualIsPriority(true);
@@ -222,8 +221,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         );
     };
 
-    const handleCancelToken = (id: string) => {
-        if (!confirm("Cancel this token?")) return;
+    const handleCancelToken = useCallback((id: string) => {
         const snapshot = tokens;
         performAction(
             () => cancelToken(params.clinicSlug, id),
@@ -231,7 +229,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             () => setTokens(prev => prev.map(t => t.id === id ? { ...t, status: 'CANCELLED' } : t)),
             () => setTokens(snapshot)
         );
-    };
+    }, [tokens, params.clinicSlug, performAction]);
 
     const handleManualAdd = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -375,8 +373,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         {session?.status || "CLOSED"}
                     </div>
 
-                    <Button variant="ghost" size="icon" onClick={() => setDarkMode(!darkMode)} className="rounded-full h-8 w-8 md:h-10 md:w-10 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
-                        {darkMode ? <Sun className="w-4 h-4 md:w-5 md:h-5" /> : <Moon className="w-4 h-4 md:w-5 md:h-5" />}
+                    <Button variant="ghost" size="icon" onClick={() => setTheme(isDarkMode ? 'light' : 'dark')} className="rounded-full h-8 w-8 md:h-10 md:w-10 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                        {isDarkMode ? <Sun className="w-4 h-4 md:w-5 md:h-5" /> : <Moon className="w-4 h-4 md:w-5 md:h-5" />}
                     </Button>
 
                     <Button variant="ghost" size="sm" onClick={() => logout()} className="text-slate-500 dark:text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl h-8 text-xs md:text-sm md:h-9">
@@ -610,13 +608,17 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                     return;
                                                 }
                                                 if (res.csv) {
-                                                    const encodedUri = encodeURI("data:text/csv;charset=utf-8," + res.csv);
+                                                    const blob = new Blob(["\uFEFF", res.csv], { type: 'text/csv;charset=utf-8;' });
+                                                    const url = URL.createObjectURL(blob);
                                                     const link = document.createElement("a");
-                                                    link.setAttribute("href", encodedUri);
-                                                    link.setAttribute("download", `session_log_${selectedDate}.csv`);
+                                                    const cleanClinicName = (res.clinicName || params.clinicSlug).replace(/[^a-z0-9]/gi, '_');
+                                                    const cleanDate = selectedDate.replace(/-/g, '');
+                                                    link.setAttribute("href", url);
+                                                    link.setAttribute("download", `${cleanClinicName}_${cleanDate}.csv`);
                                                     document.body.appendChild(link);
                                                     link.click();
                                                     document.body.removeChild(link);
+                                                    URL.revokeObjectURL(url);
                                                 }
                                             }}>
                                                 Download CSV
@@ -747,6 +749,16 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 </div>
             )}
 
+            {/* TOAST SYSTEM */}
+            {toast && (
+                <div className={cn(
+                    "fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl shadow-2xl border backdrop-blur-md animate-in slide-in-from-bottom-4 duration-300 flex items-center gap-3",
+                    toast.type === 'success' ? "bg-green-500/20 border-green-500/50 text-green-100" : "bg-red-500/20 border-red-500/50 text-red-100"
+                )}>
+                    {toast.type === 'success' ? <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" /> : <XCircle className="w-4 h-4 text-red-400" />}
+                    <span className="font-bold text-sm tracking-tight">{toast.message}</span>
+                </div>
+            )}
         </div>
     );
 }

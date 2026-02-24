@@ -37,6 +37,7 @@ export default function RootLayout({
           defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
+          storageKey="qlink-theme"
         >
           <ServiceWorkerRegister />
           {children}

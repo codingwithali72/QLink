@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw, Trash2, BarChart2, Clock, Star, TrendingUp, Settings, ActivitySquare } from "lucide-react";
+import { Loader2, Plus, ExternalLink, Activity, MessageSquare, Users, Power, RefreshCw, Trash2, BarChart2, Clock, Star, TrendingUp, Settings, ActivitySquare, Search, XCircle } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getClinicDate } from "@/lib/date";
+import { cn } from "@/lib/utils";
 
 export interface Business {
     id: string;
@@ -19,6 +20,7 @@ export interface Business {
     created_at: string;
     contact_phone: string;
     daily_token_limit?: number;
+    tokens_today?: number;
     settings?: {
         whatsapp_enabled?: boolean;
         qr_intake_enabled?: boolean;
@@ -110,6 +112,23 @@ export default function AdminPage() {
     const [existingUserId, setExistingUserId] = useState("");
     const [actionLoading, setActionLoading] = useState(false);
 
+    // Filter & Toast State
+    const [adminSearchTerm, setAdminSearchTerm] = useState("");
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        title: string;
+        description: string;
+        action: () => Promise<void>;
+        confirmText?: string;
+        requireDeleteConfirm?: boolean;
+    }>({ open: false, title: "", description: "", action: async () => { } });
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+    };
+
     // Settings Modal State
     const [editingClinic, setEditingClinic] = useState<Business | null>(null);
     interface ClinicSettings {
@@ -130,7 +149,7 @@ export default function AdminPage() {
     async function fetchStats() {
         setLoading(true);
         const res = await getAdminStats();
-        if (res.error) alert(res.error);
+        if (res.error) showToast(res.error, 'error');
         else setStats(res as unknown as AdminStats);
         setLoading(false);
     }
@@ -148,7 +167,7 @@ export default function AdminPage() {
         );
         setActionLoading(false);
 
-        if (res.error) alert(res.error);
+        if (res.error) showToast(res.error, 'error');
         else {
             setName("");
             setSlug("");
@@ -156,9 +175,15 @@ export default function AdminPage() {
             setAdminEmail("");
             setAdminPassword("");
             setExistingUserId("");
+            showToast("Workspace created successfully!");
             fetchStats();
         }
     }
+
+    const filteredBusinesses = stats?.businesses.filter(b =>
+        b.name.toLowerCase().includes(adminSearchTerm.toLowerCase()) ||
+        b.slug.toLowerCase().includes(adminSearchTerm.toLowerCase())
+    ) || [];
 
     if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
@@ -369,109 +394,148 @@ export default function AdminPage() {
 
                     {/* RIGHT COL: Tenant List */}
                     <div className="lg:col-span-8 space-y-4">
-                        <div className="flex items-center justify-between px-2">
-                            <h2 className="font-bold text-xl text-white">Active Workspaces ({stats.businesses?.length})</h2>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
+                            <h2 className="font-bold text-xl text-white">Active Workspaces ({filteredBusinesses.length})</h2>
+                            <div className="relative w-full sm:w-64">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                <Input
+                                    placeholder="Search clinics..."
+                                    value={adminSearchTerm}
+                                    onChange={(e) => setAdminSearchTerm(e.target.value)}
+                                    className="pl-9 bg-black/20 border-white/10 text-white rounded-xl focus-visible:ring-indigo-500"
+                                />
+                            </div>
                         </div>
 
                         <div className="space-y-3">
-                            {stats.businesses && stats.businesses.length === 0 && (
+                            {filteredBusinesses.length === 0 && (
                                 <div className="p-8 text-center rounded-2xl border-2 border-dashed border-slate-700 text-slate-500">
                                     No workspaces added yet.
                                 </div>
                             )}
 
-                            {stats.businesses && stats.businesses.map((b: Business) => (
-                                <div key={b.id} className="group relative overflow-hidden bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-4 sm:p-5 hover:bg-white/10 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-1">
-                                            <div className={`w-2.5 h-2.5 rounded-full ${b.is_active ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`} />
-                                            <h3 className="font-bold text-lg text-white leading-none">{b.name}</h3>
-                                            <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] font-mono border border-slate-700">/{b.slug}</span>
+                            {filteredBusinesses.map((b: Business) => (
+                                <div key={b.id} className="group relative overflow-hidden bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-4 sm:p-5 hover:bg-white/10 transition-all">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-3 mb-1">
+                                                <h3 className="font-bold text-lg text-white leading-none">{b.name}</h3>
+                                                <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] font-mono border border-slate-700">/{b.slug}</span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-400 mt-2">
+                                                <div className={cn("px-2 py-0.5 rounded-full font-bold flex items-center gap-1.5",
+                                                    b.is_active ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"
+                                                )}>
+                                                    <div className={cn("w-1.5 h-1.5 rounded-full", b.is_active ? "bg-green-400" : "bg-red-400")} />
+                                                    {b.is_active ? 'ACTIVE' : 'SUSPENDED'}
+                                                </div>
+                                                <div className="flex items-center gap-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-bold">
+                                                    <Users className="w-3 h-3" />
+                                                    {b.tokens_today || 0} / {b.daily_token_limit || b.settings?.daily_token_limit || '∞'}
+                                                </div>
+                                                <span className="font-mono bg-black/20 px-2 py-1 rounded">ID: {b.id.split('-')[0]}</span>
+                                                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(b.created_at).toLocaleDateString()}</span>
+                                                <span className="truncate max-w-[120px] font-mono">{b.contact_phone}</span>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-3 text-xs text-slate-400 mt-2">
-                                            <span className="font-mono bg-black/20 px-2 py-1 rounded">ID: {b.id.split('-')[0]}</span>
-                                            <span>•</span>
-                                            <span>Deployed {new Date(b.created_at).toLocaleDateString()}</span>
-                                            <span>•</span>
-                                            <span className="truncate max-w-[120px]">{b.contact_phone}</span>
-                                        </div>
-                                    </div>
 
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Link href={`/${b.slug}/reception`} target="_blank">
-                                            <Button variant="outline" size="sm" className="h-9 bg-transparent border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
-                                                Dashboard <ExternalLink className="w-3.5 h-3.5 ml-2 opacity-70" />
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <Link href={`/${b.slug}/reception`} target="_blank">
+                                                <Button variant="outline" size="sm" className="h-9 bg-transparent border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+                                                    Dashboard <ExternalLink className="w-3.5 h-3.5 ml-2 opacity-70" />
+                                                </Button>
+                                            </Link>
+
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className={`h-9 px-3 ${b.is_active ? 'text-red-400 hover:bg-red-500/10 hover:text-red-300' : 'text-green-400 hover:bg-green-500/10 hover:text-green-300'}`}
+                                                onClick={() => setConfirmModal({
+                                                    open: true,
+                                                    title: b.is_active ? "Suspend Clinic" : "Activate Clinic",
+                                                    description: `Are you sure you want to ${b.is_active ? 'suspend' : 'activate'} ${b.name}? Customers will ${b.is_active ? 'no longer be able to' : 'be able to'} join the queue.`,
+                                                    action: async () => {
+                                                        const res = await toggleBusinessStatus(b.id, b.is_active);
+                                                        if (res.error) showToast(res.error, 'error');
+                                                        else {
+                                                            showToast(`${b.name} ${b.is_active ? 'suspended' : 'activated'} successfully`);
+                                                            fetchStats();
+                                                        }
+                                                    }
+                                                })}
+                                            >
+                                                <Power className="w-4 h-4" />
                                             </Button>
-                                        </Link>
 
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className={`h-9 px-3 ${b.is_active ? 'text-red-400 hover:bg-red-500/10 hover:text-red-300' : 'text-green-400 hover:bg-green-500/10 hover:text-green-300'}`}
-                                            onClick={async () => {
-                                                if (confirm(`Are you sure you want to ${b.is_active ? 'suspend' : 'resume'} ${b.name}?`)) {
-                                                    await toggleBusinessStatus(b.id, b.is_active);
-                                                    fetchStats();
-                                                }
-                                            }}
-                                        >
-                                            <Power className="w-4 h-4" />
-                                        </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                title="Force close active queue session"
+                                                className="h-9 px-3 text-orange-400 hover:bg-orange-500/10 hover:text-orange-300"
+                                                onClick={() => setConfirmModal({
+                                                    open: true,
+                                                    title: "Reset Daily Session",
+                                                    description: `This will force-close the current session for ${b.name} and clear all waiting tokens. This action is intentional and logged.`,
+                                                    action: async () => {
+                                                        const res = await resetBusinessSession(b.id);
+                                                        if (res.error) showToast(res.error, 'error');
+                                                        else {
+                                                            showToast(`Session reset for ${b.name}`);
+                                                            fetchStats();
+                                                        }
+                                                    }
+                                                })}
+                                            >
+                                                <RefreshCw className="w-4 h-4" />
+                                            </Button>
 
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            title="Force close active queue session"
-                                            className="h-9 px-3 text-orange-400 hover:bg-orange-500/10 hover:text-orange-300"
-                                            onClick={async () => {
-                                                if (confirm(`Force reset today's session for ${b.name}?`)) {
-                                                    await resetBusinessSession(b.id);
-                                                    fetchStats();
-                                                }
-                                            }}
-                                        >
-                                            <RefreshCw className="w-4 h-4" />
-                                        </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                title="View Analytics"
+                                                className="h-9 px-3 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+                                                onClick={() => loadClinicMetrics(b.id, b.name, b.daily_token_limit || (b.settings?.daily_token_limit as number) || 0)}
+                                            >
+                                                <ActivitySquare className="w-4 h-4" />
+                                            </Button>
 
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            title="View Analytics"
-                                            className="h-9 px-3 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
-                                            onClick={() => loadClinicMetrics(b.id, b.name, b.daily_token_limit || (b.settings?.daily_token_limit as number) || 0)}
-                                        >
-                                            <ActivitySquare className="w-4 h-4" />
-                                        </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                title="Settings"
+                                                className="h-9 px-3 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300"
+                                                onClick={() => {
+                                                    setEditingClinic(b);
+                                                    setClinicSettings({ ...b.settings, daily_token_limit: b.daily_token_limit || b.settings?.daily_token_limit || 200 });
+                                                }}
+                                            >
+                                                <Settings className="w-4 h-4" />
+                                            </Button>
 
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            title="Settings"
-                                            className="h-9 px-3 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300"
-                                            onClick={() => {
-                                                setEditingClinic(b);
-                                                setClinicSettings({ ...b.settings, daily_token_limit: b.daily_token_limit || b.settings?.daily_token_limit || 200 });
-                                            }}
-                                        >
-                                            <Settings className="w-4 h-4" />
-                                        </Button>
-
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            title="Delete business"
-                                            className="h-9 px-3 text-red-500 hover:bg-red-500/10 hover:text-red-400"
-                                            onClick={async () => {
-                                                const confirmText = prompt(`Type "DELETE" to permanently delete ${b.name} and all its data.`);
-                                                if (confirmText === 'DELETE') {
-                                                    const res = await deleteBusiness(b.id);
-                                                    if (res?.error) alert(res.error);
-                                                    fetchStats();
-                                                }
-                                            }}
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                title="Delete business"
+                                                className="h-9 px-3 text-red-500 hover:bg-red-500/10 hover:text-red-400"
+                                                onClick={() => setConfirmModal({
+                                                    open: true,
+                                                    title: "Delete Workspace",
+                                                    description: `PERMANENT DESTRUCTION: All data for ${b.name}, including tokens, staff logins, and history will be deleted.`,
+                                                    requireDeleteConfirm: true,
+                                                    confirmText: "type DELETE to confirm",
+                                                    action: async () => {
+                                                        const res = await deleteBusiness(b.id);
+                                                        if (res?.error) showToast(res.error, 'error');
+                                                        else {
+                                                            showToast(`${b.name} deleted successfully`);
+                                                            fetchStats();
+                                                        }
+                                                    }
+                                                })}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -626,6 +690,58 @@ export default function AdminPage() {
                 </DialogContent>
             </Dialog>
 
+            {/* CONFIRMATION MODAL */}
+            <Dialog open={confirmModal.open} onOpenChange={(o) => setConfirmModal(prev => ({ ...prev, open: o }))}>
+                <DialogContent className="sm:max-w-[425px] bg-slate-900 border-slate-700 text-white">
+                    <DialogHeader>
+                        <DialogTitle className="text-red-400">{confirmModal.title}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <p className="text-sm text-slate-300">{confirmModal.description}</p>
+
+                        {confirmModal.requireDeleteConfirm && (
+                            <div className="space-y-2">
+                                <Label className="text-xs uppercase text-slate-500">To confirm, type DELETE below</Label>
+                                <Input
+                                    placeholder="DELETE"
+                                    onChange={(e) => {
+                                        const val = e.target.value.toUpperCase();
+                                        const btn = document.getElementById('final-confirm-btn') as HTMLButtonElement;
+                                        if (btn) btn.disabled = val !== 'DELETE';
+                                    }}
+                                    className="bg-black/20 border-slate-700 text-white"
+                                />
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                            <Button variant="ghost" onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}>Cancel</Button>
+                            <Button
+                                id="final-confirm-btn"
+                                variant="destructive"
+                                disabled={confirmModal.requireDeleteConfirm}
+                                onClick={async () => {
+                                    await confirmModal.action();
+                                    setConfirmModal(prev => ({ ...prev, open: false }));
+                                }}
+                            >
+                                Confirm Action
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* TOAST DISPLAY */}
+            {toast && (
+                <div className={cn(
+                    "fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl shadow-2xl border backdrop-blur-md animate-in slide-in-from-bottom-4 duration-300 flex items-center gap-3",
+                    toast.type === 'success' ? "bg-green-500/20 border-green-500/50 text-green-100" : "bg-red-500/20 border-red-500/50 text-red-100"
+                )}>
+                    {toast.type === 'success' ? <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" /> : <XCircle className="w-4 h-4 text-red-400" />}
+                    <span className="font-bold text-sm">{toast.message}</span>
+                </div>
+            )}
         </div>
     );
 }

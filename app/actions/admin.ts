@@ -278,14 +278,31 @@ export async function getAdminStats() {
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const istStart = new Date(`${todayStr}T00:00:00+05:30`).toISOString();
+
+    // 2. Get today's token counts per business
+    const { data: tokenCounts } = await supabase
+        .from('tokens')
+        .select('business_id')
+        .gte('created_at', istStart);
+
+    const countMap = (tokenCounts || []).reduce((acc: Record<string, number>, t) => {
+        acc[t.business_id] = (acc[t.business_id] || 0) + 1;
+        return acc;
+    }, {});
+
     const { count: activeSessions } = await supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', todayStr).eq('status', 'OPEN');
     const { count: todayTokens } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).gte('created_at', istStart);
     const { count: totalMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true });
     const { count: failedMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true }).gte('created_at', istStart).in('status', ['FAILED', 'PERMANENTLY_FAILED']);
     const { count: activeQueues } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).in('status', ['WAITING', 'SERVING']);
 
+    const businessesWithStats = (businesses || []).map(b => ({
+        ...b,
+        tokens_today: countMap[b.id] || 0
+    }));
+
     return {
-        businesses: businesses || [],
+        businesses: businessesWithStats,
         activeSessions: activeSessions || 0,
         todayTokens: todayTokens || 0,
         totalMessages: totalMessages || 0,
