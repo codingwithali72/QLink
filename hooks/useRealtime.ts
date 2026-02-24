@@ -25,28 +25,16 @@ export function useClinicRealtime(clinicSlug: string) {
     const pollingInterval = useRef<NodeJS.Timeout | null>(null);
     const fetchTimeout = useRef<NodeJS.Timeout | null>(null);
 
-    // 1. Fetch Business ID ONCE
-    useEffect(() => {
-        async function fetchBusinessId() {
-            if (!clinicSlug) return;
-            try {
-                const id = await getBusinessId(clinicSlug);
-                if (id) setBusinessId(id);
-                else console.error("Business not found for realtime hook");
-            } catch (err) {
-                console.error("Error fetching business:", err);
-            }
-        }
-        fetchBusinessId();
-    }, [clinicSlug]);
-
-    // Fetch Function
+    // Fetch Function - single round trip now fetches mapping + data + limits
     const fetchData = useCallback(async () => {
-        if (!businessId) return;
+        if (!clinicSlug) return;
 
         try {
-            const res = await getDashboardData(businessId);
+            const res = await getDashboardData(clinicSlug);
             setDailyTokenLimit(res.dailyTokenLimit);
+            if (res.businessId && !businessId) {
+                setBusinessId(res.businessId);
+            }
 
             if (res.session) {
                 const mappedSession = mapSession(res.session);
@@ -73,7 +61,7 @@ export function useClinicRealtime(clinicSlug: string) {
             console.error("Dashboard Fetch Error:", error);
             setIsConnected(false);
         }
-    }, [businessId]);
+    }, [clinicSlug, businessId]);
 
     // Debounced Fetch
     const debouncedFetch = useCallback(() => {

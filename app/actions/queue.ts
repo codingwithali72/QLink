@@ -687,31 +687,34 @@ async function updateSessionStatus(slug: string, status: 'OPEN' | 'CLOSED' | 'PA
 }
 
 
-export async function getDashboardData(businessId: string) {
-    if (!await verifyClinicAccess(businessId)) return { session: null, tokens: [], dailyTokenLimit: null, error: "Unauthorized" };
-
+export async function getDashboardData(clinicSlug: string) {
     const supabase = createAdminClient();
     try {
+        const business = await getBusinessBySlug(clinicSlug);
+        if (!business) return { session: null, tokens: [], dailyTokenLimit: null, businessId: null, error: "Business not found" };
+
+        if (!await verifyClinicAccess(business.id)) return { session: null, tokens: [], dailyTokenLimit: null, businessId: null, error: "Unauthorized" };
+
         const today = getClinicDate();
 
         // Get limits from business config
-        const { data: business } = await supabase
+        const { data: businessData } = await supabase
             .from('businesses')
             .select('daily_token_limit')
-            .eq('id', businessId)
+            .eq('id', business.id)
             .single();
 
         // Get active session
         const { data: session } = await supabase
             .from('sessions')
             .select('*')
-            .eq('business_id', businessId)
+            .eq('business_id', business.id)
             .eq('date', today)
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
 
-        if (!session) return { session: null, tokens: [] };
+        if (!session) return { session: null, tokens: [], dailyTokenLimit: businessData?.daily_token_limit || null, businessId: business.id };
 
         // Get tokens
         const { data: tokens } = await supabase
@@ -735,10 +738,10 @@ export async function getDashboardData(businessId: string) {
             };
         });
 
-        return { session, tokens: safeTokens, dailyTokenLimit: business?.daily_token_limit || null };
+        return { session, tokens: safeTokens, dailyTokenLimit: businessData?.daily_token_limit || null, businessId: business.id };
     } catch (e) {
         console.error("Dashboard Data Fetch Error:", e);
-        return { session: null, tokens: [], dailyTokenLimit: null };
+        return { session: null, tokens: [], dailyTokenLimit: null, businessId: null, error: (e as Error).message };
     }
 }
 

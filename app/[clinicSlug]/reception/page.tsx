@@ -671,8 +671,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                             <td className="px-4 py-3 font-mono font-bold text-slate-700 dark:text-slate-300">
                                                                 {formatToken(t.tokenNumber, t.isPriority)}
                                                             </td>
-                                                            <td className="px-4 py-3 text-slate-900 dark:text-white font-medium max-w-[100px] truncate">
-                                                                {t.customerName || '—'}
+                                                            <td className="px-4 py-3 font-medium max-w-[150px] truncate">
+                                                                <div className="text-slate-900 dark:text-white">{t.customerName || '—'}</div>
+                                                                {t.customerPhone && <div className="text-[10px] text-slate-500 font-mono mt-0.5">{t.customerPhone}</div>}
                                                             </td>
                                                             <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs max-w-[140px]">
                                                                 {t.feedback ? (
