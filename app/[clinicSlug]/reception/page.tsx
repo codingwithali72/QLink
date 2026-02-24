@@ -77,19 +77,33 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const [selectedDate, setSelectedDate] = useState(todayStr);
     const [historyTokens, setHistoryTokens] = useState<Token[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [hasMoreHistory, setHasMoreHistory] = useState(false);
+    const [historyOffset, setHistoryOffset] = useState(0);
+    const PAGE_SIZE = 50;
 
     // Fetch History/Log Data
+    const fetchLog = useCallback(async (isLoadMore = false) => {
+        setHistoryLoading(true);
+        const nextOffset = isLoadMore ? historyOffset + PAGE_SIZE : 0;
+        const res = await getTokensForDate(params.clinicSlug, selectedDate, PAGE_SIZE, nextOffset);
+
+        if (res.tokens) {
+            if (isLoadMore) {
+                setHistoryTokens(prev => [...prev, ...res.tokens]);
+            } else {
+                setHistoryTokens(res.tokens);
+            }
+            setHasMoreHistory(res.hasMore || false);
+            setHistoryOffset(nextOffset);
+        }
+        setHistoryLoading(false);
+    }, [params.clinicSlug, selectedDate, historyOffset]);
+
     useEffect(() => {
         if (!isLogOpen) return;
-
-        async function fetchLog() {
-            setHistoryLoading(true);
-            const res = await getTokensForDate(params.clinicSlug, selectedDate);
-            if (res.tokens) setHistoryTokens(res.tokens);
-            setHistoryLoading(false);
-        }
-        fetchLog();
-    }, [selectedDate, params.clinicSlug, isLogOpen, todayStr]);
+        setHistoryOffset(0);
+        fetchLog(false);
+    }, [selectedDate, isLogOpen]);
 
     const displayedTokens = historyTokens;
 
@@ -597,6 +611,24 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                 ))}
                                         </tbody>
                                     </table>
+                                )}
+
+                                {hasMoreHistory && !historyLoading && (
+                                    <div className="p-4 flex justify-center border-t">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => fetchLog(true)}
+                                            className="text-primary font-bold"
+                                        >
+                                            Load More Patients
+                                        </Button>
+                                    </div>
+                                )}
+                                {historyLoading && historyTokens.length > 0 && (
+                                    <div className="p-4 flex justify-center border-t">
+                                        <Loader2 className="animate-spin w-5 h-5 text-slate-400" />
+                                    </div>
                                 )}
                             </div>
                         </div>

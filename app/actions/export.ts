@@ -95,7 +95,8 @@ export async function exportPatientList(
         .eq("business_id", business.id)
         .gte("sessions.date", dateFrom)
         .lte("sessions.date", dateTo)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: true })
+        .limit(1000); // Scalability Guard: Prevent server action timeout/OOM
 
     if (fetchErr) return { error: fetchErr.message };
 

@@ -160,11 +160,19 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         isPriority = false;
     }
 
-    // Input sanitization: Trim, restrict to 50 chars, strip dangerous HTML chars
+    // Input sanitization: Trim, restrict to 50 chars, and robust PII/XSS mitigation
     const safeName = name
         .trim()
         .substring(0, 50)
-        .replace(/[<>]/g, ''); // Basic XSS mitigation before DB entry
+        .replace(/<[^>]*>?/gm, '') // Strip all HTML tags
+        .replace(/[&"'/<>]/g, (s) => ({
+            '&': '&amp;',
+            '"': '&quot;',
+            "'": '&#39;',
+            '/': '&#47;',
+            '<': '&lt;',
+            '>': '&gt;'
+        }[s] || s)); // Standard HTML entity encoding
 
     // Allow empty phone for emergency walk-ins. Convert legacy 0000000000 to null.
     const isEmergencyFake = phone === "0000000000" || phone.trim() === "";
@@ -749,7 +757,7 @@ export async function getDashboardData(clinicSlug: string) {
 }
 
 // 9. HISTORY
-export async function getTokensForDate(clinicSlug: string, date: string) {
+export async function getTokensForDate(clinicSlug: string, date: string, limit: number = 50, offset: number = 0) {
     const supabase = createAdminClient();
     try {
         const business = await getBusinessBySlug(clinicSlug);
@@ -764,13 +772,16 @@ export async function getTokensForDate(clinicSlug: string, date: string) {
             .eq('date', date)
             .maybeSingle();
 
-        if (!session) return { tokens: [] };
+        if (!session) return { tokens: [], hasMore: false };
 
-        const { data } = await supabase
+        const { data, count } = await supabase
             .from('tokens')
-            .select('id, token_number, patient_name, patient_phone, patient_phone_encrypted, status, is_priority, rating, feedback, created_at, served_at, cancelled_at, created_by_staff_id')
+            .select('id, token_number, patient_name, patient_phone, patient_phone_encrypted, status, is_priority, rating, feedback, created_at, served_at, cancelled_at, created_by_staff_id', { count: 'exact' })
             .eq('session_id', session.id)
-            .order('token_number', { ascending: true });
+            .order('token_number', { ascending: true })
+            .range(offset, offset + limit - 1);
+
+        const hasMore = count ? offset + (data?.length || 0) < count : false;
 
         // Map to camelCase for consistent use in the UI
         const tokens = (data || []).map((t: any) => { // eslint-disable-line
@@ -797,7 +808,7 @@ export async function getTokensForDate(clinicSlug: string, date: string) {
             };
         });
 
-        return { tokens };
+        return { tokens, hasMore };
     } catch (e) {
         return { error: (e as Error).message };
     }
