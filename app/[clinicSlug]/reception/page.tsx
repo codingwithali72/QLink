@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw, Pencil, AlertTriangle, BarChart2 } from "lucide-react";
+import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw, Pencil, AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -720,7 +720,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                                 <td className="px-4 py-3 truncate max-w-[120px] font-medium">{t.customerName || '—'}</td>
                                                                 <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{t.customerPhone || '—'}</td>
                                                                 <td className="px-4 py-3 text-xs italic text-muted-foreground max-w-[150px] truncate">
-                                                                    {t.feedback ? <span className="text-orange-600">"{t.feedback}"</span> : "—"}
+                                                                    {t.feedback ? <span className="text-orange-600">&ldquo;{t.feedback}&rdquo;</span> : "—"}
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right">
                                                                     <Badge variant="outline" className={cn("text-[9px] uppercase border-0",
