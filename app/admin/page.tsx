@@ -1,6 +1,6 @@
 "use client";
 
-import { createBusiness, getAdminStats, toggleBusinessStatus, resetBusinessSession, deleteBusiness, getAnalytics, getClinicMetrics, updateBusinessSettings } from "@/app/actions/admin";
+import { createBusiness, getAdminStats, toggleBusinessStatus, deleteBusiness, getAnalytics, getClinicMetrics, updateBusinessSettings } from "@/app/actions/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

@@ -87,13 +87,13 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const displayedTokens = historyTokens;
 
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 3000);
-    };
+    }, []);
 
     // ── Generic action wrapper with optimistic UI support ───────────────────
-    const performAction = async (
+    const performAction = useCallback(async (
         actionFn: () => Promise<{ error?: string;[key: string]: unknown }>,
         setLoading: (v: boolean) => void,
         optimisticUpdate?: () => void,
@@ -116,7 +116,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         } finally {
             setLoading(false);
         }
-    };
+    }, [showToast]);
 
     // MEMOIZED DERIVED STATE
     const waitingTokens = useMemo(() => {
@@ -333,7 +333,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 <h2 className="text-2xl font-black text-foreground mb-3 tracking-tight">Terminal Error</h2>
                 <p className="text-muted-foreground max-w-md mx-auto mb-8 font-medium leading-relaxed">{error}</p>
                 <div className="flex gap-3">
-                    <Button variant="outline" className="rounded-2xl h-12 px-8 font-bold border-border shadow-soft" onClick={() => (window as any).location.reload()}>Reconnect Now</Button>
+                    <Button variant="outline" className="rounded-2xl h-12 px-8 font-bold border-border shadow-soft" onClick={() => window.location.reload()}>Reconnect Now</Button>
                     <Button variant="ghost" className="rounded-2xl h-12 font-bold" onClick={() => logout()}>Exit Terminal</Button>
                 </div>
             </div>
@@ -547,6 +547,54 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
                     {/* RIGHT COLUMN: Lists (4 cols) */}
                     <div className="xl:col-span-4 space-y-8 flex flex-col h-full">
+
+                        {/* Add Token Section */}
+                        <div className="flex items-center gap-3 mb-2">
+                            <Plus className="w-4 h-4 text-primary/60" />
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Direct Registration</h3>
+                        </div>
+                        <div className="p-1.5 bg-card border border-border/60 rounded-[2rem] shadow-soft mb-2">
+                            <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+                                <DialogTrigger asChild>
+                                    <Button disabled={!isSessionActive || isLimitReached || addLoading} className="w-full h-16 bg-primary dark:bg-primary hover:bg-primary/90 text-primary-foreground font-black rounded-[1.7rem] text-sm tracking-widest uppercase shadow-lg shadow-primary/20 transition-all hover:-translate-y-1 active:translate-y-0">
+                                        {isLimitReached ? "Capacity Reached" : "Register Walk-in"}
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="dark:bg-slate-900 border-none rounded-[2rem] shadow-2xl p-6">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-xl font-black tracking-tight flex items-center gap-3 mb-4">
+                                            <div className="p-2 bg-primary/10 rounded-xl">
+                                                <Plus className="w-5 h-5 text-primary" />
+                                            </div>
+                                            New Registration
+                                        </DialogTitle>
+                                    </DialogHeader>
+                                    <form onSubmit={handleManualAdd} className="space-y-6">
+                                        <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-[1.5rem] border border-border/40">
+                                            <div className="space-y-0.5">
+                                                <Label className="text-sm font-black text-foreground">Priority Pulse</Label>
+                                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest leading-none mt-1">Push to front for medical urgency</p>
+                                            </div>
+                                            <Switch
+                                                checked={manualIsPriority}
+                                                onCheckedChange={setManualIsPriority}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/60 ml-2">Patient Full Name</Label>
+                                            <Input value={manualName} onChange={e => setManualName(e.target.value)} placeholder="e.g. Rahul Sharma" className="h-12 bg-secondary/30 border-border/40 rounded-xl" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/60 ml-2">Mobile Number (10 Digits)</Label>
+                                            <Input value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="Enter phone number" className="h-12 bg-secondary/30 border-border/40 rounded-xl" />
+                                        </div>
+                                        <Button type="submit" disabled={addLoading} className="w-full h-14 bg-primary text-primary-foreground font-black tracking-widest uppercase rounded-xl shadow-lg shadow-primary/20 mt-4">
+                                            {addLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Authorize Entry"}
+                                        </Button>
+                                    </form>
+                                </DialogContent>
+                            </Dialog>
+                        </div>
 
                         {/* Waiting List Section */}
                         <div className="flex flex-col flex-1 min-h-[500px]">
