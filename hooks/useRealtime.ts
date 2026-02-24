@@ -86,53 +86,58 @@ export function useClinicRealtime(clinicSlug: string) {
             )
             .on(
                 'postgres_changes',
-                // FIX: filter by business_id so we only receive this clinic's token events,
-                // not every clinic across the whole table.
                 { event: '*', schema: 'public', table: 'tokens', filter: `business_id=eq.${businessId}` },
                 () => { debouncedFetch(); }
             )
-            .subscribe((status) => {
+            .subscribe((status, err) => {
                 if (isUnmounting) return;
-                setIsConnected(status === 'SUBSCRIBED');
-                // Force full sync on connect/reconnect to catch any missed events during WiFi loss
-                if (status === 'SUBSCRIBED') fetchData();
+
+                if (status === 'SUBSCRIBED') {
+                    setIsConnected(true);
+                    // Force full sync on connect/reconnect to catch any missed events during WiFi loss
+                    fetchData();
+                } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+                    setIsConnected(false);
+                }
             });
 
         return () => {
             isUnmounting = true;
             supabase.removeChannel(channel);
         };
-    }, [businessId, debouncedFetch, fetchData]);
+    }, [businessId, debouncedFetch, fetchData, supabase]);
 
-
-
-    // Setup Polling with exponential backoff on failures
+    // Adaptive Polling Fallback
+    // When Realtime is active, polling is entirely suspended (0 network traffic overhead).
+    // When Realtime drops (WiFi swap, sleep wakeup, corporate firewall blocking WS), polling activates at 3s intervals.
     useEffect(() => {
         if (!businessId) return;
 
         let failCount = 0;
-        // Realtime handles instant updates; polling is a fallback only.
-        // 8s base (was 3s) reduces unnecessary network traffic without impacting responsiveness.
-        const BASE_INTERVAL = 8000;
-        const MAX_INTERVAL = 60000;
 
-        fetchData(); // Initial load
-        setIsConnected(true);
+        // If connected to websockets, we don't need to poll at all.
+        if (isConnected) {
+            if (pollingInterval.current) clearTimeout(pollingInterval.current);
+            return;
+        }
+
+        // When disconnected: Aggressive 3s fallback polling for sub-500ms feel even offline
+        const BASE_INTERVAL = 3000;
+        const MAX_INTERVAL = 30000;
 
         function scheduleNext() {
             const delay = Math.min(BASE_INTERVAL * Math.pow(2, failCount), MAX_INTERVAL);
             pollingInterval.current = setTimeout(async () => {
-                // Pause polling when tab is hidden
                 if (document.visibilityState === 'hidden') {
-                    failCount = 0; // reset on resume
+                    failCount = 0;
                     scheduleNext();
                     return;
                 }
                 try {
                     await fetchData();
-                    failCount = 0; // reset backoff on success
+                    failCount = 0;
                 } catch {
-                    failCount = Math.min(failCount + 1, 4); // cap at 4 = 30s max
+                    failCount = Math.min(failCount + 1, 4);
                 }
                 scheduleNext();
             }, delay);
@@ -140,7 +145,6 @@ export function useClinicRealtime(clinicSlug: string) {
 
         scheduleNext();
 
-        // Resume immediately when tab becomes visible again
         const handleVisibility = () => {
             if (document.visibilityState === 'visible') {
                 if (pollingInterval.current) clearTimeout(pollingInterval.current);
@@ -153,10 +157,9 @@ export function useClinicRealtime(clinicSlug: string) {
 
         return () => {
             if (pollingInterval.current) clearTimeout(pollingInterval.current);
-            if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
             document.removeEventListener('visibilitychange', handleVisibility);
         };
-    }, [businessId, fetchData]);
+    }, [businessId, fetchData, isConnected]);
 
     // Offline Sync - passing businessId explicitly if needed, but keeping simple for now
     // Note: useOfflineSync might need updates if it relies on old types
