@@ -10,11 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw, Pencil, AlertTriangle } from "lucide-react";
+import { Loader2, SkipForward, PauseCircle, Users, AlertOctagon, LogOut, PlayCircle, Plus, XCircle, RefreshCw, Moon, Sun, Calendar, Power, ChevronDown, ChevronUp, Search, RotateCcw, Pencil, AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { TokenItem } from "./_components/TokenItem";
 import { getClinicDate } from "@/lib/date";
@@ -23,28 +22,36 @@ import { getClinicDate } from "@/lib/date";
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function ReceptionPage({ params }: { params: { clinicSlug: string } }) {
-    const { session, tokens, loading, error, refresh, lastUpdated, isConnected, dailyTokenLimit, setTokens } = useClinicRealtime(params.clinicSlug);
+    const { session, tokens, loading, refresh, lastUpdated, isConnected, dailyTokenLimit, setTokens } = useClinicRealtime(params.clinicSlug);
 
-    // ── Per-action loading flags ─────────────────────────────────────────────
-    // Each action has its own flag so one in-flight request doesn't block others.
+    // ── Per-action loading flags ────────────────────────────────────────────────
     const [nextLoading, setNextLoading] = useState(false);
     const [skipLoading, setSkipLoading] = useState(false);
     const [pauseLoading, setPauseLoading] = useState(false);
     const [addLoading, setAddLoading] = useState(false);
-    // Legacy alias: true if any heavy action is running (used only for Add form submit)
     const actionLoading = nextLoading || skipLoading || pauseLoading || addLoading;
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [darkMode, setDarkMode] = useState(false);
 
-    const { theme, setTheme } = useTheme();
-    const isDarkMode = theme === 'dark';
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+    }, []);
 
-    // B1: Stalled queue detection — track how long since last NEXT
+    // Stalled queue detection
     const [servingChangedAt, setServingChangedAt] = useState<Date | null>(null);
     const [lastServingId, setLastServingId] = useState<string | null>(null);
     const [stallMinutes, setStallMinutes] = useState(0);
 
-    // B4: Inline token edit
+    // Inline token edit
     const [editingToken, setEditingToken] = useState<{ id: string; name: string; phone: string } | null>(null);
+
+    // Toggle Dark Mode
+    useEffect(() => {
+        if (darkMode) document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+    }, [darkMode]);
 
     // Manual Token Form
     const [manualName, setManualName] = useState("");
@@ -86,26 +93,18 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     const displayedTokens = historyTokens;
 
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-    const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
-        setToast({ message, type });
-        setTimeout(() => setToast(null), 3000);
-    }, []);
-
-    // ── Generic action wrapper with optimistic UI support ───────────────────
-    const performAction = useCallback(async (
+    // ── Generic action wrapper ───────────────────────────────────────────────
+    const performAction = async (
         actionFn: () => Promise<{ error?: string;[key: string]: unknown }>,
         setLoading: (v: boolean) => void,
         optimisticUpdate?: () => void,
         rollback?: () => void
     ) => {
         setLoading(true);
-        // Apply optimistic state immediately so UI feels instant
         if (optimisticUpdate) optimisticUpdate();
         try {
             const result = await actionFn();
             if (result && result.error) {
-                // Roll back optimistic state if server rejected the action
                 if (rollback) rollback();
                 showToast(result.error, 'error');
             }
@@ -116,7 +115,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         } finally {
             setLoading(false);
         }
-    }, [showToast]);
+    };
 
     // MEMOIZED DERIVED STATE
     const waitingTokens = useMemo(() => {
@@ -128,9 +127,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     }, [tokens]);
 
     const visibleWaitingTokens = useMemo(() => waitingTokens.slice(0, 50), [waitingTokens]);
-
     const servingToken = useMemo(() => tokens.find(t => t.status === 'SERVING') || null, [tokens]);
-
     const skippedTokens = useMemo(() => {
         return tokens.filter(t => t.status === 'SKIPPED').sort((a, b) => a.tokenNumber - b.tokenNumber);
     }, [tokens]);
@@ -147,10 +144,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const isLimitReached = dailyTokenLimit !== null && dailyTokenLimit > 0 && activeTokensCount >= dailyTokenLimit;
 
     // ── Action handlers ──────────────────────────────────────────────────────
-
-    const handleNext = useCallback(() => {
-        // Optimistic: mark current serving as SERVED, advance next WAITING to SERVING
-        const snapshot = tokens; // capture for rollback
+    const handleNext = () => {
+        const snapshot = tokens;
         performAction(
             () => nextPatient(params.clinicSlug),
             setNextLoading,
@@ -159,15 +154,13 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     const next = [...prev];
                     const servingIdx = next.findIndex(t => t.status === 'SERVING');
                     if (servingIdx !== -1) next[servingIdx] = { ...next[servingIdx], status: 'SERVED' };
-                    const waitingTokens = next
-                        .filter(t => t.status === 'WAITING')
-                        .sort((a, b) => {
-                            if (a.isPriority && !b.isPriority) return -1;
-                            if (!a.isPriority && b.isPriority) return 1;
-                            return a.tokenNumber - b.tokenNumber;
-                        });
-                    if (waitingTokens.length > 0) {
-                        const nextIdx = next.findIndex(t => t.id === waitingTokens[0].id);
+                    const waiting = next.filter(t => t.status === 'WAITING').sort((a, b) => {
+                        if (a.isPriority && !b.isPriority) return -1;
+                        if (!a.isPriority && b.isPriority) return 1;
+                        return a.tokenNumber - b.tokenNumber;
+                    });
+                    if (waiting.length > 0) {
+                        const nextIdx = next.findIndex(t => t.id === waiting[0].id);
                         if (nextIdx !== -1) next[nextIdx] = { ...next[nextIdx], status: 'SERVING' };
                     }
                     return next;
@@ -175,9 +168,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             },
             () => setTokens(snapshot)
         );
-    }, [tokens, params.clinicSlug, performAction, setTokens]);
+    };
 
-    const handleSkip = useCallback(() => {
+    const handleSkip = () => {
         if (!servingToken) return;
         const snapshot = tokens;
         performAction(
@@ -186,7 +179,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             () => setTokens(prev => prev.map(t => t.id === servingToken.id ? { ...t, status: 'SKIPPED' } : t)),
             () => setTokens(snapshot)
         );
-    }, [servingToken, tokens, params.clinicSlug, performAction, setTokens]);
+    };
 
     const handleEmergencyClick = () => {
         setManualIsPriority(true);
@@ -194,9 +187,11 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         setManualPhone("0000000000");
         setIsAddModalOpen(true);
     };
+
     const handleUndo = () => {
-        if (confirm("Undo the last action?")) performAction(() => undoLastAction(params.clinicSlug), setNextLoading);
+        performAction(() => undoLastAction(params.clinicSlug), setNextLoading);
     };
+
     const handlePauseToggle = () => {
         if (!session) return;
         performAction(
@@ -204,24 +199,25 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             setPauseLoading
         );
     };
+
     const handleCloseQueue = () => {
         const answer = prompt('Type CLOSE to confirm ending today\'s queue:');
         if (answer?.trim().toUpperCase() === 'CLOSE') performAction(() => closeQueue(params.clinicSlug), setPauseLoading);
     };
+
     const handleStartSession = () => performAction(() => startSession(params.clinicSlug), setPauseLoading);
 
     const handleRecall = (id: string) => {
-        if (!confirm("Recall this ticket?")) return;
         const snapshot = tokens;
         performAction(
             () => recallToken(params.clinicSlug, id),
-            setNextLoading, // reuse nextLoading — recall is a queue-advance variant
+            setNextLoading,
             () => setTokens(prev => prev.map(t => t.id === id ? { ...t, status: 'WAITING', isPriority: true } : t)),
             () => setTokens(snapshot)
         );
     };
 
-    const handleCancelToken = useCallback((id: string) => {
+    const handleCancelToken = (id: string) => {
         const snapshot = tokens;
         performAction(
             () => cancelToken(params.clinicSlug, id),
@@ -229,19 +225,17 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             () => setTokens(prev => prev.map(t => t.id === id ? { ...t, status: 'CANCELLED' } : t)),
             () => setTokens(snapshot)
         );
-    }, [tokens, params.clinicSlug, performAction, setTokens]);
+    };
 
     const handleManualAdd = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        // Prevent invalid phone inputs at UI level, but allow empty/fake for emergencies
         if (manualPhone.trim() !== "" && manualPhone !== "0000000000") {
             if (!isValidIndianPhone(manualPhone)) {
-                alert("Please enter a valid 10-digit Indian mobile number");
+                showToast("Please enter a valid 10-digit Indian mobile number", 'error');
                 return;
             }
         } else if (!manualIsPriority) {
-            alert("A valid mobile number is required for standard walk-ins");
+            showToast("A valid mobile number is required for standard walk-ins", 'error');
             return;
         }
 
@@ -249,19 +243,13 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         const res = await createToken(params.clinicSlug, manualPhone, manualName, manualIsPriority);
         if (res.error) {
             if (res.is_duplicate) {
-                alert(`Token #${res.existing_token_number} already exists for this number in ${res.existing_status} state. Creation ignored.`);
+                showToast(`Token #${res.existing_token_number} already exists`, 'error');
                 setIsAddModalOpen(false);
-                setManualName("");
-                setManualPhone("");
-                setManualIsPriority(false);
             } else if (res.limit_reached) {
-                alert(`Daily limit reached (${res.count}/${res.limit}).`);
+                showToast(`Daily limit reached`, 'error');
                 setIsAddModalOpen(false);
-                setManualName("");
-                setManualPhone("");
-                setManualIsPriority(false);
             } else {
-                alert(res.error);
+                showToast(res.error, 'error');
             }
         } else {
             setIsAddModalOpen(false);
@@ -269,11 +257,27 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             setManualPhone("");
             setManualIsPriority(false);
             refresh();
+            showToast("Token Created");
         }
         setAddLoading(false);
     };
 
-    // B1: Stall detection — track when serving token changes
+    const handleSaveEdit = async () => {
+        if (!editingToken) return;
+        if (editingToken.phone && editingToken.phone.trim() !== "") {
+            if (!isValidIndianPhone(editingToken.phone)) {
+                showToast("Invalid mobile number", 'error');
+                return;
+            }
+        }
+        setAddLoading(true);
+        const res = await updateToken(params.clinicSlug, editingToken.id, editingToken.name, editingToken.phone);
+        if (res.error) showToast(res.error, 'error');
+        else { setEditingToken(null); refresh(); showToast("Token Updated"); }
+        setAddLoading(false);
+    };
+
+    // Stall detection
     useEffect(() => {
         const currentId = servingToken?.id || null;
         if (currentId !== lastServingId) {
@@ -287,28 +291,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         if (!servingChangedAt || session?.status !== 'OPEN') { setStallMinutes(0); return; }
         const interval = setInterval(() => {
             setStallMinutes(Math.floor((Date.now() - servingChangedAt.getTime()) / 60000));
-        }, 30000); // check every 30s
+        }, 30000);
         return () => clearInterval(interval);
     }, [servingChangedAt, session?.status]);
-
-    // B4: Handle save edit
-    const handleSaveEdit = async () => {
-        if (!editingToken) return;
-
-        if (editingToken.phone && editingToken.phone.trim() !== "") {
-            if (!isValidIndianPhone(editingToken.phone)) {
-                alert("Please enter a valid 10-digit Indian mobile number");
-                return;
-            }
-        }
-
-        setAddLoading(true);
-        const res = await updateToken(params.clinicSlug, editingToken.id, editingToken.name, editingToken.phone);
-        if (res.error) alert(res.error);
-        else { setEditingToken(null); refresh(); }
-        setAddLoading(false);
-    };
-
 
     const [showOfflineError, setShowOfflineError] = useState(false);
     useEffect(() => {
@@ -322,485 +307,332 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
-    if (loading) return <div className="h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-primary/40 w-10 h-10" /></div>;
-
-    if (error) {
-        return (
-            <div className="h-screen flex flex-col items-center justify-center bg-background p-6 text-center">
-                <div className="p-4 bg-rose-500/10 rounded-3xl mb-6 shadow-lg shadow-rose-500/5 transition-transform hover:scale-105 duration-300">
-                    <AlertOctagon className="w-12 h-12 text-rose-500" />
-                </div>
-                <h2 className="text-2xl font-black text-foreground mb-3 tracking-tight">Terminal Error</h2>
-                <p className="text-muted-foreground max-w-md mx-auto mb-8 font-medium leading-relaxed">{error}</p>
-                <div className="flex gap-3">
-                    <Button variant="outline" className="rounded-2xl h-12 px-8 font-bold border-border shadow-soft" onClick={() => window.location.reload()}>Reconnect Now</Button>
-                    <Button variant="ghost" className="rounded-2xl h-12 font-bold" onClick={() => logout()}>Exit Terminal</Button>
-                </div>
-            </div>
-        );
-    }
+    if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><Loader2 className="animate-spin text-slate-400 w-8 h-8" /></div>;
 
     const isSessionActive = session?.status === 'OPEN' || session?.status === 'PAUSED';
 
     return (
-        <div className="min-h-screen bg-background text-foreground font-sans transition-colors duration-300 relative overflow-hidden pb-20">
-            {/* Background Aesthetics */}
-            <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px] translate-x-1/2 -translate-y-1/2 pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-[120px] -translate-x-1/4 translate-y-1/4 pointer-events-none" />
-
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300 p-3 pb-20 md:p-6 lg:p-8 font-sans relative">
             {showOfflineError && (
-                <div className="fixed top-0 left-0 w-full bg-rose-600 text-white text-[10px] py-1 font-black z-[100] animate-in slide-in-from-top-full tracking-widest text-center uppercase">
-                    Critical: Lost connection to real-time engine...
+                <div className="fixed top-0 left-0 w-full bg-red-500 text-white text-center text-xs py-1 font-bold z-50 animate-in slide-in-from-top-full">
+                    Reconnecting to live updates...
                 </div>
             )}
 
             {stallMinutes >= 5 && servingToken && session?.status === 'OPEN' && (
-                <div className={cn(
-                    "fixed top-4 left-1/2 -translate-x-1/2 z-[90] px-6 py-2.5 rounded-2xl text-white font-black text-[10px] uppercase tracking-widest shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4",
-                    stallMinutes >= 10 ? 'bg-rose-600' : 'bg-amber-500'
-                )}>
-                    <AlertTriangle className="w-4 h-4" />
-                    Queue Inactive for {stallMinutes} minutes
+                <div className={`fixed top-0 left-0 w-full text-white text-center text-xs py-2 font-bold z-50 animate-pulse flex items-center justify-center gap-2 ${stallMinutes >= 10 ? 'bg-red-600' : 'bg-amber-500'}`}>
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Queue stalled — {stallMinutes} min since last advance
                 </div>
             )}
 
-            <div className="max-w-[1400px] mx-auto px-4 sm:px-8 py-6 relative z-10">
-                {/* ── UNIFIED HEADER ── */}
-                <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 lg:mb-12">
-                    <div className="flex items-center gap-5">
-                        <div className="h-14 w-14 bg-primary rounded-2xl flex items-center justify-center text-primary-foreground font-black text-2xl shadow-xl shadow-primary/20 transition-transform hover:scale-110 duration-500 rotate-2 group cursor-default">
-                            Q
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-3">
-                                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground uppercase pt-1">Reception</h1>
-                                <Badge variant="secondary" className="bg-secondary/80 text-foreground border-border font-black text-[9px] tracking-[0.1em] px-2 py-0.5 h-fit opacity-80 uppercase">{params.clinicSlug}</Badge>
-                            </div>
-                            <div className="flex items-center gap-4 mt-2 font-bold text-[10px] uppercase tracking-widest text-muted-foreground/60">
-                                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-secondary/50 rounded-lg border border-border/40">
-                                    <div className={cn("w-1.5 h-1.5 rounded-full", isConnected ? "bg-emerald-500" : "bg-rose-500 animate-pulse")} />
-                                    {isConnected ? 'Sync Active' : 'Offline'}
-                                </div>
-                                <div className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-primary/60" /> {todayDate}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <div className={cn("px-4 py-2 rounded-2xl text-[10px] font-black tracking-[0.1em] border flex items-center gap-2.5 shadow-soft",
-                            session?.status === 'OPEN' ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400" :
-                                session?.status === 'PAUSED' ? "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400" :
-                                    "bg-rose-500/10 text-rose-600 border-rose-500/30 dark:text-rose-400"
-                        )}>
-                            <div className={cn("w-2 h-2 rounded-full",
-                                session?.status === 'OPEN' ? "bg-emerald-500 animate-pulse" : session?.status === 'PAUSED' ? "bg-amber-500" : "bg-rose-500"
-                            )}></div>
-                            {session?.status || "CLOSED"}
-                        </div>
-
-                        <div className="flex bg-card/50 backdrop-blur-md p-1.5 rounded-2xl border border-border/60 shadow-soft">
-                            <Button variant="ghost" size="icon" onClick={() => setTheme(isDarkMode ? 'light' : 'dark')} className="h-9 w-9 rounded-xl text-muted-foreground transition-all hover:bg-secondary active:scale-90">
-                                {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                            </Button>
-                            <div className="w-px h-5 bg-border/60 mx-1" />
-                            <Button variant="ghost" size="icon" onClick={() => logout()} className="h-9 w-9 rounded-xl text-muted-foreground transition-all hover:bg-rose-500/10 hover:text-rose-500 active:scale-90">
-                                <LogOut className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </div>
-                </header>
-
-                {/* MAIN GRID */}
-                <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-10">
-
-                    {/* LEFT COLUMN: Controls & Status (8 cols) */}
-                    <div className="xl:col-span-8 space-y-8 lg:space-y-10">
-
-                        {/* HERO CARD: Now Serving */}
-                        <Card className="bg-card border-border/60 p-6 sm:p-10 flex flex-col items-center justify-center text-center min-h-[300px]">
-                            {servingToken ? (
-                                <div className="animate-in zoom-in-95 duration-500">
-                                    <div className="flex items-center justify-center gap-2 mb-4">
-                                        <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Now Serving</span>
-                                    </div>
-                                    <h2 className="text-8xl sm:text-9xl font-black text-foreground tracking-tighter">
-                                        {formatToken(servingToken.tokenNumber, servingToken.isPriority)}
-                                    </h2>
-                                    <div className="mt-6 space-y-1">
-                                        <p className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">{servingToken.customerName}</p>
-                                        <p className="text-muted-foreground font-mono text-sm font-bold opacity-60">
-                                            {servingToken.customerPhone}
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="text-center py-10">
-                                    <div className="w-16 h-16 bg-secondary/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                                        <Loader2 className="w-8 h-8 text-muted-foreground/30" />
-                                    </div>
-                                    <h2 className="text-4xl font-bold text-muted-foreground/40 uppercase italic">Standby</h2>
-                                    <p className="mt-2 text-xs font-bold text-muted-foreground/60 tracking-widest uppercase">Waiting for first token</p>
-                                </div>
-                            )}
-
-                            <div className="absolute bottom-6 left-6 hidden sm:flex items-center gap-2 text-[10px] text-muted-foreground/40 font-bold uppercase">
-                                <RefreshCw className={cn("w-3 h-3", !isConnected && "animate-spin")} /> {lastUpdated?.toLocaleTimeString()}
-                            </div>
-                        </Card>
-
-                        {/* CONTROL DECK */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {/* NEXT BUTTON */}
-                            <Button
-                                onClick={handleNext}
-                                disabled={nextLoading || !isSessionActive || (waitingTokens.length === 0 && !servingToken)}
-                                className="col-span-2 h-24 text-2xl font-bold rounded-xl bg-primary text-primary-foreground hover:opacity-90 active:scale-95"
-                            >
-                                {nextLoading ? <Loader2 className="animate-spin w-8 h-8" /> : (
-                                    <div className="flex items-center gap-3">
-                                        <PlayCircle className="w-8 h-8 text-white" />
-                                        <span>{waitingTokens.length === 0 && servingToken ? "FINISH" : "NEXT PATIENT"}</span>
-                                    </div>
-                                )}
-                            </Button>
-
-                            {/* SKIP */}
-                            <Button
-                                variant="outline"
-                                onClick={handleSkip}
-                                disabled={!servingToken || skipLoading || !isSessionActive}
-                                className="h-24 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-border/60 hover:bg-secondary active:scale-95"
-                            >
-                                {skipLoading ? <Loader2 className="animate-spin w-6 h-6" /> : <SkipForward className="w-6 h-6 text-muted-foreground" />}
-                                <span className="font-bold text-xs uppercase tracking-widest">Skip</span>
-                            </Button>
-
-                            {/* SOS */}
-                            <Button
-                                variant="destructive"
-                                onClick={handleEmergencyClick}
-                                disabled={actionLoading || !isSessionActive}
-                                className="h-24 flex flex-col items-center justify-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-lg shadow-rose-500/20"
-                            >
-                                <AlertTriangle className="w-6 h-6" />
-                                <span className="font-bold text-xs uppercase tracking-widest">Urgent</span>
-                            </Button>
-                        </div>
-
-                        {/* SECONDARY CONTROLS */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {isSessionActive ? (
-                                <>
-                                    <Button
-                                        variant="outline"
-                                        onClick={handleUndo}
-                                        disabled={nextLoading}
-                                        className="h-16 font-black rounded-2xl border-border/60 bg-card/50 hover:bg-secondary flex gap-3 tracking-[0.1em] text-[11px] uppercase"
-                                    >
-                                        <RotateCcw className="w-4 h-4 text-primary" /> Redo Last Action
-                                    </Button>
-
-                                    <Button
-                                        variant="outline"
-                                        onClick={handlePauseToggle}
-                                        disabled={pauseLoading}
-                                        className={cn("h-16 font-black rounded-2xl border-border/60 bg-card/50 flex gap-3 tracking-[0.1em] text-[11px] uppercase transition-all",
-                                            session?.status === 'OPEN' ? "hover:bg-amber-500/10 hover:text-amber-600" : "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20"
-                                        )}
-                                    >
-                                        {session?.status === 'OPEN' ? <><PauseCircle className="w-4 h-4 text-amber-500" /> Hold Queue</> : <><PlayCircle className="w-4 h-4 text-emerald-500" /> Resume Queue</>}
-                                    </Button>
-
-                                    <Button
-                                        variant="ghost"
-                                        onClick={handleCloseQueue}
-                                        className="h-16 font-black rounded-2xl text-muted-foreground/40 hover:bg-rose-500/10 hover:text-rose-600 flex gap-3 tracking-[0.1em] text-[11px] uppercase"
-                                    >
-                                        <Power className="w-4 h-4" /> Shutdown Session
-                                    </Button>
-                                </>
-                            ) : (
-                                <Button
-                                    onClick={handleStartSession}
-                                    className="col-span-3 h-20 font-black rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xl shadow-emerald-600/20 text-lg tracking-tight transition-all active:scale-95"
-                                >
-                                    <div className="p-1.5 bg-white/20 rounded-lg mr-4">
-                                        <PlayCircle className="w-6 h-6" />
-                                    </div>
-                                    INITIALIZE NEW CLINICAL SESSION
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* RIGHT COLUMN: Lists (4 cols) */}
-                    <div className="xl:col-span-4 space-y-8 flex flex-col h-full">
-
-                        {/* Add Token Section */}
-                        <div className="flex items-center gap-3 mb-2">
-                            <Plus className="w-4 h-4 text-primary/60" />
-                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Direct Registration</h3>
-                        </div>
-                        <div className="p-1.5 bg-card border border-border/60 rounded-[2rem] shadow-soft mb-2">
-                            <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-                                <DialogTrigger asChild>
-                                    <Button disabled={!isSessionActive || isLimitReached || addLoading} className="w-full h-16 bg-primary dark:bg-primary hover:bg-primary/90 text-primary-foreground font-black rounded-[1.7rem] text-sm tracking-widest uppercase shadow-lg shadow-primary/20 transition-all hover:-translate-y-1 active:translate-y-0">
-                                        {isLimitReached ? "Capacity Reached" : "Register Walk-in"}
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent className="dark:bg-slate-900 border-none rounded-[2rem] shadow-2xl p-6">
-                                    <DialogHeader>
-                                        <DialogTitle className="text-xl font-black tracking-tight flex items-center gap-3 mb-4">
-                                            <div className="p-2 bg-primary/10 rounded-xl">
-                                                <Plus className="w-5 h-5 text-primary" />
-                                            </div>
-                                            New Registration
-                                        </DialogTitle>
-                                    </DialogHeader>
-                                    <form onSubmit={handleManualAdd} className="space-y-6">
-                                        <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-[1.5rem] border border-border/40">
-                                            <div className="space-y-0.5">
-                                                <Label className="text-sm font-black text-foreground">Priority Pulse</Label>
-                                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest leading-none mt-1">Push to front for medical urgency</p>
-                                            </div>
-                                            <Switch
-                                                checked={manualIsPriority}
-                                                onCheckedChange={setManualIsPriority}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/60 ml-2">Patient Full Name</Label>
-                                            <Input value={manualName} onChange={e => setManualName(e.target.value)} placeholder="e.g. Rahul Sharma" className="h-12 bg-secondary/30 border-border/40 rounded-xl" />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/60 ml-2">Mobile Number (10 Digits)</Label>
-                                            <Input value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="Enter phone number" className="h-12 bg-secondary/30 border-border/40 rounded-xl" />
-                                        </div>
-                                        <Button type="submit" disabled={addLoading} className="w-full h-14 bg-primary text-primary-foreground font-black tracking-widest uppercase rounded-xl shadow-lg shadow-primary/20 mt-4">
-                                            {addLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Authorize Entry"}
-                                        </Button>
-                                    </form>
-                                </DialogContent>
-                            </Dialog>
-                        </div>
-
-                        {/* Waiting List Section */}
-                        <div className="flex flex-col flex-1">
-                            <div className="flex items-center justify-between mb-3 px-1">
-                                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Waiting List</h3>
-                                <Badge variant="secondary">{waitingTokens.length}</Badge>
-                            </div>
-
-                            <Card className="flex-1 bg-card border-border/60 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-                                <div className="overflow-y-auto flex-1 p-2 space-y-2">
-                                    {visibleWaitingTokens.length === 0 ? (
-                                        <div className="h-full flex flex-col items-center justify-center text-center p-10 opacity-40">
-                                            <div className="w-16 h-16 bg-secondary/50 rounded-[2rem] flex items-center justify-center mb-4">
-                                                <Users className="w-8 h-8 text-muted-foreground/30" />
-                                            </div>
-                                            <p className="text-xs font-black uppercase tracking-widest leading-relaxed">No Active Pulse In Queue</p>
-                                        </div>
-                                    ) : (
-                                        visibleWaitingTokens.map((t) => (
-                                            <TokenItem
-                                                key={t.id}
-                                                token={t}
-                                                onCancel={handleCancelToken}
-                                            />
-                                        ))
-                                    )}
-                                </div>
-
-                                {/* Skipped/Secondary List */}
-                                {skippedTokens.length > 0 && (
-                                    <div className="bg-secondary/30 border-t border-border/60 p-4">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <h4 className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">Skipped Tokens</h4>
-                                            <div className="w-4 h-4 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center text-[8px] font-black">{skippedTokens.length}</div>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {skippedTokens.map(t => (
-                                                <div key={t.id} className="group flex items-center gap-2 pl-3 pr-1 py-1 rounded-xl bg-card border border-border/40 hover:border-primary/40 transition-all">
-                                                    <span className="font-black text-[10px] text-foreground/70">{formatToken(t.tokenNumber, t.isPriority)}</span>
-                                                    <Button size="icon" variant="ghost" className="h-6 w-6 rounded-lg text-primary hover:bg-primary/10" onClick={() => handleRecall(t.id)}>
-                                                        <RotateCcw className="w-3 h-3" />
-                                                    </Button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </Card>
-                        </div>
-
-                        {/* Session Log */}
-                        <div className="space-y-3">
-                            <div
-                                className="flex items-center justify-between p-4 bg-card border border-border/60 rounded-2xl cursor-pointer hover:bg-secondary/50 transition-all font-bold"
-                                onClick={() => setIsLogOpen(!isLogOpen)}
-                            >
-                                <div className="flex items-center gap-2 text-sm">
-                                    <Users className="w-4 h-4 text-muted-foreground" />
-                                    <span>Session Log</span>
-                                    <Badge variant="secondary" className="ml-2 font-mono">{displayedTokens.length}</Badge>
-                                </div>
-                                {isLogOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                            </div>
-
-                            {isLogOpen && (
-                                <Card className="bg-card border-border/60 rounded-2xl shadow-lg overflow-hidden animate-in slide-in-from-top-2">
-                                    <div className="p-3 border-b border-border/60 bg-secondary/10 space-y-3">
-                                        <div className="flex gap-2">
-                                            <div className="relative flex-1">
-                                                <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground/40" />
-                                                <Input
-                                                    placeholder="Search..."
-                                                    value={searchTerm}
-                                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                                    className="pl-9 h-10 bg-background border-border"
-                                                />
-                                            </div>
-                                            <Input
-                                                type="date"
-                                                value={selectedDate}
-                                                max={todayStr}
-                                                onChange={(e) => setSelectedDate(e.target.value)}
-                                                className="w-36 h-10 bg-background border-border text-xs font-bold"
-                                            />
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <Button variant="outline" size="sm" className="h-8 text-xs font-bold" onClick={async () => {
-                                                const res = await exportPatientList(params.clinicSlug, selectedDate, selectedDate);
-                                                if (res.error) { showToast(res.error, 'error'); return; }
-                                                if (res.csv) {
-                                                    const blob = new Blob(["\uFEFF", res.csv], { type: 'text/csv;charset=utf-8;' });
-                                                    const url = URL.createObjectURL(blob);
-                                                    const link = document.createElement("a");
-                                                    const cleanClinicName = (res.clinicName || params.clinicSlug).replace(/[^a-z0-9]/gi, '_');
-                                                    const cleanDate = selectedDate.replace(/-/g, '');
-                                                    link.setAttribute("href", url);
-                                                    link.setAttribute("download", `${cleanClinicName}_${cleanDate}.csv`);
-                                                    document.body.appendChild(link);
-                                                    link.click();
-                                                    document.body.removeChild(link);
-                                                    URL.revokeObjectURL(url);
-                                                    showToast("CSV Exported");
-                                                }
-                                            }}>
-                                                Download CSV
-                                            </Button>
-                                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Served: {totalServedCount}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="max-h-[350px] overflow-y-auto">
-                                        {historyLoading ? (
-                                            <div className="py-10 flex justify-center"><Loader2 className="animate-spin w-6 h-6 text-primary" /></div>
-                                        ) : (
-                                            <table className="w-full text-left text-sm">
-                                                <thead className="bg-secondary/20 sticky top-0 z-10 border-b border-border/40">
-                                                    <tr>
-                                                        <th className="px-4 py-3 font-bold uppercase text-[10px] text-muted-foreground">Tkn</th>
-                                                        <th className="px-4 py-3 font-bold uppercase text-[10px] text-muted-foreground">Patient</th>
-                                                        <th className="px-4 py-3 font-bold uppercase text-[10px] text-muted-foreground">Phone</th>
-                                                        <th className="px-4 py-3 font-bold uppercase text-[10px] text-muted-foreground">Feedback</th>
-                                                        <th className="px-4 py-3 font-bold uppercase text-[10px] text-muted-foreground text-right">Status</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-border/20">
-                                                    {displayedTokens
-                                                        .filter(t =>
-                                                            (t.customerName?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-                                                            (t.customerPhone || "").includes(searchTerm)
-                                                        )
-                                                        .map((t) => (
-                                                            <tr key={t.id} className="hover:bg-secondary/10 transition-colors">
-                                                                <td className="px-4 py-3 font-mono font-bold">{formatToken(t.tokenNumber, t.isPriority)}</td>
-                                                                <td className="px-4 py-3 truncate max-w-[120px] font-medium">{t.customerName || '—'}</td>
-                                                                <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{t.customerPhone || '—'}</td>
-                                                                <td className="px-4 py-3 text-xs italic text-muted-foreground max-w-[150px] truncate">
-                                                                    {t.feedback ? <span className="text-orange-600">&ldquo;{t.feedback}&rdquo;</span> : "—"}
-                                                                </td>
-                                                                <td className="px-4 py-3 text-right">
-                                                                    <Badge variant="outline" className={cn("text-[9px] uppercase border-0",
-                                                                        t.status === 'SERVING' ? "bg-emerald-50 text-emerald-600" :
-                                                                            t.status === 'WAITING' ? "bg-blue-50 text-blue-600" :
-                                                                                t.status === 'SKIPPED' ? "bg-amber-50 text-amber-600" :
-                                                                                    t.status === 'CANCELLED' ? "bg-rose-50 text-rose-600 line-through opacity-60" :
-                                                                                        "bg-secondary text-muted-foreground"
-                                                                    )}>
-                                                                        {t.status}
-                                                                    </Badge>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                </tbody>
-                                            </table>
-                                        )}
-                                    </div>
-                                </Card>
-                            )}
+            {/* HEADER */}
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 md:p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 mb-6">
+                <div className="flex items-center gap-3 md:gap-4">
+                    <div className="h-10 w-10 md:h-12 md:w-12 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-xl md:text-2xl shadow-lg shadow-blue-500/30">Q</div>
+                    <div>
+                        <h1 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white leading-tight">Reception</h1>
+                        <div className="flex items-center gap-2 text-[10px] md:text-xs font-medium text-slate-500 dark:text-slate-400">
+                            <span className="uppercase tracking-wider">{params.clinicSlug}</span>
+                            <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {todayDate}</span>
                         </div>
                     </div>
                 </div>
+
+                <div className="flex items-center gap-2 md:gap-3">
+                    <div className={cn("px-2 md:px-3 py-1 md:py-1.5 rounded-full text-xs font-bold border flex items-center gap-2",
+                        session?.status === 'OPEN' ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800" :
+                            session?.status === 'PAUSED' ? "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800" :
+                                "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800"
+                    )}>
+                        <div className={cn("w-1.5 h-1.5 md:w-2 md:h-2 rounded-full",
+                            session?.status === 'OPEN' ? "bg-green-600 animate-pulse" : session?.status === 'PAUSED' ? "bg-yellow-600" : "bg-red-600"
+                        )}></div>
+                        {session?.status || "CLOSED"}
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => setDarkMode(!darkMode)} className="rounded-full h-8 w-8 text-slate-500 dark:text-slate-400">
+                        {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => logout()} className="text-slate-500 text-xs h-8">
+                        <LogOut className="w-3 h-3 mr-1" /> Logout
+                    </Button>
+                </div>
+            </header>
+
+            {/* MAIN GRID */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                {/* LEFT: Controls (8 cols) */}
+                <div className="xl:col-span-8 space-y-6">
+                    {/* SERVING CARD */}
+                    <Card className="relative overflow-hidden border-0 shadow-lg bg-blue-600 text-white h-72 flex flex-col items-center justify-center p-8 rounded-3xl">
+                        <p className="text-blue-100 uppercase tracking-widest text-sm font-bold mb-4">Now Serving</p>
+                        {servingToken ? (
+                            <div className="text-center z-10">
+                                <h2 className="text-8xl md:text-9xl font-black tracking-tighter shadow-sm">
+                                    {formatToken(servingToken.tokenNumber, servingToken.isPriority)}
+                                </h2>
+                                <div className="mt-4">
+                                    <p className="text-2xl font-bold">{servingToken.customerName || 'Anonymous'}</p>
+                                    <p className="text-blue-100/70 font-mono text-sm">{servingToken.customerPhone}</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center z-10 opacity-60">
+                                <div className="text-8xl font-black">--</div>
+                                <p className="mt-2 text-lg">Wait for next patient</p>
+                            </div>
+                        )}
+                        <div className="absolute bottom-6 left-8 flex items-center gap-2 text-[10px] text-blue-200/60 uppercase font-mono tracking-widest">
+                            <RefreshCw className={cn("w-3 h-3", !isConnected && "animate-spin")} /> {lastUpdated.toLocaleTimeString()}
+                        </div>
+                    </Card>
+
+                    {/* CONTROL DECK */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Button
+                            onClick={handleNext}
+                            disabled={nextLoading || !isSessionActive || (waitingTokens.length === 0 && !servingToken)}
+                            className="col-span-2 h-24 text-2xl font-black rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-2 border-slate-200 dark:border-slate-800 hover:bg-slate-50 shadow-sm"
+                        >
+                            {nextLoading ? <Loader2 className="animate-spin w-8 h-8" /> : (
+                                <div className="flex items-center gap-3">
+                                    <PlayCircle className="w-8 h-8 text-blue-600" />
+                                    <span>{waitingTokens.length === 0 && servingToken ? "FINISH" : "NEXT PATIENT"}</span>
+                                </div>
+                            )}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={handleSkip}
+                            disabled={!servingToken || skipLoading || !isSessionActive}
+                            className="h-24 flex flex-col gap-2 rounded-2xl border-2 border-slate-200 dark:border-slate-800"
+                        >
+                            {skipLoading ? <Loader2 className="animate-spin w-6 h-6" /> : <SkipForward className="w-6 h-6" />}
+                            <span className="font-bold text-xs uppercase tracking-widest">Skip</span>
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleEmergencyClick}
+                            disabled={actionLoading || !isSessionActive}
+                            className="h-24 flex flex-col gap-2 rounded-2xl bg-red-600 hover:bg-red-700"
+                        >
+                            <AlertOctagon className="w-6 h-6" />
+                            <span className="font-bold text-xs uppercase tracking-widest">Urgent</span>
+                        </Button>
+                    </div>
+
+                    {/* EXTRA CONTROLS */}
+                    <div className="grid grid-cols-3 gap-4">
+                        {isSessionActive ? (
+                            <>
+                                <Button variant="outline" onClick={handleUndo} className="h-16 font-bold rounded-2xl border-2">Undo</Button>
+                                <Button variant="outline" onClick={handlePauseToggle} className="h-16 font-bold rounded-2xl border-2">
+                                    {session?.status === 'OPEN' ? 'Pause' : 'Resume'}
+                                </Button>
+                                <Button variant="ghost" onClick={handleCloseQueue} className="h-16 font-bold rounded-2xl text-red-500 hover:bg-red-50">Close</Button>
+                            </>
+                        ) : (
+                            <Button onClick={handleStartSession} className="col-span-3 h-16 text-xl font-bold rounded-2xl bg-green-600">Start Session</Button>
+                        )}
+                    </div>
+                </div>
+
+                {/* RIGHT: Lists (4 cols) */}
+                <div className="xl:col-span-4 space-y-6">
+                    <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+                        <DialogTrigger asChild>
+                            <Button disabled={!isSessionActive || isLimitReached} className="w-full h-16 bg-slate-900 text-white rounded-2xl text-lg font-bold shadow-lg">
+                                <Plus className="mr-2" /> Add Walk-in
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader><DialogTitle>Add Patient</DialogTitle></DialogHeader>
+                            <form onSubmit={handleManualAdd} className="space-y-4 py-4">
+                                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border">
+                                    <Label className="font-bold">Urgent / Priority</Label>
+                                    <Switch checked={manualIsPriority} onCheckedChange={setManualIsPriority} />
+                                </div>
+                                <Input value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Patient Name" />
+                                <Input value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="Phone number" />
+                                <Button type="submit" disabled={addLoading} className="w-full h-12 bg-blue-600 text-white font-bold">Create Token</Button>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
+
+                    {/* WAITING LIST */}
+                    <Card className="flex flex-col h-[500px] border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b flex justify-between items-center">
+                            <h3 className="font-bold text-slate-700 dark:text-slate-300">Queue</h3>
+                            <Badge className="bg-blue-600 text-white">{waitingTokens.length}</Badge>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                            {visibleWaitingTokens.map(t => (
+                                <TokenItem key={t.id} token={t} onCancel={handleCancelToken} />
+                            ))}
+                            {visibleWaitingTokens.length === 0 && <div className="text-center py-20 text-slate-400">Box is empty</div>}
+                        </div>
+                    </Card>
+
+                    {/* SKIPPED */}
+                    {skippedTokens.length > 0 && (
+                        <Card className="p-2 border-slate-200 dark:border-slate-800 rounded-2xl">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-2">Skipped Today</div>
+                            <div className="space-y-1">
+                                {skippedTokens.map(t => (
+                                    <div key={t.id} className="flex justify-between items-center p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800">
+                                        <span className="font-mono font-bold text-sm tracking-tighter">{formatToken(t.tokenNumber, t.isPriority)}</span>
+                                        <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-600" onClick={() => handleRecall(t.id)}>Recall</Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                    )}
+                </div>
             </div>
 
-            {/* B4: Inline Edit Fragment */}
+            {/* SESSION LOG (Bottom) */}
+            <div className="mt-8">
+                <Card className="border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                    <div
+                        className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900"
+                        onClick={() => setIsLogOpen(!isLogOpen)}
+                    >
+                        <div className="flex items-center gap-2">
+                            <Users className="w-5 h-5 text-slate-400" />
+                            <h3 className="font-bold text-slate-700 dark:text-slate-300">Daily Patient Log</h3>
+                            <Badge variant="outline" className="ml-2">{displayedTokens.length}</Badge>
+                        </div>
+                        {isLogOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    </div>
+
+                    {isLogOpen && (
+                        <div className="border-t animate-in slide-in-from-top-2">
+                            <div className="p-4 bg-slate-50 dark:bg-slate-900 flex flex-wrap gap-4 items-center justify-between">
+                                <div className="flex gap-4 items-center">
+                                    <div className="relative w-64">
+                                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                                        <Input
+                                            placeholder="Search by name or phone..."
+                                            value={searchTerm}
+                                            onChange={e => setSearchTerm(e.target.value)}
+                                            className="pl-9"
+                                        />
+                                    </div>
+                                    <Input
+                                        type="date"
+                                        value={selectedDate}
+                                        max={todayStr}
+                                        onChange={e => setSelectedDate(e.target.value)}
+                                        className="w-40"
+                                    />
+                                    <Button variant="outline" className="font-bold" onClick={async () => {
+                                        showToast("Generating CSV...", "success");
+                                        const res = await exportPatientList(params.clinicSlug, selectedDate, selectedDate);
+                                        if (res.error) {
+                                            showToast(res.error, 'error');
+                                            return;
+                                        }
+                                        if (res.csv) {
+                                            const blob = new Blob(["\uFEFF", res.csv], { type: 'text/csv;charset=utf-8;' });
+                                            const url = URL.createObjectURL(blob);
+                                            const link = document.createElement("a");
+                                            const cleanClinicName = (res.clinicName || params.clinicSlug).replace(/[^a-z0-9]/gi, '_');
+                                            const cleanDate = selectedDate.replace(/-/g, '');
+                                            link.setAttribute("href", url);
+                                            link.setAttribute("download", `${cleanClinicName}_${cleanDate}.csv`);
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            document.body.removeChild(link);
+                                            URL.revokeObjectURL(url);
+                                            showToast("CSV Downloaded");
+                                        }
+                                    }}>
+                                        Export Log (CSV)
+                                    </Button>
+                                </div>
+                                <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                    Served: {totalServedCount}
+                                </div>
+                            </div>
+
+                            <div className="max-h-[400px] overflow-y-auto">
+                                {historyLoading ? (
+                                    <div className="py-20 flex justify-center"><Loader2 className="animate-spin" /></div>
+                                ) : (
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-[10px] font-bold sticky top-0">
+                                            <tr>
+                                                <th className="px-6 py-3">Token</th>
+                                                <th className="px-6 py-3">Patient</th>
+                                                <th className="px-6 py-3">Phone</th>
+                                                <th className="px-6 py-3">Feedback</th>
+                                                <th className="px-6 py-3 text-right">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                            {displayedTokens
+                                                .filter(t =>
+                                                    (t.customerName?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+                                                    (t.customerPhone || "").includes(searchTerm)
+                                                )
+                                                .map(t => (
+                                                    <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                                        <td className="px-6 py-4 font-mono font-bold">{formatToken(t.tokenNumber, t.isPriority)}</td>
+                                                        <td className="px-6 py-4 font-medium">{t.customerName || '—'}</td>
+                                                        <td className="px-6 py-4 text-slate-500">{t.customerPhone || '—'}</td>
+                                                        <td className="px-6 py-4 max-w-xs truncate italic text-orange-600">
+                                                            {t.feedback ? <>&ldquo;{t.feedback}&rdquo;</> : "—"}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <Badge variant="outline" className={cn("text-[9px] border-0",
+                                                                t.status === 'SERVED' ? "bg-emerald-50 text-emerald-600" :
+                                                                    t.status === 'CANCELLED' ? "bg-rose-50 text-rose-600 line-through" :
+                                                                        "bg-slate-100 text-slate-600"
+                                                            )}>
+                                                                {t.status}
+                                                            </Badge>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </Card>
+            </div>
+
+            {/* EDIT MODAL */}
             {editingToken && (
-                <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <Card className="bg-card border-border shadow-[0_32px_64px_rgba(0,0,0,0.2)] p-8 w-full max-w-sm rounded-[2rem] space-y-6 relative overflow-hidden">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
-                                <Pencil className="w-6 h-6" />
-                            </div>
-                            <h3 className="text-xl font-black tracking-tight">Modify Patient</h3>
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <Card className="w-full max-w-sm p-6 rounded-3xl shadow-2xl">
+                        <div className="flex items-center gap-3 mb-6">
+                            <Pencil className="text-blue-600" />
+                            <h3 className="text-xl font-bold">Edit Patient</h3>
                         </div>
-
-                        <div className="space-y-5">
-                            <div className="space-y-2">
-                                <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/60 ml-1">Identity</Label>
-                                <Input
-                                    value={editingToken.name}
-                                    onChange={e => setEditingToken(t => t ? { ...t, name: e.target.value } : null)}
-                                    className="h-12 bg-secondary/30 rounded-xl"
-                                    placeholder="Patient name"
-                                />
+                        <div className="space-y-4">
+                            <Input value={editingToken.name} onChange={e => setEditingToken({ ...editingToken, name: e.target.value })} placeholder="Name" />
+                            <Input value={editingToken.phone} onChange={e => setEditingToken({ ...editingToken, phone: e.target.value })} placeholder="Phone" />
+                            <div className="flex gap-2 pt-4">
+                                <Button variant="ghost" className="flex-1" onClick={() => setEditingToken(null)}>Cancel</Button>
+                                <Button className="flex-1 bg-blue-600" onClick={handleSaveEdit}>Save</Button>
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/60 ml-1">Communication</Label>
-                                <Input
-                                    value={editingToken.phone}
-                                    onChange={e => setEditingToken(t => t ? { ...t, phone: e.target.value } : null)}
-                                    className="h-12 bg-secondary/30 rounded-xl"
-                                    placeholder="Mobile number"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex gap-3 pt-4">
-                            <Button variant="ghost" className="flex-1 h-12 rounded-xl font-bold" onClick={() => setEditingToken(null)}>Cancel</Button>
-                            <Button className="flex-1 h-12 rounded-xl bg-primary font-black tracking-widest uppercase text-xs" disabled={actionLoading} onClick={handleSaveEdit}>
-                                {actionLoading ? <Loader2 className="animate-spin w-4 h-4" /> : "Authorize"}
-                            </Button>
                         </div>
                     </Card>
                 </div>
             )}
 
-            {/* NOTIFICATION LAYER */}
+            {/* TOAST */}
             {toast && (
                 <div className={cn(
-                    "fixed bottom-10 left-1/2 -translate-x-1/2 z-[300] px-6 py-4 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] border backdrop-blur-3xl animate-in slide-in-from-bottom-8 duration-500 flex items-center gap-4 min-w-[320px] justify-center transition-all",
-                    toast.type === 'success'
-                        ? "bg-emerald-500/90 dark:bg-emerald-600/90 border-emerald-400/30 text-white"
-                        : "bg-rose-500/90 dark:bg-rose-600/90 border-rose-400/30 text-white"
+                    "fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl shadow-2xl z-[100] animate-in slide-in-from-bottom-5",
+                    toast.type === 'success' ? "bg-slate-900 text-white" : "bg-red-600 text-white"
                 )}>
-                    <div className="w-2 h-2 rounded-full bg-white opacity-40 animate-ping" />
-                    <span className="font-black text-xs tracking-widest uppercase">{toast.message}</span>
+                    <span className="font-bold text-sm tracking-wide">{toast.message}</span>
                 </div>
             )}
         </div>
     );
 }
-

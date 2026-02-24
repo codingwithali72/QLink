@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+﻿import { Button } from "@/components/ui/button";
 import { XCircle, Phone } from "lucide-react";
 import { memo } from "react";
 import { cn } from "@/lib/utils";
@@ -7,6 +7,8 @@ import { Token } from "@/types/firestore";
 interface TokenItemProps {
     token: Token;
     onCancel: (id: string) => void;
+    // Per-token call loading ΓÇö only THIS token's Call button shows a spinner,
+    // not a global flag that would freeze NEXT/SKIP/ADD.
     isCallLoading?: boolean;
 }
 
