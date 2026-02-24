@@ -94,7 +94,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     // ── Generic action wrapper with optimistic UI support ───────────────────
     const performAction = async (
-        actionFn: () => Promise<{ error?: string;[key: string]: any }>,
+        actionFn: () => Promise<{ error?: string;[key: string]: unknown }>,
         setLoading: (v: boolean) => void,
         optimisticUpdate?: () => void,
         rollback?: () => void
@@ -175,7 +175,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             },
             () => setTokens(snapshot)
         );
-    }, [tokens, params.clinicSlug, performAction]);
+    }, [tokens, params.clinicSlug, performAction, setTokens]);
 
     const handleSkip = useCallback(() => {
         if (!servingToken) return;
@@ -186,7 +186,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             () => setTokens(prev => prev.map(t => t.id === servingToken.id ? { ...t, status: 'SKIPPED' } : t)),
             () => setTokens(snapshot)
         );
-    }, [servingToken, tokens, params.clinicSlug, performAction]);
+    }, [servingToken, tokens, params.clinicSlug, performAction, setTokens]);
 
     const handleEmergencyClick = () => {
         setManualIsPriority(true);
@@ -229,7 +229,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             () => setTokens(prev => prev.map(t => t.id === id ? { ...t, status: 'CANCELLED' } : t)),
             () => setTokens(snapshot)
         );
-    }, [tokens, params.clinicSlug, performAction]);
+    }, [tokens, params.clinicSlug, performAction, setTokens]);
 
     const handleManualAdd = async (e: React.FormEvent) => {
         e.preventDefault();
