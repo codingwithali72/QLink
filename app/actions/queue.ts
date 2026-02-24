@@ -728,13 +728,16 @@ export async function getDashboardData(clinicSlug: string) {
             if (t.patient_phone_encrypted) {
                 try {
                     decryptedPhone = decryptPhone(t.patient_phone_encrypted);
-                } catch {
+                } catch (e) {
+                    console.error('[getDashboardData] Decryption failed:', e);
                     decryptedPhone = "[decryption_error]";
                 }
             }
             return {
                 ...t,
-                patient_phone: decryptedPhone
+                patient_phone: decryptedPhone,
+                customerPhone: decryptedPhone, // Secondary mapping for UI components
+                customerName: t.patient_name     // Mapping for consistency
             };
         });
 
@@ -775,7 +778,8 @@ export async function getTokensForDate(clinicSlug: string, date: string) {
             if (t.patient_phone_encrypted) {
                 try {
                     decryptedPhone = decryptPhone(t.patient_phone_encrypted);
-                } catch {
+                } catch (e) {
+                    console.error('[getTokensForDate] Decryption failed:', e);
                     decryptedPhone = "[decryption_error]";
                 }
             }

@@ -292,9 +292,15 @@ export async function getAdminStats() {
 
     const { count: activeSessions } = await supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', todayStr).eq('status', 'OPEN');
     const { count: todayTokens } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).gte('created_at', istStart);
+    const { count: messagesToday } = await supabase.from('message_logs').select('id', { count: 'exact', head: true }).gte('created_at', istStart);
     const { count: totalMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true });
     const { count: failedMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true }).gte('created_at', istStart).in('status', ['FAILED', 'PERMANENTLY_FAILED']);
-    const { count: activeQueues } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).in('status', ['WAITING', 'SERVING']);
+
+    // VAPT Fix: Only count active tokens from TODAY to avoid ghost counts from abandoned sessions
+    const { count: activeQueuesToday } = await supabase.from('tokens')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['WAITING', 'SERVING'])
+        .gte('created_at', istStart);
 
     const businessesWithStats = (businesses || []).map(b => ({
         ...b,
@@ -306,8 +312,9 @@ export async function getAdminStats() {
         activeSessions: activeSessions || 0,
         todayTokens: todayTokens || 0,
         totalMessages: totalMessages || 0,
+        messagesToday: messagesToday || 0,
         failedMessagesToday: failedMessages || 0,
-        activeQueueTokens: activeQueues || 0,
+        activeQueueTokens: activeQueuesToday || 0,
     };
 }
 

@@ -37,6 +37,7 @@ export interface AdminStats {
     activeSessions: number;
     todayTokens: number;
     totalMessages: number;
+    messagesToday?: number;
     businesses: Business[];
     failedMessagesToday?: number;
     activeQueueTokens?: number;
@@ -206,9 +207,10 @@ export default function AdminPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-4">
                         {[
-                            { value: stats.activeSessions, label: 'Active Now', icon: <Activity className="w-5 h-5" />, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-                            { value: stats.todayTokens, label: 'Tokens Today', icon: <Users className="w-5 h-5" />, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                            { value: stats.totalMessages, label: 'Total Messages', icon: <MessageSquare className="w-5 h-5" />, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+                            { value: stats.activeSessions, label: 'Clinics Live', icon: <Activity className="w-5 h-5" />, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                            { value: stats.activeQueueTokens || 0, label: 'Queue Active', icon: <Users className="w-5 h-5" />, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+                            { value: stats.todayTokens, label: 'Tokens Today', icon: <TrendingUp className="w-5 h-5" />, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                            { value: stats.messagesToday || stats.totalMessages, label: 'Messages Today', icon: <MessageSquare className="w-5 h-5" />, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
                         ].map((item, idx) => (
                             <Card key={idx} className="px-5 py-3 border-border shadow-soft flex items-center gap-4 bg-card/50 backdrop-blur-sm">
                                 <div className={cn("p-2 rounded-lg", item.bg, item.color)}>{item.icon}</div>

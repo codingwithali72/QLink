@@ -138,7 +138,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     }, [tokens, displayedTokens, selectedDate, todayStr]);
 
     const activeTokensCount = useMemo(() => {
-        return tokens.filter(t => t.status !== 'SERVED' && t.status !== 'CANCELLED').length;
+        return tokens.filter(t => t.status === 'WAITING' || t.status === 'SERVING').length;
     }, [tokens]);
 
     const isLimitReached = dailyTokenLimit !== null && dailyTokenLimit > 0 && activeTokensCount >= dailyTokenLimit;
