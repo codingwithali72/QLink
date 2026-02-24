@@ -369,6 +369,17 @@ BEGIN
           AND  patient_phone_hash = p_phone_hash
           AND  status             IN ('WAITING', 'SERVING', 'SKIPPED', 'RECALLED', 'PAUSED')
         LIMIT 1;
+
+        IF FOUND THEN
+            RETURN json_build_object(
+                'success',               false,
+                'error',                 'You already have an active token in this session.',
+                'is_duplicate',          true,
+                'existing_token_id',     v_existing_token.id,
+                'existing_token_number', v_existing_token.token_number,
+                'existing_status',       v_existing_token.status
+            );
+        END IF;
     ELSIF p_phone IS NOT NULL AND TRIM(p_phone) != '' THEN
         -- Legacy path: deduplicate by plaintext phone
         SELECT id, token_number, status
@@ -378,17 +389,17 @@ BEGIN
           AND  patient_phone = p_phone
           AND  status        IN ('WAITING', 'SERVING', 'SKIPPED', 'RECALLED', 'PAUSED')
         LIMIT 1;
-    END IF;
 
-    IF FOUND THEN
-        RETURN json_build_object(
-            'success',               false,
-            'error',                 'You already have an active token in this session.',
-            'is_duplicate',          true,
-            'existing_token_id',     v_existing_token.id,
-            'existing_token_number', v_existing_token.token_number,
-            'existing_status',       v_existing_token.status
-        );
+        IF FOUND THEN
+            RETURN json_build_object(
+                'success',               false,
+                'error',                 'You already have an active token in this session.',
+                'is_duplicate',          true,
+                'existing_token_id',     v_existing_token.id,
+                'existing_token_number', v_existing_token.token_number,
+                'existing_status',       v_existing_token.status
+            );
+        END IF;
     END IF;
 
     -- 5. Atomically increment session counter
@@ -461,14 +472,21 @@ EXCEPTION
           AND  status IN ('WAITING', 'SERVING', 'SKIPPED', 'RECALLED', 'PAUSED')
         LIMIT 1;
 
-        RETURN json_build_object(
-            'success',               false,
-            'error',                 'You already have an active token in this session.',
-            'is_duplicate',          true,
-            'existing_token_id',     v_existing_token.id,
-            'existing_token_number', v_existing_token.token_number,
-            'existing_status',       v_existing_token.status
-        );
+        IF FOUND THEN
+            RETURN json_build_object(
+                'success',               false,
+                'error',                 'You already have an active token in this session.',
+                'is_duplicate',          true,
+                'existing_token_id',     v_existing_token.id,
+                'existing_token_number', v_existing_token.token_number,
+                'existing_status',       v_existing_token.status
+            );
+        ELSE
+            RETURN json_build_object(
+                'success', false,
+                'error',   'A token for this number already exists (conflict)'
+            );
+        END IF;
 END;
 $$;
 

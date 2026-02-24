@@ -368,14 +368,21 @@ EXCEPTION
           AND  status        IN ('WAITING', 'SERVING', 'SKIPPED', 'RECALLED', 'PAUSED')
         LIMIT 1;
 
-        RETURN json_build_object(
-            'success',               false,
-            'error',                 'You already have an active token in this session.',
-            'is_duplicate',          true,
-            'existing_token_id',     v_existing_token.id,
-            'existing_token_number', v_existing_token.token_number,
-            'existing_status',       v_existing_token.status
-        );
+        IF FOUND THEN
+            RETURN json_build_object(
+                'success',               false,
+                'error',                 'You already have an active token in this session.',
+                'is_duplicate',          true,
+                'existing_token_id',     v_existing_token.id,
+                'existing_token_number', v_existing_token.token_number,
+                'existing_status',       v_existing_token.status
+            );
+        ELSE
+            RETURN json_build_object(
+                'success', false,
+                'error',   'A token for this number already exists (conflict)'
+            );
+        END IF;
 END;
 $$;
 
