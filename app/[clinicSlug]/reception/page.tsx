@@ -103,6 +103,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         if (!isLogOpen) return;
         setHistoryOffset(0);
         fetchLog(false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDate, isLogOpen]);
 
     const displayedTokens = historyTokens;

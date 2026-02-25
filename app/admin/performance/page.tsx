@@ -23,13 +23,13 @@ export default function PerformanceTestPage() {
             const testSlugs = [];
             for (let i = 1; i <= 5; i++) {
                 const slug = `p-test-${i}-${Math.floor(Math.random() * 1000)}`;
-                await createBusiness({
-                    name: `Perf Test ${i}`,
+                await createBusiness(
+                    `Perf Test ${i}`,
                     slug,
-                    address: "Simulation Lab",
-                    phone: "1234567890",
-                    is_active: true
-                });
+                    "1234567890",
+                    `perf-${slug}@example.com`,
+                    "perf-password-123"
+                );
                 testSlugs.push(slug);
             }
 
@@ -60,8 +60,8 @@ export default function PerformanceTestPage() {
             ]);
             setStatus("Simulation complete.");
 
-        } catch (e: any) {
-            setStatus(`Error: ${e.message}`);
+        } catch (e: unknown) {
+            setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             setLoading(false);
         }
@@ -127,6 +127,6 @@ export default function PerformanceTestPage() {
 }
 
 // Minimal Tailwind helper since I can't import cn easily in this snippet context if it's not exported
-function cn(...classes: any[]) {
+function cn(...classes: unknown[]) {
     return classes.filter(Boolean).join(' ');
 }
