@@ -39,10 +39,10 @@
   }
 
   .dark {
-    --background: 0 0% 7%;
-    --foreground: 0 0% 92%;
+    --background: 0 0% 7%; /* #121212 */
+    --foreground: 0 0% 92%; /* #EAEAEA */
 
-    --card: 0 0% 12%;
+    --card: 0 0% 12%; /* #1E1E1E */
     --card-foreground: 0 0% 92%;
 
     --popover: 0 0% 7%;
@@ -63,7 +63,7 @@
     --destructive: 0 84% 44%;
     --destructive-foreground: 0 0% 92%;
 
-    --border: 0 0% 17%;
+    --border: 0 0% 17%; /* #2C2C2C is 0 0% 17% */
     --input: 0 0% 17%;
     --ring: 221 83% 53%;
   }

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, SkipForward, Users, AlertOctagon, LogOut, PlayCircle, Plus, RefreshCw, Moon, Sun, Calendar, ChevronDown, ChevronUp, Search, Pencil, AlertTriangle } from "lucide-react";
+import { Loader2, SkipForward, Users, AlertOctagon, LogOut, PlayCircle, Plus, RefreshCw, Moon, Sun, Calendar, ChevronDown, ChevronUp, Search, Pencil, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -117,10 +117,13 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         optimisticUpdate?: () => void,
         rollback?: () => void
     ) => {
-        if (Date.now() - lastActionTime < 500) return; // Debounce all queue mutations
+        if (Date.now() - lastActionTime < 300) return; // Debounce all queue mutations
         setLastActionTime(Date.now());
-        setLoading(true);
+
+        // INSTANT UI: Update local state before anything else
         if (optimisticUpdate) optimisticUpdate();
+
+        // Background the request
         try {
             const result = await actionFn();
             if (result && result.error) {
@@ -132,7 +135,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             console.error(e);
             showToast("Unexpected Error", 'error');
         } finally {
-            setLoading(false);
+            // Optional: small delay before clearing loading state to prevent double-clicks
+            setTimeout(() => setLoading(false), 200);
         }
     };
 
@@ -260,26 +264,31 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         }
 
         setAddLoading(true);
-        const res = await createToken(params.clinicSlug, manualPhone, manualName, manualIsPriority);
-        if (res.error) {
-            if (res.is_duplicate) {
-                showToast(`Token #${res.existing_token_number} already exists`, 'error');
-                setIsAddModalOpen(false);
-            } else if (res.limit_reached) {
-                showToast(`Daily limit reached`, 'error');
+        try {
+            const res = await createToken(params.clinicSlug, manualPhone, manualName, manualIsPriority);
+            if (res.error) {
+                if (res.is_duplicate) {
+                    showToast(`Token #${res.existing_token_number} already active`, 'error');
+                } else if (res.limit_reached) {
+                    showToast(`Daily limit reached`, 'error');
+                } else {
+                    showToast(res.error, 'error');
+                }
                 setIsAddModalOpen(false);
             } else {
-                showToast(res.error, 'error');
+                setIsAddModalOpen(false);
+                setManualName("");
+                setManualPhone("");
+                setManualIsPriority(false);
+                // Background refresh
+                refresh();
+                showToast("Token Created", "success");
             }
-        } else {
-            setIsAddModalOpen(false);
-            setManualName("");
-            setManualPhone("");
-            setManualIsPriority(false);
-            refresh();
-            showToast("Token Created");
+        } catch (err) {
+            showToast("Failed to create token", "error");
+        } finally {
+            setAddLoading(false);
         }
-        setAddLoading(false);
     };
 
     const handleSaveEdit = async () => {
@@ -347,7 +356,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             )}
 
             {/* HEADER */}
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 md:p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 mb-6">
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-card text-card-foreground p-3 md:p-4 rounded-2xl shadow-sm border border-border mb-6">
                 <div className="flex items-center gap-3 md:gap-4">
                     <div className="h-10 w-10 md:h-12 md:w-12 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-xl md:text-2xl shadow-lg shadow-blue-500/30">Q</div>
                     <div>
@@ -412,21 +421,19 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <Button
                             onClick={handleNext}
-                            disabled={nextLoading || !isSessionActive || (waitingTokens.length === 0 && !servingToken)}
-                            className="col-span-2 h-24 text-2xl font-black rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-2 border-slate-200 dark:border-slate-800 hover:bg-slate-50 shadow-sm"
+                            disabled={!isSessionActive || (waitingTokens.length === 0 && !servingToken)}
+                            className="col-span-2 h-24 text-2xl font-black rounded-2xl bg-card text-card-foreground border-2 border-border hover:bg-accent shadow-sm active:scale-[0.98] transition-all"
                         >
-                            {nextLoading ? <Loader2 className="animate-spin w-8 h-8" /> : (
-                                <div className="flex items-center gap-3">
-                                    <PlayCircle className="w-8 h-8 text-blue-600" />
-                                    <span>{waitingTokens.length === 0 && servingToken ? "FINISH" : "NEXT PATIENT"}</span>
-                                </div>
-                            )}
+                            <div className="flex items-center gap-3">
+                                {nextLoading ? <Loader2 className="animate-spin w-8 h-8 text-blue-600" /> : <PlayCircle className="w-8 h-8 text-blue-600" />}
+                                <span>{waitingTokens.length === 0 && servingToken ? "FINISH" : "NEXT PATIENT"}</span>
+                            </div>
                         </Button>
                         <Button
                             variant="outline"
                             onClick={handleSkip}
-                            disabled={!servingToken || skipLoading || !isSessionActive}
-                            className="h-24 flex flex-col gap-2 rounded-2xl border-2 border-slate-200 dark:border-slate-800"
+                            disabled={!servingToken || !isSessionActive}
+                            className="h-24 flex flex-col gap-2 rounded-2xl border-2 border-border bg-card text-card-foreground hover:bg-accent active:scale-[0.98] transition-all"
                         >
                             {skipLoading ? <Loader2 className="animate-spin w-6 h-6" /> : <SkipForward className="w-6 h-6" />}
                             <span className="font-bold text-xs uppercase tracking-widest">Skip</span>
@@ -434,8 +441,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         <Button
                             variant="destructive"
                             onClick={handleEmergencyClick}
-                            disabled={actionLoading || !isSessionActive}
-                            className="h-24 flex flex-col gap-2 rounded-2xl bg-red-600 hover:bg-red-700"
+                            disabled={!isSessionActive}
+                            className="h-24 flex flex-col gap-2 rounded-2xl bg-red-600 hover:bg-red-700 active:scale-[0.98] transition-all"
                         >
                             <AlertOctagon className="w-6 h-6" />
                             <span className="font-bold text-xs uppercase tracking-widest">Urgent</span>
@@ -481,27 +488,27 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     </Dialog>
 
                     {/* WAITING LIST */}
-                    <Card className="flex flex-col h-[500px] border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b flex justify-between items-center">
-                            <h3 className="font-bold text-slate-700 dark:text-slate-300">Queue</h3>
+                    <Card className="flex flex-col h-[500px] border-border rounded-2xl overflow-hidden shadow-sm bg-card">
+                        <div className="p-4 bg-muted border-b flex justify-between items-center">
+                            <h3 className="font-bold text-foreground">Queue</h3>
                             <Badge className="bg-blue-600 text-white">{waitingTokens.length}</Badge>
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-2">
                             {visibleWaitingTokens.map(t => (
                                 <TokenItem key={t.id} token={t} onCancel={handleCancelToken} />
                             ))}
-                            {visibleWaitingTokens.length === 0 && <div className="text-center py-20 text-slate-400">Box is empty</div>}
+                            {visibleWaitingTokens.length === 0 && <div className="text-center py-20 text-muted-foreground">Box is empty</div>}
                         </div>
                     </Card>
 
                     {/* SKIPPED */}
                     {skippedTokens.length > 0 && (
-                        <Card className="p-2 border-slate-200 dark:border-slate-800 rounded-2xl">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-2">Skipped Today</div>
+                        <Card className="p-2 border-border rounded-2xl bg-card">
+                            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 px-2">Skipped Today</div>
                             <div className="space-y-1">
                                 {skippedTokens.map(t => (
-                                    <div key={t.id} className="flex justify-between items-center p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800">
-                                        <span className="font-mono font-bold text-sm tracking-tighter">{formatToken(t.tokenNumber, t.isPriority)}</span>
+                                    <div key={t.id} className="flex justify-between items-center p-2 rounded-lg hover:bg-accent">
+                                        <span className="font-mono font-bold text-sm tracking-tighter text-foreground">{formatToken(t.tokenNumber, t.isPriority)}</span>
                                         <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-600" onClick={() => handleRecall(t.id)}>Recall</Button>
                                     </div>
                                 ))}
@@ -513,17 +520,17 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
             {/* SESSION LOG (Bottom) */}
             <div className="mt-8">
-                <Card className="border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                <Card className="border-border rounded-2xl overflow-hidden shadow-sm bg-card">
                     <div
-                        className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900"
+                        className="p-4 flex justify-between items-center cursor-pointer hover:bg-accent"
                         onClick={() => setIsLogOpen(!isLogOpen)}
                     >
                         <div className="flex items-center gap-2">
-                            <Users className="w-5 h-5 text-slate-400" />
-                            <h3 className="font-bold text-slate-700 dark:text-slate-300">Daily Patient Log</h3>
-                            <Badge variant="outline" className="ml-2">{displayedTokens.length}</Badge>
+                            <Users className="w-5 h-5 text-muted-foreground" />
+                            <h3 className="font-bold text-card-foreground">Daily Patient Log</h3>
+                            <Badge variant="outline" className="ml-2 border-border">{displayedTokens.length}</Badge>
                         </div>
-                        {isLogOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                        {isLogOpen ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
                     </div>
 
                     {isLogOpen && (

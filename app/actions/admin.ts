@@ -279,11 +279,22 @@ export async function getAdminStats() {
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const istStart = new Date(`${todayStr}T00:00:00+05:30`).toISOString();
 
-    // 2. Get today's token counts per business (join with sessions to enforce session_date = today)
+    // 2. Get today's token counts per business (strictly filtered by session date)
+    const { data: sessionData } = await supabase
+        .from('sessions')
+        .select('business_id, id')
+        .eq('date', todayStr);
+
+    const sessionIds = (sessionData || []).map(s => s.id);
+    const businessToSessionMap = (sessionData || []).reduce((acc: Record<string, string>, s) => {
+        acc[s.business_id] = s.id;
+        return acc;
+    }, {});
+
     const { data: tokenCounts } = await supabase
         .from('tokens')
-        .select('business_id, sessions!inner(date)')
-        .eq('sessions.date', todayStr);
+        .select('business_id, id')
+        .in('session_id', sessionIds);
 
     const countMap = (tokenCounts || []).reduce((acc: Record<string, number>, t) => {
         acc[t.business_id] = (acc[t.business_id] || 0) + 1;
@@ -291,16 +302,24 @@ export async function getAdminStats() {
     }, {});
 
     const { count: activeSessions } = await supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', todayStr).eq('status', 'OPEN');
-    const { count: todayTokens } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('sessions.date', todayStr);
+
+    // Total tokens across all clinics today
+    const { count: todayTokens } = tokenCounts ? { count: tokenCounts.length } : { count: 0 };
+
     const { count: messagesToday } = await supabase.from('message_logs').select('id', { count: 'exact', head: true }).gte('created_at', istStart);
     const { count: totalMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true });
-    const { count: failedMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true }).gte('created_at', istStart).in('status', ['FAILED', 'PERMANENTLY_FAILED']);
 
-    // VAPT Fix: Only count active tokens from TODAY to avoid ghost counts from abandoned sessions
+    // Failed messages strictly from today
+    const { count: failedMessages } = await supabase.from('message_logs')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', istStart)
+        .in('status', ['FAILED', 'PERMANENTLY_FAILED']);
+
+    // Active tokens across all clinics today
     const { count: activeQueuesToday } = await supabase.from('tokens')
         .select('id', { count: 'exact', head: true })
-        .in('status', ['WAITING', 'SERVING'])
-        .gte('created_at', istStart);
+        .in('session_id', sessionIds)
+        .in('status', ['WAITING', 'SERVING']);
 
     const businessesWithStats = (businesses || []).map(b => ({
         ...b,

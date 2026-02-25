@@ -26,6 +26,7 @@ export type Session = {
     startTime: string | null;
     endTime: string | null;
     dailyTokenCount: number;
+    nowServingNumber: number;
     createdAt: string;
 };
 
@@ -47,7 +48,7 @@ export type AuditLog = {
     id: string;
     businessId: string;
     staffId: string;
-    action: 'NEXT' | 'ADD' | 'SKIP' | 'CANCEL' | 'PAUSE' | 'RESUME' | 'EMERGENCY' | 'UNDO';
+    action: 'NEXT' | 'ADD' | 'SKIP' | 'CANCEL' | 'PAUSE' | 'RESUME' | 'EMERGENCY';
     details: any;
     createdAt: string;
 };

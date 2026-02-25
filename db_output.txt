@@ -1,0 +1,70 @@
+[dotenv@17.2.4] injecting env (13) from .env.local -- tip: ⚙️  override existing env vars with { override: true }
+--- FETCHING BUSINESSES ---
+Businesses: [
+  {
+    "id": "a6736bf9-a24f-4f63-ab9f-c0fc448cb3ef",
+    "name": "Hussain",
+    "slug": "Prime-care",
+    "is_active": true
+  },
+  {
+    "id": "edb5b589-4be1-45bb-94f5-66cb1b809a7d",
+    "name": "Ali",
+    "slug": "we-care",
+    "is_active": true
+  }
+]
+
+--- FETCHING RECENT SESSIONS ---
+Sessions: [
+  {
+    "id": "e5bedad3-d2f1-4b0c-9c7c-9a3b7667bfe7",
+    "business_id": "a6736bf9-a24f-4f63-ab9f-c0fc448cb3ef",
+    "date": "2026-02-25",
+    "status": "OPEN",
+    "last_token_number": 5,
+    "now_serving_number": 5,
+    "created_at": "2026-02-24T19:22:42.695367+00:00",
+    "closed_at": null
+  },
+  {
+    "id": "e29ba7ef-c9d3-4554-bab6-a2b4b0455909",
+    "business_id": "edb5b589-4be1-45bb-94f5-66cb1b809a7d",
+    "date": "2026-02-25",
+    "status": "OPEN",
+    "last_token_number": 20,
+    "now_serving_number": 13,
+    "created_at": "2026-02-24T19:22:50.128476+00:00",
+    "closed_at": null
+  },
+  {
+    "id": "f80a81ee-d62c-4b95-a711-f6fce49b1fde",
+    "business_id": "edb5b589-4be1-45bb-94f5-66cb1b809a7d",
+    "date": "2026-02-24",
+    "status": "OPEN",
+    "last_token_number": 16,
+    "now_serving_number": 15,
+    "created_at": "2026-02-23T19:07:39.445079+00:00",
+    "closed_at": null
+  },
+  {
+    "id": "c106fd1a-f0ea-42f9-a47e-1146182e7e65",
+    "business_id": "a6736bf9-a24f-4f63-ab9f-c0fc448cb3ef",
+    "date": "2026-02-24",
+    "status": "OPEN",
+    "last_token_number": 5,
+    "now_serving_number": 5,
+    "created_at": "2026-02-23T18:59:31.90899+00:00",
+    "closed_at": null
+  },
+  {
+    "id": "56a953c5-8e83-42e9-9445-60295e7d0fcc",
+    "business_id": "edb5b589-4be1-45bb-94f5-66cb1b809a7d",
+    "date": "2026-02-22",
+    "status": "OPEN",
+    "last_token_number": 8,
+    "now_serving_number": 8,
+    "created_at": "2026-02-22T16:37:55.771571+00:00",
+    "closed_at": null
+  }
+]

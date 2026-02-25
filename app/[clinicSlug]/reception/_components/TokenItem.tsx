@@ -17,23 +17,23 @@ export const TokenItem = memo(function TokenItem({ token, onCancel }: TokenItemP
         <div className={cn(
             "p-3 rounded-xl flex items-center justify-between group transition-colors",
             token.isPriority
-                ? "bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30"
-                : "bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800"
+                ? "bg-destructive/10 border border-destructive/20"
+                : "bg-accent/50 hover:bg-accent border border-transparent"
         )}>
             <div className="flex items-center gap-3">
                 <div className={cn(
                     "w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm",
                     token.isPriority
-                        ? "bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-200"
-                        : "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                        ? "bg-destructive text-destructive-foreground"
+                        : "bg-card text-card-foreground shadow-sm"
                 )}>
                     {formatToken(token.tokenNumber, token.isPriority)}
                 </div>
                 <div>
-                    <p className="font-bold text-sm text-slate-900 dark:text-slate-200 truncate max-w-[120px]">
+                    <p className="font-bold text-sm text-foreground truncate max-w-[120px]">
                         {token.customerName}
                     </p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                    <p className="text-[10px] text-muted-foreground font-mono">
                         {token.customerPhone}
                     </p>
                 </div>

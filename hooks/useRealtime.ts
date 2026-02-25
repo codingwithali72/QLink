@@ -52,18 +52,35 @@ export function useClinicRealtime(clinicSlug: string) {
                 setBusinessId(res.businessId);
             }
 
-            // STABILIZATION: Ignore server results for 1.5s after a local action
+            // STABILIZATION: Ignore server results for 2.5s after a local action
             // to allow DB replication/caching to settle and prevent "ghost" state flicker.
-            if (Date.now() - lastActionRef.current > 1500) {
+            const timeSinceLastAction = Date.now() - lastActionRef.current;
+            if (timeSinceLastAction > 2500) {
                 if (res.session) {
                     const mappedSession = mapSession(res.session);
+
+                    // Versioning check: If incoming session has a lower now_serving than our current state,
+                    // it's likely a stale broadcast from a replica. Ignore it.
                     setSession(prev => {
-                        if (JSON.stringify(prev) !== JSON.stringify(mappedSession)) return mappedSession;
-                        return prev;
+                        if (prev && mappedSession.nowServingNumber < prev.nowServingNumber) {
+                            console.log("Ignoring stale session data (now_serving fallback)");
+                            return prev;
+                        }
+                        return mappedSession;
                     });
 
                     if (res.tokens) {
-                        setTokens(res.tokens.map(mapToken));
+                        const mappedTokens = res.tokens.map(mapToken);
+                        setTokens(prev => {
+                            // If we have more served tokens in current state than the incoming fetch, ignore the fetch.
+                            const currentServed = prev.filter(t => t.status === 'SERVED').length;
+                            const incomingServed = mappedTokens.filter(t => t.status === 'SERVED').length;
+                            if (incomingServed < currentServed && timeSinceLastAction < 5000) {
+                                console.log("Ignoring stale token data (served_count fallback)");
+                                return prev;
+                            }
+                            return mappedTokens;
+                        });
                     } else {
                         setTokens([]);
                     }
@@ -210,6 +227,7 @@ function mapSession(s: any): Session {
         startTime: s.start_time,
         endTime: s.end_time,
         dailyTokenCount: s.daily_token_count,
+        nowServingNumber: s.now_serving_number || 0,
         createdAt: s.created_at
     };
 }
