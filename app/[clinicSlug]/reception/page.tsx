@@ -27,7 +27,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     // ── Per-action loading flags ────────────────────────────────────────────────
     const [nextLoading, setNextLoading] = useState(false);
     const [skipLoading, setSkipLoading] = useState(false);
-    const [pauseLoading, setPauseLoading] = useState(false);
+    const [, setPauseLoading] = useState(false);
     const [addLoading, setAddLoading] = useState(false);
 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
