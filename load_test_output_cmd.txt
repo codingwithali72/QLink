@@ -1,0 +1,13 @@
+[dotenv@17.2.4] injecting env (13) from .env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+🔥 INITIATING PHASE 2/3/5/18 CHAOS TEST
+✅ Session ID secured: 846a3441-b951-4087-9c1c-44039ef69a0b
+🚀 FIRING 100 SIMULTANEOUS TOKEN CREATIONS (RACE CONDITION BARRAGE)...
+C:\Users\ASUS\OneDrive\Desktop\qless\scripts\load-test.js:58
+            }).catch(err => ({ error: err }))
+                    ^
+
+TypeError: supabase.rpc(...).catch is not a function
+    at runChaosTest (C:\Users\ASUS\OneDrive\Desktop\qless\scripts\load-test.js:58:21)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+
+Node.js v22.18.0

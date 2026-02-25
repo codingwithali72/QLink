@@ -117,7 +117,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         optimisticUpdate?: () => void,
         rollback?: () => void
     ) => {
-        if (Date.now() - lastActionTime < 300) return; // Debounce all queue mutations
+        if (Date.now() - lastActionTime < 500) return; // Debounce all queue mutations (Chaos Test proven)
         setLastActionTime(Date.now());
 
         // INSTANT UI: Update local state before anything else
@@ -274,6 +274,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 } else {
                     showToast(res.error, 'error');
                 }
+                setManualName("");
+                setManualPhone("");
+                setManualIsPriority(false);
                 setIsAddModalOpen(false);
             } else {
                 setIsAddModalOpen(false);
@@ -469,7 +472,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 <div className="xl:col-span-4 space-y-6">
                     <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                         <DialogTrigger asChild>
-                            <Button disabled={!isSessionActive || isLimitReached} className="w-full h-16 bg-slate-900 text-white rounded-2xl text-lg font-bold shadow-lg">
+                            <Button disabled={!isSessionActive || isLimitReached} className="w-full h-16 bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white rounded-2xl text-lg font-bold shadow-lg">
                                 <Plus className="mr-2" /> Add Walk-in
                             </Button>
                         </DialogTrigger>
