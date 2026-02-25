@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, SkipForward, Users, AlertOctagon, LogOut, PlayCircle, Plus, RefreshCw, Moon, Sun, Calendar, ChevronDown, ChevronUp, Search, Pencil, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Loader2, SkipForward, Users, AlertOctagon, LogOut, PlayCircle, Plus, RefreshCw, Moon, Sun, Calendar, ChevronDown, ChevronUp, Search, Pencil, AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -29,7 +29,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const [skipLoading, setSkipLoading] = useState(false);
     const [pauseLoading, setPauseLoading] = useState(false);
     const [addLoading, setAddLoading] = useState(false);
-    const actionLoading = nextLoading || skipLoading || pauseLoading || addLoading;
+
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
 
@@ -284,7 +284,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 refresh();
                 showToast("Token Created", "success");
             }
-        } catch (err) {
+        } catch {
             showToast("Failed to create token", "error");
         } finally {
             setAddLoading(false);

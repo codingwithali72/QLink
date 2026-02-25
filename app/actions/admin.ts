@@ -286,10 +286,6 @@ export async function getAdminStats() {
         .eq('date', todayStr);
 
     const sessionIds = (sessionData || []).map(s => s.id);
-    const businessToSessionMap = (sessionData || []).reduce((acc: Record<string, string>, s) => {
-        acc[s.business_id] = s.id;
-        return acc;
-    }, {});
 
     const { data: tokenCounts } = await supabase
         .from('tokens')
