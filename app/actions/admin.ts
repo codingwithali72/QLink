@@ -279,11 +279,11 @@ export async function getAdminStats() {
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const istStart = new Date(`${todayStr}T00:00:00+05:30`).toISOString();
 
-    // 2. Get today's token counts per business
+    // 2. Get today's token counts per business (join with sessions to enforce session_date = today)
     const { data: tokenCounts } = await supabase
         .from('tokens')
-        .select('business_id')
-        .gte('created_at', istStart);
+        .select('business_id, sessions!inner(date)')
+        .eq('sessions.date', todayStr);
 
     const countMap = (tokenCounts || []).reduce((acc: Record<string, number>, t) => {
         acc[t.business_id] = (acc[t.business_id] || 0) + 1;
@@ -291,7 +291,7 @@ export async function getAdminStats() {
     }, {});
 
     const { count: activeSessions } = await supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', todayStr).eq('status', 'OPEN');
-    const { count: todayTokens } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).gte('created_at', istStart);
+    const { count: todayTokens } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('sessions.date', todayStr);
     const { count: messagesToday } = await supabase.from('message_logs').select('id', { count: 'exact', head: true }).gte('created_at', istStart);
     const { count: totalMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true });
     const { count: failedMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true }).gte('created_at', istStart).in('status', ['FAILED', 'PERMANENTLY_FAILED']);
@@ -356,12 +356,17 @@ export async function getAnalytics(dateFrom?: string, dateTo?: string) {
         : null;
     const timeSavedHours = timeSavedMins !== null ? Math.floor(timeSavedMins / 60) : null;
 
+    const ratedDays = rows.filter(r => (r.avg_rating || 0) > 0);
+    const avgRating = ratedDays.length > 0
+        ? Number((ratedDays.reduce((acc, row) => acc + (row.avg_rating || 0), 0) / ratedDays.length).toFixed(1))
+        : null;
+
     return {
         totalCreated,
         totalServed,
         totalCancelled,
         totalSkipped,
-        avgRating: null, // Ratings not aggregated at platform level for performance
+        avgRating,
         avgWaitMins,
         timeSavedMins,
         timeSavedLabel: timeSavedMins === null

@@ -1,7 +1,7 @@
 "use client";
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
-import { nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, undoLastAction, updateToken } from "@/app/actions/queue";
+import { nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, updateToken } from "@/app/actions/queue";
 import { exportPatientList } from "@/app/actions/export";
 import { isValidIndianPhone } from "@/lib/phone";
 import { logout } from "@/app/actions/auth";
@@ -108,12 +108,16 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const displayedTokens = historyTokens;
 
     // ── Generic action wrapper ───────────────────────────────────────────────
+    const [lastActionTime, setLastActionTime] = useState(0);
+
     const performAction = async (
         actionFn: () => Promise<{ error?: string;[key: string]: unknown }>,
         setLoading: (v: boolean) => void,
         optimisticUpdate?: () => void,
         rollback?: () => void
     ) => {
+        if (Date.now() - lastActionTime < 500) return; // Debounce all queue mutations
+        setLastActionTime(Date.now());
         setLoading(true);
         if (optimisticUpdate) optimisticUpdate();
         try {
@@ -196,15 +200,14 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     };
 
     const handleEmergencyClick = () => {
+        if (addLoading) return;
         setManualIsPriority(true);
         setManualName("");
         setManualPhone("0000000000");
         setIsAddModalOpen(true);
     };
 
-    const handleUndo = () => {
-        performAction(() => undoLastAction(params.clinicSlug), setNextLoading);
-    };
+
 
     const handlePauseToggle = () => {
         if (!session) return;
@@ -243,6 +246,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
     const handleManualAdd = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (addLoading) return;
+
         if (manualPhone.trim() !== "" && manualPhone !== "0000000000") {
             if (!isValidIndianPhone(manualPhone)) {
                 showToast("Please enter a valid 10-digit Indian mobile number", 'error');
@@ -440,7 +445,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     <div className="grid grid-cols-3 gap-4">
                         {isSessionActive ? (
                             <>
-                                <Button variant="outline" onClick={handleUndo} className="h-16 font-bold rounded-2xl border-2">Undo</Button>
+
                                 <Button variant="outline" onClick={handlePauseToggle} className="h-16 font-bold rounded-2xl border-2">
                                     {session?.status === 'OPEN' ? 'Pause' : 'Resume'}
                                 </Button>

@@ -26,6 +26,12 @@ export function useClinicRealtime(clinicSlug: string) {
     const pollingInterval = useRef<NodeJS.Timeout | null>(null);
     const fetchTimeout = useRef<NodeJS.Timeout | null>(null);
 
+    const lastActionRef = useRef<number>(0);
+    const setOptimisticTokens = useCallback((newTokens: Token[] | ((prev: Token[]) => Token[])) => {
+        lastActionRef.current = Date.now();
+        setTokens(newTokens);
+    }, []);
+
     // Fetch Function - single round trip now fetches mapping + data + limits
     const fetchData = useCallback(async () => {
         if (!clinicSlug) return;
@@ -46,21 +52,25 @@ export function useClinicRealtime(clinicSlug: string) {
                 setBusinessId(res.businessId);
             }
 
-            if (res.session) {
-                const mappedSession = mapSession(res.session);
-                setSession(prev => {
-                    if (JSON.stringify(prev) !== JSON.stringify(mappedSession)) return mappedSession;
-                    return prev;
-                });
+            // STABILIZATION: Ignore server results for 1.5s after a local action
+            // to allow DB replication/caching to settle and prevent "ghost" state flicker.
+            if (Date.now() - lastActionRef.current > 1500) {
+                if (res.session) {
+                    const mappedSession = mapSession(res.session);
+                    setSession(prev => {
+                        if (JSON.stringify(prev) !== JSON.stringify(mappedSession)) return mappedSession;
+                        return prev;
+                    });
 
-                if (res.tokens) {
-                    setTokens(res.tokens.map(mapToken));
+                    if (res.tokens) {
+                        setTokens(res.tokens.map(mapToken));
+                    } else {
+                        setTokens([]);
+                    }
                 } else {
+                    setSession(null);
                     setTokens([]);
                 }
-            } else {
-                setSession(null);
-                setTokens([]);
             }
 
             setError(null);
@@ -130,20 +140,16 @@ export function useClinicRealtime(clinicSlug: string) {
     }, [businessId, debouncedFetch, fetchData, supabase]);
 
     // Adaptive Polling Fallback
-    // When Realtime is active, polling is entirely suspended (0 network traffic overhead).
-    // When Realtime drops (WiFi swap, sleep wakeup, corporate firewall blocking WS), polling activates at 3s intervals.
     useEffect(() => {
         if (!businessId) return;
 
         let failCount = 0;
 
-        // If connected to websockets, we don't need to poll at all.
         if (isConnected) {
             if (pollingInterval.current) clearTimeout(pollingInterval.current);
             return;
         }
 
-        // When disconnected: Aggressive 3s fallback polling for sub-500ms feel even offline
         const BASE_INTERVAL = 3000;
         const MAX_INTERVAL = 30000;
 
@@ -183,9 +189,7 @@ export function useClinicRealtime(clinicSlug: string) {
         };
     }, [businessId, fetchData, isConnected]);
 
-    // Offline Sync - passing businessId explicitly if needed, but keeping simple for now
-    // Note: useOfflineSync might need updates if it relies on old types
-    const { saveToLocal, readFromLocal } = useOfflineSync(clinicSlug);
+    const { saveToLocal } = useOfflineSync(clinicSlug);
 
     useEffect(() => {
         if (session && tokens.length > 0) {
@@ -193,24 +197,7 @@ export function useClinicRealtime(clinicSlug: string) {
         }
     }, [session, tokens, saveToLocal]);
 
-    // NOTE: Disabled offline cache loading to prevent stale ghost tokens
-    // The server action polling is the single source of truth
-    // useEffect(() => {
-    //     async function loadLocal() {
-    //         const localData = await readFromLocal();
-    //         if (localData && loading) {
-    //             setSession(localData.session);
-    //             setTokens(localData.tokens);
-    //             setLastUpdated(new Date(localData.lastUpdated));
-    //             setLoading(false);
-    //         }
-    //     }
-    //     loadLocal();
-    // }, [readFromLocal]);
-
-    // Export setTokens/setSession for optimistic UI updates in the calling component.
-    // The page applies local state immediately, then realtime subscription reconciles with truth.
-    return { session, tokens, loading, error, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit, setTokens, setSession };
+    return { session, tokens, loading, error, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit, setTokens: setOptimisticTokens, setSession };
 }
 
 // Mappers

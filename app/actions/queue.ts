@@ -296,7 +296,8 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
         const source = actualStaffId ? 'receptionist' : 'qr';
 
         if (phoneHash || cleanPhone) {
-            await supabase.from('patient_consent_logs').insert({
+            // Non-blocking compliance log
+            supabase.from('patient_consent_logs').insert({
                 clinic_id: business.id,
                 phone_hash: phoneHash || hashPhone(cleanPhone || 'emergency'),
                 consent_text_version: 'v1.0-2026-02-24',
@@ -310,9 +311,8 @@ export async function createToken(clinicSlug: string, phone: string, name: strin
             });
         }
 
-        // Audit
-        // If created by staff, log 'ADD_TOKEN'. If public, log 'JOIN_QR'.
-        await logAudit(business.id, actualStaffId ? 'ADD_TOKEN' : 'JOIN_QR', { token_no: token.token_number, priority: isPriority });
+        // Audit handled inside create_token_atomic RPC (Section 8 of migration)
+        // Redundant logAudit(business.id, ...) removed to save 200ms roundtrip.
 
         // WhatsApp (Decoupled to Background Queue to avoid blocking DB transactions on High API latency)
         if (cleanPhone) {
@@ -530,10 +530,7 @@ export async function cancelToken(clinicSlug: string, tokenId: string) {
     return processQueueAction(clinicSlug, 'CANCEL', tokenId);
 }
 
-// 7. UNDO (New)
-export async function undoLastAction(clinicSlug: string) {
-    return processQueueAction(clinicSlug, 'UNDO');
-}
+
 
 // 8. PUBLIC TRACKING (Replaces Realtime)
 export async function getPublicTokenStatus(tokenId: string) {
