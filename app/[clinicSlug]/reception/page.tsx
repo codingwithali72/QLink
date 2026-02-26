@@ -1,7 +1,7 @@
 "use client";
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
-import { nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, updateToken } from "@/app/actions/queue";
+import { nextPatient, skipToken, cancelToken, recallToken, pauseQueue, resumeQueue, createToken, closeQueue, startSession, getTokensForDate, updateToken, toggleArrivalStatus } from "@/app/actions/queue";
 import { exportPatientList } from "@/app/actions/export";
 import { isValidIndianPhone } from "@/lib/phone";
 import { logout } from "@/app/actions/auth";
@@ -245,6 +245,16 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             () => cancelToken(params.clinicSlug, id),
             setSkipLoading,
             () => setTokens(prev => prev.map(t => t.id === id ? { ...t, status: 'CANCELLED' } : t)),
+            () => setTokens(snapshot)
+        );
+    };
+
+    const handleToggleArrived = (id: string, isArrived: boolean) => {
+        const snapshot = tokens;
+        performAction(
+            () => toggleArrivalStatus(params.clinicSlug, id, isArrived),
+            setNextLoading,
+            () => setTokens(prev => prev.map(t => t.id === id ? { ...t, isArrived, status: 'WAITING', graceExpiresAt: null } : t)),
             () => setTokens(snapshot)
         );
     };
@@ -498,7 +508,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-2">
                             {visibleWaitingTokens.map(t => (
-                                <TokenItem key={t.id} token={t} onCancel={handleCancelToken} />
+                                <TokenItem key={t.id} token={t} onCancel={handleCancelToken} onToggleArrived={handleToggleArrived} />
                             ))}
                             {visibleWaitingTokens.length === 0 && <div className="text-center py-20 text-muted-foreground">Box is empty</div>}
                         </div>

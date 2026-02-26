@@ -692,6 +692,39 @@ async function updateSessionStatus(slug: string, status: 'OPEN' | 'CLOSED' | 'PA
 }
 
 
+// 8.5 Toggle Arrival Status
+export async function toggleArrivalStatus(clinicSlug: string, tokenId: string, isArrived: boolean) {
+    if (!tokenId || !clinicSlug) return { error: "Missing data" };
+    try {
+        const user = await getAuthenticatedUser();
+        if (!user) return { error: "Unauthorized" };
+
+        const supabase = createAdminClient();
+        const business = await getBusinessBySlug(clinicSlug);
+        if (!business) return { error: "Business not found" };
+
+        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized: You do not have access to this clinic." };
+
+        const { error } = await supabase
+            .from('tokens')
+            .update({
+                is_arrived: isArrived,
+                arrived_at: isArrived ? new Date().toISOString() : null,
+                grace_expires_at: null, // Clear any grace periods
+                status: isArrived ? 'WAITING' : 'WAITING' // Always normal wait status on manual toggle
+            })
+            .eq('id', tokenId)
+            .eq('business_id', business.id)
+
+        if (error) throw error;
+        await logAudit(business.id, 'ARRIVAL_TOGGLED', { token_id: tokenId, is_arrived: isArrived });
+        revalidatePath(`/${clinicSlug}`);
+        return { success: true };
+    } catch (e) {
+        return { error: (e as Error).message };
+    }
+}
+
 export async function getDashboardData(clinicSlug: string) {
     const supabase = createAdminClient();
     try {
@@ -725,6 +758,7 @@ export async function getDashboardData(clinicSlug: string) {
         const { data: tokens } = await supabase
             .from('tokens')
             .select('*')
+            .in('status', ['WAITING', 'SERVING', 'SKIPPED', 'CANCELLED', 'SERVED', 'WAITING_LATE'])
             .eq('session_id', session.id)
             .order('token_number', { ascending: true });
 
@@ -742,7 +776,10 @@ export async function getDashboardData(clinicSlug: string) {
                 ...t,
                 patient_phone: decryptedPhone,
                 customerPhone: decryptedPhone, // Secondary mapping for UI components
-                customerName: t.patient_name     // Mapping for consistency
+                customerName: t.patient_name,     // Mapping for consistency
+                isArrived: t.is_arrived,
+                graceExpiresAt: t.grace_expires_at,
+                source: t.source,
             };
         });
 

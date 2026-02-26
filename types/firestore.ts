@@ -37,11 +37,14 @@ export type Token = {
     tokenNumber: number;
     customerPhone: string;
     customerName: string;
-    status: 'WAITING' | 'SERVING' | 'SERVED' | 'SKIPPED' | 'CANCELLED';
+    status: 'WAITING' | 'SERVING' | 'SERVED' | 'SKIPPED' | 'CANCELLED' | 'WAITING_LATE';
     isPriority: boolean;
     createdAt: string;
     completedAt: string | null;
     createdByStaffId?: string;
+    isArrived?: boolean;
+    graceExpiresAt?: string | null;
+    source?: string;
 };
 
 export type AuditLog = {
