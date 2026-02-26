@@ -11,7 +11,7 @@ export async function middleware(request: NextRequest) {
     }
 
     const isApi = hostname.startsWith("api.");
-    const isApp = hostname.startsWith("app.");
+    const isApp = hostname.startsWith("app.") || hostname.includes("qlink-zeta.vercel.app"); // Hobby Tier Fallback
     const isTv = hostname.startsWith("tv.");
     const isWebhook = hostname.startsWith("webhook.");
 
@@ -26,6 +26,12 @@ export async function middleware(request: NextRequest) {
         url.pathname = `/(tv)${url.pathname}`;
         return NextResponse.rewrite(url);
     } else if (isApp) {
+        // If it's a Vercel root and the user is hitting / (home), show marketing.
+        // Otherwise, rewrite to /(app) for Dashboard/Admin.
+        if (url.pathname === "/" && !hostname.startsWith("app.")) {
+            url.pathname = `/(marketing)/`;
+            return NextResponse.rewrite(url);
+        }
         url.pathname = `/(app)${url.pathname}`;
         // DO NOT RETURN YET, app requires Auth evaluation
     } else {

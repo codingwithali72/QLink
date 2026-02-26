@@ -474,7 +474,7 @@ export default function AdminPage() {
                                         </div>
 
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <Link href={`/${b.slug}/reception`} target="_blank">
+                                            <Link href={`/clinic/${b.slug}/reception`} target="_blank">
                                                 <Button variant="outline" size="sm" className="h-10 rounded-xl bg-background hover:bg-secondary font-bold border-border/60 transition-all hover:scale-105 active:scale-95 shadow-soft">
                                                     View Dashboard <ExternalLink className="w-3.5 h-3.5 ml-2 opacity-50" />
                                                 </Button>
