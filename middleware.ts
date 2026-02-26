@@ -39,28 +39,37 @@ export async function middleware(request: NextRequest) {
                         return request.cookies.get(name)?.value
                     },
                     set(name: string, value: string, options: CookieOptions) {
-                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         const { maxAge, ...sessionOptions } = options;
+                        const currentHost = request.headers.get("host") || "";
+                        // If on Vercel Hobby, use the exact host. Otherwise use top-level domain for subdomains.
+                        const cookieDomain = currentHost.includes("vercel.app")
+                            ? currentHost.split(":")[0]
+                            : (currentHost.includes(".") ? `.${currentHost.split('.').slice(-2).join('.')}` : undefined);
 
                         const secureOptions = {
                             ...sessionOptions,
                             httpOnly: true,
                             secure: process.env.NODE_ENV === 'production',
-                            sameSite: 'lax' as const, // Lax for OAuth compat, Strict if standalone
-                            domain: process.env.NODE_ENV === 'production' ? '.qlink.com' : 'localhost'
+                            sameSite: 'lax' as const,
+                            domain: cookieDomain
                         };
 
                         request.cookies.set({ name, value, ...secureOptions })
-                        response = NextResponse.rewrite(url) // Regenerate response with cookies
+                        response = NextResponse.next()
                         response.cookies.set({ name, value, ...secureOptions })
                     },
                     remove(name: string, options: CookieOptions) {
+                        const currentHost = request.headers.get("host") || "";
+                        const cookieDomain = currentHost.includes("vercel.app")
+                            ? currentHost.split(":")[0]
+                            : (currentHost.includes(".") ? `.${currentHost.split('.').slice(-2).join('.')}` : undefined);
+
                         const secureOptions = {
                             ...options,
-                            domain: process.env.NODE_ENV === 'production' ? '.qlink.com' : 'localhost'
+                            domain: cookieDomain
                         };
                         request.cookies.set({ name, value: '', ...secureOptions })
-                        response = NextResponse.rewrite(url)
+                        response = NextResponse.next()
                         response.cookies.set({ name, value: '', ...secureOptions })
                     },
                 },
