@@ -151,7 +151,7 @@ export default function AdminPage() {
             const res = await getAdminStats();
             if (res.error) showToast(res.error, 'error');
             else setStats(res as unknown as AdminStats);
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('[fetchStats] Error:', e);
             showToast('Service signal lost. Please refresh.', 'error');
         } finally {
