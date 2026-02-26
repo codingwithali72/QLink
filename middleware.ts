@@ -11,39 +11,22 @@ export async function middleware(request: NextRequest) {
     }
 
     const isApi = hostname.startsWith("api.");
-    const isApp = hostname.startsWith("app.") || hostname.includes("qlink-zeta.vercel.app"); // Hobby Tier Fallback
     const isTv = hostname.startsWith("tv.");
     const isWebhook = hostname.startsWith("webhook.");
+    const isApp = hostname.startsWith("app.") || hostname.includes("qlink-zeta.vercel.app");
 
     // ---- SUBDOMAIN REWRITES ----
     if (isApi || isWebhook) {
-        // Force /api prefix if not present natively. 
         if (!url.pathname.startsWith("/api")) {
             url.pathname = `/api${url.pathname}`;
             return NextResponse.rewrite(url);
         }
-    } else if (isTv) {
-        url.pathname = `/(tv)${url.pathname}`;
-        return NextResponse.rewrite(url);
-    } else if (isApp) {
-        // If it's a Vercel root and the user is hitting / (home), show marketing.
-        // Otherwise, rewrite to /(app) for Dashboard/Admin.
-        if (url.pathname === "/" && !hostname.startsWith("app.")) {
-            url.pathname = `/(marketing)/`;
-            return NextResponse.rewrite(url);
-        }
-        url.pathname = `/(app)${url.pathname}`;
-        // DO NOT RETURN YET, app requires Auth evaluation
-    } else {
-        // Marketing Site (qlink.com or anything else)
-        if (url.pathname === "/") {
-            url.pathname = `/(marketing)${url.pathname}`;
-            return NextResponse.rewrite(url);
-        }
     }
 
+    // On Hobby Tier (root domain), paths like /login or /admin work naturally.
+    // We only need to enforce authentication on them.
 
-    let response = isApp ? NextResponse.rewrite(url) : NextResponse.next();
+    let response = NextResponse.next();
 
     // ---- SUPABASE AUTH & COOKIE SCOPING (ONLY FOR APP SUBDOMAIN) ----
     if (isApp) {
