@@ -14,34 +14,29 @@ export const createClient = () => {
                 },
                 set(name: string, value: string, options: CookieOptions) {
                     try {
-                        const isProd = process.env.NODE_ENV === 'production';
-                        const secureOptions = {
-                            ...options,
+                        const { maxAge, expires, ...sessionOptions } = options;
+                        cookieStore.set({
+                            name,
+                            value,
+                            ...sessionOptions,
                             httpOnly: true,
-                            secure: isProd,
+                            secure: process.env.NODE_ENV === 'production',
                             sameSite: 'lax' as const,
-                            domain: isProd ? '.qlink.com' : 'localhost'
-                        };
-
-                        // FORCE SESSION COOKIE: Remove maxAge and expires so it clears on browser close
-                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                        const { maxAge, expires, ...sessionOptions } = secureOptions;
-                        cookieStore.set({ name, value, ...sessionOptions });
+                        });
                     } catch {
                         // The `set` method was called from a Server Component.
                     }
                 },
                 remove(name: string, options: CookieOptions) {
                     try {
-                        const isProd = process.env.NODE_ENV === 'production';
-                        const secureOptions = {
+                        cookieStore.set({
+                            name,
+                            value: '',
                             ...options,
                             httpOnly: true,
-                            secure: isProd,
+                            secure: process.env.NODE_ENV === 'production',
                             sameSite: 'lax' as const,
-                            domain: isProd ? '.qlink.com' : 'localhost'
-                        };
-                        cookieStore.set({ name, value: '', ...secureOptions })
+                        })
                     } catch {
                         // The `delete` method was called from a Server Component.
                     }

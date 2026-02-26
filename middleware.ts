@@ -40,18 +40,11 @@ export async function middleware(request: NextRequest) {
                     },
                     set(name: string, value: string, options: CookieOptions) {
                         const { maxAge, ...sessionOptions } = options;
-                        const currentHost = request.headers.get("host") || "";
-                        // If on Vercel Hobby, use the exact host. Otherwise use top-level domain for subdomains.
-                        const cookieDomain = currentHost.includes("vercel.app")
-                            ? currentHost.split(":")[0]
-                            : (currentHost.includes(".") ? `.${currentHost.split('.').slice(-2).join('.')}` : undefined);
-
                         const secureOptions = {
                             ...sessionOptions,
                             httpOnly: true,
                             secure: process.env.NODE_ENV === 'production',
                             sameSite: 'lax' as const,
-                            domain: cookieDomain
                         };
 
                         request.cookies.set({ name, value, ...secureOptions })
@@ -59,14 +52,11 @@ export async function middleware(request: NextRequest) {
                         response.cookies.set({ name, value, ...secureOptions })
                     },
                     remove(name: string, options: CookieOptions) {
-                        const currentHost = request.headers.get("host") || "";
-                        const cookieDomain = currentHost.includes("vercel.app")
-                            ? currentHost.split(":")[0]
-                            : (currentHost.includes(".") ? `.${currentHost.split('.').slice(-2).join('.')}` : undefined);
-
                         const secureOptions = {
                             ...options,
-                            domain: cookieDomain
+                            httpOnly: true,
+                            secure: process.env.NODE_ENV === 'production',
+                            sameSite: 'lax' as const,
                         };
                         request.cookies.set({ name, value: '', ...secureOptions })
                         response = NextResponse.next()
