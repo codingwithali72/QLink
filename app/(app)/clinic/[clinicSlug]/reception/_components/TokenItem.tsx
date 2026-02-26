@@ -13,7 +13,7 @@ interface TokenItemProps {
 
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
-export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArrived }: TokenItemProps) {
+export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArrived, isCallLoading }: TokenItemProps) {
     const isLate = token.status === 'WAITING_LATE';
     const isRemote = token.source === 'DIRECT_WA' || token.source === 'WEB_LINK';
     const needsArrival = isRemote && !token.isArrived;
@@ -67,14 +67,15 @@ export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArri
                     <Button
                         variant="default"
                         size="sm"
+                        disabled={isCallLoading}
                         onClick={() => onToggleArrived(token.id, true)}
-                        className="h-8 text-[10px] font-bold bg-green-600 hover:bg-green-700 text-white flex gap-1 animate-in zoom-in-95"
+                        className="h-8 text-[10px] font-bold bg-green-600 hover:bg-green-700 text-white flex gap-1 animate-in zoom-in-95 transition-all outline-none"
                     >
                         <MapPinCheck className="w-3 h-3" /> Arrive
                     </Button>
                 )}
 
-                <div className={cn("flex items-center gap-1 transition-opacity", needsArrival ? "opacity-0 group-hover:opacity-100 hidden md:flex" : "opacity-0 group-hover:opacity-100")}>
+                <div className={cn("flex items-center gap-1 transition-all duration-300", needsArrival ? "opacity-0 group-hover:opacity-100 hidden md:flex" : "opacity-0 group-hover:opacity-100")}>
                     {token.customerPhone && (
                         <a href={`tel:${token.customerPhone}`}>
                             <Button
@@ -89,8 +90,9 @@ export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArri
                     <Button
                         variant="ghost"
                         size="icon"
+                        disabled={isCallLoading}
                         onClick={() => onCancel(token.id)}
-                        className="h-8 w-8 text-slate-300 hover:text-red-500 dark:hover:text-red-400 hover:bg-white dark:hover:bg-slate-700 rounded-full shrink-0"
+                        className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full shrink-0 transition-colors"
                     >
                         <XCircle className="w-4 h-4" />
                     </Button>

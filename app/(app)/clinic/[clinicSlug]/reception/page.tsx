@@ -407,25 +407,25 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 {/* LEFT: Controls (8 cols) */}
                 <div className="xl:col-span-8 space-y-6">
                     {/* SERVING CARD */}
-                    <Card className="relative overflow-hidden border-0 shadow-lg bg-blue-600 text-white h-72 flex flex-col items-center justify-center p-8 rounded-3xl">
-                        <p className="text-blue-100 uppercase tracking-widest text-sm font-bold mb-4">Now Serving</p>
+                    <Card className="relative overflow-hidden border shadow-xl shadow-blue-900/10 bg-[#0F172A] dark:bg-slate-900 text-white h-72 flex flex-col items-center justify-center p-8 rounded-3xl">
+                        <p className="text-blue-300 uppercase tracking-widest text-sm font-bold mb-4">Now Serving</p>
                         {servingToken ? (
-                            <div className="text-center z-10">
-                                <h2 className="text-8xl md:text-9xl font-black tracking-tighter shadow-sm">
+                            <div className="text-center z-10 animate-in zoom-in-95 duration-500">
+                                <h2 className="text-8xl md:text-9xl font-black tracking-tighter shadow-sm text-white drop-shadow-md">
                                     {formatToken(servingToken.tokenNumber, servingToken.isPriority)}
                                 </h2>
                                 <div className="mt-4">
-                                    <p className="text-2xl font-bold">{servingToken.customerName || 'Anonymous'}</p>
-                                    <p className="text-blue-100/70 font-mono text-sm">{servingToken.customerPhone}</p>
+                                    <p className="text-2xl font-bold text-slate-100">{servingToken.customerName || 'Anonymous'}</p>
+                                    <p className="text-blue-300 font-mono text-sm">{servingToken.customerPhone}</p>
                                 </div>
                             </div>
                         ) : (
                             <div className="text-center z-10 opacity-60">
-                                <div className="text-8xl font-black">--</div>
-                                <p className="mt-2 text-lg">Wait for next patient</p>
+                                <div className="text-8xl font-black text-slate-600">--</div>
+                                <p className="mt-2 text-lg text-slate-400">Wait for next patient</p>
                             </div>
                         )}
-                        <div className="absolute bottom-6 left-8 flex items-center gap-2 text-[10px] text-blue-200/60 uppercase font-mono tracking-widest">
+                        <div className="absolute bottom-6 left-8 flex items-center gap-2 text-[10px] text-slate-400 uppercase font-mono tracking-widest">
                             <RefreshCw className={cn("w-3 h-3", !isConnected && "animate-spin")} /> {lastUpdated.toLocaleTimeString()}
                         </div>
                     </Card>
@@ -508,7 +508,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-2">
                             {visibleWaitingTokens.map(t => (
-                                <TokenItem key={t.id} token={t} onCancel={handleCancelToken} onToggleArrived={handleToggleArrived} />
+                                <TokenItem key={t.id} token={t} onCancel={handleCancelToken} onToggleArrived={handleToggleArrived} isCallLoading={nextLoading || skipLoading} />
                             ))}
                             {visibleWaitingTokens.length === 0 && <div className="text-center py-20 text-muted-foreground">Box is empty</div>}
                         </div>

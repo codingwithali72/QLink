@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { successResponse, errorResponse, generateRequestId } from '@/lib/api-response'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'qlink_wa_token'
 const APP_SECRET = process.env.WHATSAPP_APP_SECRET || ''
@@ -14,10 +15,11 @@ export async function GET(req: Request) {
     if (mode === 'subscribe' && token === VERIFY_TOKEN) {
         return new NextResponse(challenge, { status: 200 })
     }
-    return new NextResponse('Forbidden', { status: 403 })
+    return errorResponse('Forbidden', 403)
 }
 
 export async function POST(req: Request) {
+    const requestId = generateRequestId();
     const signature = req.headers.get('x-hub-signature-256')
     const rawBody = await req.text()
 
@@ -31,7 +33,7 @@ export async function POST(req: Request) {
             p_max_hits: 20,
             p_window_seconds: 60
         });
-        if (!allowedIp) return new NextResponse('Rate Limited (IP)', { status: 429 });
+        if (!allowedIp) return errorResponse('Rate Limited (IP)', 429, requestId);
     }
 
     // 1. Validate Meta webhook signature
@@ -41,20 +43,20 @@ export async function POST(req: Request) {
             .update(rawBody)
             .digest('hex')}`
         if (signature !== expectedSignature) {
-            return new NextResponse('Invalid signature', { status: 401 })
+            return errorResponse('Invalid signature', 401, requestId)
         }
     }
 
     let body
     try {
         body = JSON.parse(rawBody)
-    } catch (e) {
-        return new NextResponse('Invalid JSON', { status: 400 })
+    } catch {
+        return errorResponse('Invalid JSON', 400, requestId)
     }
 
     // Acknowledge non-message webhooks or empty payloads
     if (body.object !== 'whatsapp_business_account' || !body.entry?.[0]?.changes?.[0]?.value) {
-        return new NextResponse('Event Received', { status: 200 })
+        return successResponse({ message: 'Event Received' }, requestId)
     }
 
     const value = body.entry[0].changes[0].value
@@ -100,13 +102,13 @@ export async function POST(req: Request) {
 
         if (!allowedPhone) {
             await sendWhatsAppReply(phoneNumber, "Too many requests. Please wait a minute and try again.");
-            return new NextResponse('OK', { status: 200 })
+            return successResponse({ message: 'Rate limited message sent' }, requestId)
         }
 
         const slug = messageText.split('_')[1]?.toLowerCase().trim()
         if (!slug) {
             await sendWhatsAppReply(phoneNumber, "Please send a valid command like JOIN_CLINICNAME");
-            return new NextResponse('OK', { status: 200 })
+            return successResponse({ message: 'Invalid command message sent' }, requestId)
         }
 
         // Identify clinic
@@ -118,7 +120,7 @@ export async function POST(req: Request) {
 
         if (!business) {
             await sendWhatsAppReply(phoneNumber, "Clinic not found. Please check the clinic code.");
-            return new NextResponse('OK', { status: 200 })
+            return successResponse({ message: 'Clinic not found message sent' }, requestId)
         }
 
         // Find open session
@@ -135,7 +137,7 @@ export async function POST(req: Request) {
 
         if (!session) {
             await sendWhatsAppReply(phoneNumber, `Sorry, ${business.name} is not accepting queue joins right now.`);
-            return new NextResponse('OK', { status: 200 })
+            return successResponse({ message: 'Session closed message sent' }, requestId)
         }
 
         // DB Transactional Token Creation + Dup Check via existing RPC
@@ -150,7 +152,7 @@ export async function POST(req: Request) {
 
         if (error || !tokenResult) {
             await sendWhatsAppReply(phoneNumber, "System error while adding you to the queue. Please try again or walk-in.");
-            return new NextResponse('OK', { status: 200 })
+            return errorResponse('Token creation error', 500, requestId)
         }
 
         if (tokenResult.success) {
@@ -188,7 +190,7 @@ export async function POST(req: Request) {
         }, { onConflict: 'business_id,phone_number' }).select()
     }
 
-    return new NextResponse('OK', { status: 200 })
+    return successResponse({ message: 'Webhook processed' }, requestId)
 }
 
 // Helper (Would ideally be in lib/whatsapp.ts, placed here for immediate usage)
