@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, ChevronRight, MessageSquare, Clock, ShieldCheck, Activity } from "lucide-react";
+import { ChevronRight, MessageSquare, ShieldCheck, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/mode-toggle";
 
