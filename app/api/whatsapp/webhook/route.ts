@@ -167,14 +167,7 @@ export async function POST(req: Request) {
             return successResponse({ message: 'Session closed message sent' }, requestId)
         }
 
-        // Establish Conversation State
-        const { data: conv } = await supabase
-            .from('whatsapp_conversations')
-            .select('state, active_token_id')
-            .eq('clinic_id', business.id)
-            .eq('phone', phoneNumber)
-            .single()
-
+        // Establish Conversation State (if we need to check state here)
         // Check if they already have an active token from ANY source
         const { data: activeToken } = await supabase
             .from('tokens')
