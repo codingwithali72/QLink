@@ -5,18 +5,18 @@
 
 -- 1. SCHEMA ADDITIONS
 ALTER TABLE "public"."tokens"
-    ADD COLUMN "source" text DEFAULT 'QR_WALKIN', -- 'QR_WALKIN', 'WEB_LINK', 'DIRECT_WA'
-    ADD COLUMN "is_arrived" boolean DEFAULT false,
-    ADD COLUMN "arrived_at" timestamp with time zone,
-    ADD COLUMN "grace_expires_at" timestamp with time zone;
+    ADD COLUMN IF NOT EXISTS "source" text DEFAULT 'QR_WALKIN', -- 'QR_WALKIN', 'WEB_LINK', 'DIRECT_WA'
+    ADD COLUMN IF NOT EXISTS "is_arrived" boolean DEFAULT false,
+    ADD COLUMN IF NOT EXISTS "arrived_at" timestamp with time zone,
+    ADD COLUMN IF NOT EXISTS "grace_expires_at" timestamp with time zone;
 
 ALTER TABLE "public"."clinic_daily_stats"
-    ADD COLUMN "remote_join_count" integer DEFAULT 0,
-    ADD COLUMN "walkin_join_count" integer DEFAULT 0,
-    ADD COLUMN "remote_noshow_count" integer DEFAULT 0;
+    ADD COLUMN IF NOT EXISTS "remote_join_count" integer DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "walkin_join_count" integer DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS "remote_noshow_count" integer DEFAULT 0;
 
 ALTER TABLE "public"."sessions"
-    ADD COLUMN "avg_consult_seconds" integer DEFAULT 300; -- Default 5 mins
+    ADD COLUMN IF NOT EXISTS "avg_consult_seconds" integer DEFAULT 300; -- Default 5 mins
 
 -- 2. UPDATE CREATE_TOKEN_ATOMIC RPC
 -- Added `p_source` and properly inserts it.
