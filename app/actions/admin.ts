@@ -13,17 +13,21 @@ async function isSuperAdmin() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
-    // Primary check: DB-level SUPER_ADMIN role
-    const admin = createAdminClient();
-    const { data: staffRow } = await admin.from('staff_users')
-        .select('role')
-        .eq('id', user.id)
-        .eq('role', 'SUPER_ADMIN')
-        .maybeSingle();
-    if (staffRow) return true;
-
-    // Bootstrap fallback: env-var email match (first-run only)
+    // 1. Bootstrap fallback: env-var email match (Priority for bypass)
     if (ADMIN_EMAIL && user.email === ADMIN_EMAIL) return true;
+
+    try {
+        // 2. check: DB-level SUPER_ADMIN role
+        const admin = createAdminClient();
+        const { data: staffRow } = await admin.from('staff_users')
+            .select('role')
+            .eq('id', user.id)
+            .eq('role', 'SUPER_ADMIN')
+            .maybeSingle();
+        if (staffRow) return true;
+    } catch (e) {
+        console.error('[isSuperAdmin] Admin check error:', e);
+    }
 
     return false;
 }
