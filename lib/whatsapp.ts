@@ -64,6 +64,101 @@ async function logMessage(businessId: string, tokenId: string | undefined, statu
     });
 }
 
+// -------------------------------------------------------------------------------------------------
+// Phase 6 WhatsApp Interactive Additions
+// -------------------------------------------------------------------------------------------------
+
+export async function sendWhatsAppInteractiveButtons(to: string, bodyText: string, buttons: { id: string, title: string }[], businessId: string, tokenId?: string) {
+    const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const ACCESS_TOKEN = process.env.WHATSAPP_BEARER_TOKEN;
+
+    if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) return { success: true, mock: true };
+
+    try {
+        const response = await fetch(`${WHATSAPP_API_URL}/${PHONE_NUMBER_ID}/messages`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: to,
+                type: "interactive",
+                interactive: {
+                    type: "button",
+                    body: { text: bodyText },
+                    action: {
+                        buttons: buttons.map(b => ({
+                            type: "reply",
+                            reply: {
+                                id: b.id,
+                                title: b.title.substring(0, 20) // max 20 chars
+                            }
+                        }))
+                    }
+                }
+            }),
+        });
+
+        const data = await response.json();
+        const status = response.ok ? "SENT" : "FAILED";
+        await logMessage(businessId, tokenId, status, data);
+        return { success: response.ok, data };
+    } catch (error) {
+        console.error("WhatsApp Interactive Exception:", error);
+        return { success: false, error };
+    }
+}
+
+export async function sendWhatsAppInteractiveList(to: string, bodyText: string, listTitle: string, options: { id: string, title: string, description?: string }[], businessId: string, tokenId?: string) {
+    const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const ACCESS_TOKEN = process.env.WHATSAPP_BEARER_TOKEN;
+
+    if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) return { success: true, mock: true };
+
+    try {
+        const response = await fetch(`${WHATSAPP_API_URL}/${PHONE_NUMBER_ID}/messages`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: to,
+                type: "interactive",
+                interactive: {
+                    type: "list",
+                    body: { text: bodyText },
+                    action: {
+                        button: listTitle.substring(0, 20),
+                        sections: [
+                            {
+                                title: "Options",
+                                rows: options.map(o => ({
+                                    id: o.id,
+                                    title: o.title.substring(0, 24),
+                                    description: o.description ? o.description.substring(0, 72) : undefined
+                                }))
+                            }
+                        ]
+                    }
+                }
+            }),
+        });
+
+        const data = await response.json();
+        const status = response.ok ? "SENT" : "FAILED";
+        await logMessage(businessId, tokenId, status, data);
+        return { success: response.ok, data };
+    } catch (error) {
+        console.error("WhatsApp List Exception:", error);
+        return { success: false, error };
+    }
+}
+
+
 // Queue system to decouple HTTP request from User action
 // DPDP FIX: phone is NOT stored in provider_response. Instead we store the tokenId
 // which allows the async worker to safely retrieve the encrypted phone from tokens table.

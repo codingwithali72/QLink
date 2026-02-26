@@ -64,11 +64,59 @@ export async function GET(req: Request) {
 
             let success = false
             if (isWithin24h) {
-                // Free-form message because user interacted within 24 hours
-                success = await sendWhatsAppFreeText(alert.phone_number, messageText)
+                if (alert.event_type === 'NEAR_TURN') {
+                    success = await sendWhatsAppInteractiveButtons(
+                        alert.phone_number,
+                        "🔔 Your turn is coming up!\n\nOnly 5 patients ahead of you.\n\nPlease reach the clinic in the next 10 minutes.",
+                        [
+                            { id: 'IM_ON_THE_WAY', title: "I'm On The Way" },
+                            { id: 'CANCEL_TOKEN', title: 'Cancel My Token' }
+                        ]
+                    )
+                } else if (alert.event_type === 'SERVING') {
+                    success = await sendWhatsAppInteractiveButtons(
+                        alert.phone_number,
+                        "🟢 It's Your Turn!\n\nYour token is now being served.\n\nPlease proceed to reception.",
+                        [
+                            { id: 'IM_HERE', title: "I'm Here" }
+                        ]
+                    )
+                } else if (alert.event_type === 'DELAYED') {
+                    // Just informational
+                    success = await sendWhatsAppFreeText(alert.phone_number, "The doctor is delayed by approximately 15 mins. Thank you for your patience.")
+                } else if (alert.event_type === 'FEEDBACK_REQUEST') {
+                    // Set conversation state to AWAITING_FEEDBACK_RATING
+                    await supabase.from('whatsapp_conversations').upsert({
+                        clinic_id: alert.business_id,
+                        phone: alert.phone_number,
+                        state: 'AWAITING_FEEDBACK_RATING',
+                        active_token_id: alert.token_id,
+                        last_interaction: new Date().toISOString()
+                    }, { onConflict: 'clinic_id,phone' })
+
+                    success = await sendWhatsAppInteractiveList(
+                        alert.phone_number,
+                        "🙏 Thank you for visiting us.\n\nHow was your experience today?",
+                        "Rate Us",
+                        [
+                            { id: 'RATE_5', title: '⭐⭐⭐⭐⭐ 5', description: 'Excellent' },
+                            { id: 'RATE_4', title: '⭐⭐⭐⭐ 4', description: 'Good' },
+                            { id: 'RATE_3', title: '⭐⭐⭐ 3', description: 'Average' },
+                            { id: 'RATE_2', title: '⭐⭐ 2', description: 'Poor' },
+                            { id: 'RATE_1', title: '⭐ 1', description: 'Very Poor' }
+                        ]
+                    )
+                } else {
+                    success = await sendWhatsAppFreeText(alert.phone_number, messageText)
+                }
             } else {
                 // strict Utility Template outside 24h
-                success = await sendWhatsAppTemplate(alert.phone_number, templateName)
+                // For feedback outside 24h, you cannot easily start conversations. We'll skip or use standard template.
+                if (alert.event_type !== 'FEEDBACK_REQUEST') {
+                    success = await sendWhatsAppTemplate(alert.phone_number, templateName)
+                } else {
+                    success = true; // Skip feedback outside 24h to save costs and avoid template rejection
+                }
             }
 
             if (success) {
@@ -140,5 +188,87 @@ async function sendWhatsAppTemplate(phone: string, templateName: string): Promis
         return res.ok
     } catch {
         return false
+    }
+}
+
+async function sendWhatsAppInteractiveButtons(phone: string, bodyText: string, buttons: { id: string, title: string }[]): Promise<boolean> {
+    const WABA_ID = process.env.WHATSAPP_PHONE_ID
+    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
+
+    if (!WABA_ID || !TOKEN) return false;
+
+    try {
+        const res = await fetch(`https://graph.facebook.com/v19.0/${WABA_ID}/messages`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: `91${phone}`,
+                type: "interactive",
+                interactive: {
+                    type: "button",
+                    body: { text: bodyText },
+                    action: {
+                        buttons: buttons.map(b => ({
+                            type: "reply",
+                            reply: {
+                                id: b.id,
+                                title: b.title.substring(0, 20) // max 20 chars
+                            }
+                        }))
+                    }
+                }
+            }),
+        });
+        return res.ok
+    } catch (e) {
+        console.error("Failed to send WA message", e)
+        return false
+    }
+}
+
+async function sendWhatsAppInteractiveList(phone: string, bodyText: string, listTitle: string, options: { id: string, title: string, description?: string }[]): Promise<boolean> {
+    const WABA_ID = process.env.WHATSAPP_PHONE_ID;
+    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+
+    if (!WABA_ID || !TOKEN) return false;
+
+    try {
+        const response = await fetch(`https://graph.facebook.com/v19.0/${WABA_ID}/messages`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: `91${phone}`,
+                type: "interactive",
+                interactive: {
+                    type: "list",
+                    body: { text: bodyText },
+                    action: {
+                        button: listTitle.substring(0, 20),
+                        sections: [
+                            {
+                                title: "Options",
+                                rows: options.map(o => ({
+                                    id: o.id,
+                                    title: o.title.substring(0, 24),
+                                    description: o.description ? o.description.substring(0, 72) : undefined
+                                }))
+                            }
+                        ]
+                    }
+                }
+            }),
+        });
+        return response.ok;
+    } catch (error) {
+        console.error("WhatsApp List Exception:", error);
+        return false;
     }
 }

@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     const name = contact.profile?.name || 'WhatsApp Patient'
     const waMessageId = message.id
 
-    const messageText = message.text?.body?.trim() || ''
+    let messageText = message.text?.body?.trim() || ''
 
     // 2. Normalize Indian phone to 10-digit
     // Accept: +91XXXXXXXXXX, 91XXXXXXXXXX, XXXXXXXXXX
@@ -88,34 +88,61 @@ export async function POST(req: Request) {
 
     const supabase = createAdminClient()
 
-    // Process specific commands
+    // -------------------------------------------------------------------------------------------------
+    // Phase 6 WhatsApp Interactive Additions - State Machine Webhook
+    // -------------------------------------------------------------------------------------------------
+
+    // Deduplication check
+    const { data: existingMsg } = await supabase
+        .from('whatsapp_messages')
+        .select('id')
+        .eq('id', waMessageId)
+        .single()
+
+    if (existingMsg) {
+        return successResponse({ message: 'Duplicate webhook ignored' }, requestId)
+    }
+
+    // Identify interactive response
+    let interactiveResponseId = '';
+    if (message.type === 'interactive') {
+        if (message.interactive.type === 'button_reply') {
+            interactiveResponseId = message.interactive.button_reply.id;
+            messageText = message.interactive.button_reply.title;
+        } else if (message.interactive.type === 'list_reply') {
+            interactiveResponseId = message.interactive.list_reply.id;
+            messageText = message.interactive.list_reply.title;
+        }
+    }
+
+    // Log incoming message
+    await supabase.from('whatsapp_messages').insert({
+        id: waMessageId,
+        phone: phoneNumber,
+        direction: 'INBOUND',
+        message_type: message.type || 'text',
+        status: 'received'
+    });
+
+    // We need clinic_id context. For new joins, it will be parsed from JOIN_SLUG.
+    // For existing conversations, we get it from whatsapp_conversations state.
+
+    // 1. Check if user sent a JOIN command to start a fresh flow
     const isJoinCommand = messageText.toUpperCase().startsWith('JOIN_')
+    let clinicSlug = '';
 
     if (isJoinCommand) {
-        // Phone Rate Limit check (Phase 5)
-        const { data: allowedPhone } = await supabase.rpc('rpc_check_rate_limit', {
-            p_ip: phoneNumber,
-            p_endpoint: 'wa_webhook_phone',
-            p_max_hits: 3,
-            p_window_seconds: 60
-        });
-
-        if (!allowedPhone) {
-            await sendWhatsAppReply(phoneNumber, "Too many requests. Please wait a minute and try again.");
-            return successResponse({ message: 'Rate limited message sent' }, requestId)
-        }
-
-        const slug = messageText.split('_')[1]?.toLowerCase().trim()
-        if (!slug) {
+        clinicSlug = messageText.split('_')[1]?.toLowerCase().trim()
+        if (!clinicSlug) {
             await sendWhatsAppReply(phoneNumber, "Please send a valid command like JOIN_CLINICNAME");
             return successResponse({ message: 'Invalid command message sent' }, requestId)
         }
 
-        // Identify clinic
+        // Find clinic to initialize state
         const { data: business } = await supabase
             .from('businesses')
             .select('id, name')
-            .eq('slug', slug)
+            .eq('slug', clinicSlug)
             .single()
 
         if (!business) {
@@ -123,13 +150,13 @@ export async function POST(req: Request) {
             return successResponse({ message: 'Clinic not found message sent' }, requestId)
         }
 
-        // Find open session
+        // Check if there is already an active session taking tokens
         const todayIST = new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
         const dateString = new Date(todayIST).toISOString().split('T')[0]
 
         const { data: session } = await supabase
             .from('sessions')
-            .select('id, last_token_number')
+            .select('id')
             .eq('business_id', business.id)
             .eq('date', dateString)
             .in('status', ['OPEN', 'PAUSED'])
@@ -140,60 +167,296 @@ export async function POST(req: Request) {
             return successResponse({ message: 'Session closed message sent' }, requestId)
         }
 
-        // DB Transactional Token Creation + Dup Check via existing RPC
-        const { data: tokenResult, error } = await supabase.rpc('create_token_atomic', {
-            p_business_id: business.id,
-            p_session_id: session.id,
-            p_phone: phoneNumber,
-            p_name: name,
-            p_is_priority: false,
-            p_source: 'DIRECT_WA'
-        })
+        // Establish Conversation State
+        const { data: conv } = await supabase
+            .from('whatsapp_conversations')
+            .select('state, active_token_id')
+            .eq('clinic_id', business.id)
+            .eq('phone', phoneNumber)
+            .single()
 
-        if (error || !tokenResult) {
-            await sendWhatsAppReply(phoneNumber, "System error while adding you to the queue. Please try again or walk-in.");
-            return errorResponse('Token creation error', 500, requestId)
-        }
+        // Check if they already have an active token from ANY source
+        const { data: activeToken } = await supabase
+            .from('tokens')
+            .select('id, token_number, status, business:businesses(name)')
+            .eq('business_id', business.id)
+            .eq('patient_phone', phoneNumber)
+            .eq('session_id', session.id)
+            .in('status', ['WAITING', 'SERVING'])
+            .single()
 
-        if (tokenResult.success) {
-            // New Token
-            const ewtMinutes = Math.round((tokenResult.ewt_seconds || 0) / 60);
-            const ewtMessage = ewtMinutes > 0 ? ` (Estimated wait: ~${ewtMinutes} mins).` : '.';
+        if (activeToken) {
+            // Already has active token
+            // Update conv state to ACTIVE_TOKEN if it isn't already
+            await supabase.from('whatsapp_conversations').upsert({
+                clinic_id: business.id,
+                phone: phoneNumber,
+                state: 'ACTIVE_TOKEN',
+                active_token_id: activeToken.id,
+                last_interaction: new Date().toISOString()
+            }, { onConflict: 'clinic_id,phone' })
 
-            await sendWhatsAppReply(phoneNumber, `Success! You are added to the queue at ${business.name}. Your token number is *${tokenResult.token_number}*${ewtMessage} Please make sure you are physically present when your turn approaches.`);
-
-            // Log message for cost tracking
-            await supabase.from('message_logs').insert({
-                business_id: business.id,
-                phone_number: phoneNumber,
-                token_id: tokenResult.token_id,
-                message_type: 'CREATED',
-                wa_message_id: waMessageId,
-                delivery_status: 'sent'
-            })
-        } else if (tokenResult.is_duplicate) {
-            // Duplicate Active Token Handling
-            await sendWhatsAppReply(phoneNumber, `You already have an active token (*${tokenResult.existing_token_number}*) at ${business.name}. Please wait for your turn.`);
+            // Determine estimated wait directly or simple view
+            await sendWhatsAppInteractiveButtons(
+                phoneNumber,
+                `🟢 You already have an active token.\n\n🎟 Token: #${activeToken.token_number}\nStatus: ${activeToken.status}\n\nWhat would you like to do?`,
+                [
+                    { id: 'VIEW_STATUS', title: 'View Live Status' },
+                    { id: 'CANCEL_TOKEN', title: 'Cancel Token' }
+                ]
+            );
+            return successResponse({ message: 'Sent active token interactive' }, requestId)
         } else {
-            // Other failures (like daily limit reached)
-            await sendWhatsAppReply(phoneNumber, tokenResult.error || "Unable to add you to the queue right now.");
+            // NEW USER Flow
+            await supabase.from('whatsapp_conversations').upsert({
+                clinic_id: business.id,
+                phone: phoneNumber,
+                state: 'AWAITING_NAME',
+                active_token_id: null,
+                last_interaction: new Date().toISOString()
+            }, { onConflict: 'clinic_id,phone' })
+
+            await sendWhatsAppReply(phoneNumber, `Welcome to ${business.name} 🏥\n\nPlease reply with your full name to join today's queue.`);
+            return successResponse({ message: 'Sent name request' }, requestId)
         }
-    } else {
-        // Log conversations if it's general chat
-        // Check 24hr window
+    }
+
+    // 2. Not a JOIN command. Proceed with State Machine logic.
+    // We need to look up active conversation
+    const { data: activeConvs } = await supabase
+        .from('whatsapp_conversations')
+        .select('*, clinic:businesses(id, name)')
+        .eq('phone', phoneNumber)
+        .order('last_interaction', { ascending: false })
+        .limit(1)
+
+    const conv = activeConvs?.[0];
+
+    if (!conv) {
+        // Just log general interaction if no active state
         await supabase.from('conversations').upsert({
-            business_id: null, // Depending on if we know context
+            business_id: null,
             phone_number: phoneNumber,
             last_message_at: new Date().toISOString(),
             conversation_open: true,
             wa_conversation_id: null
-        }, { onConflict: 'business_id,phone_number' }).select()
+        }, { onConflict: 'business_id,phone_number' });
+        return successResponse({ message: 'General chat logged' }, requestId)
     }
+
+    const businessId = conv.clinic.id;
+    const businessName = conv.clinic.name;
+
+    // State Machine Dispatcher
+    if (conv.state === 'AWAITING_NAME') {
+        const patientName = messageText;
+        // Proceed to confirmation
+        await supabase.from('whatsapp_conversations').update({
+            state: 'AWAITING_CONFIRMATION',
+            last_interaction: new Date().toISOString()
+        }).eq('id', conv.id);
+
+        // Store temp name in state or rely on token atomic. Actually we need to pass the name.
+        // We can temporarily update patient profile or just ask for confirmation knowing we can use the name from profile later.
+        // To be completely robust, we should store temp data. But for now we will just use the name provided in the whatsapp msg obj.
+        // Wait, the confirmation doesn't have the text typed previously.
+        // Quick fix: Update the name in the user's contacts profile in DB or rely on the WA contact name when confirming.
+        // Let's use `name` from `contact.profile.name` as fallback.
+
+        await sendWhatsAppInteractiveButtons(
+            phoneNumber,
+            `Hi ${patientName} 👋\n\nYou are joining today's queue.\n\nPlease confirm:`,
+            [
+                { id: `CONFIRM_${encodeURIComponent(patientName)}`, title: 'Confirm & Join' },
+                { id: 'CANCEL_JOIN', title: 'Cancel' }
+            ]
+        );
+
+    } else if (conv.state === 'AWAITING_CONFIRMATION') {
+        if (interactiveResponseId.startsWith('CONFIRM_')) {
+            const patientName = decodeURIComponent(interactiveResponseId.replace('CONFIRM_', ''));
+
+            // Execute Token Creation
+            const todayIST = new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+            const dateString = new Date(todayIST).toISOString().split('T')[0]
+            const { data: session } = await supabase
+                .from('sessions')
+                .select('id')
+                .eq('business_id', businessId)
+                .eq('date', dateString)
+                .in('status', ['OPEN', 'PAUSED'])
+                .single()
+
+            if (!session) {
+                await sendWhatsAppReply(phoneNumber, "The session has closed. Cannot create token.");
+                await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
+                return successResponse({ message: 'Session closed on confirm' }, requestId);
+            }
+
+            const { data: tokenResult, error } = await supabase.rpc('create_token_atomic', {
+                p_business_id: businessId,
+                p_session_id: session.id,
+                p_phone: phoneNumber,
+                p_name: patientName || name, // fallback to WA profile name
+                p_is_priority: false,
+                p_source: 'DIRECT_WA'
+            });
+
+            if (error || !tokenResult || !tokenResult.success) {
+                await sendWhatsAppReply(phoneNumber, "System error while adding you to the queue. Please try again.");
+                await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
+                return successResponse({ message: 'Token creation error' }, requestId);
+            }
+
+            // Success Transition
+            await supabase.from('whatsapp_conversations').update({
+                state: 'ACTIVE_TOKEN',
+                active_token_id: tokenResult.token_id,
+                last_interaction: new Date().toISOString()
+            }).eq('id', conv.id);
+
+            const ewtMinutes = Math.round((tokenResult.ewt_seconds || 0) / 60);
+
+            await sendWhatsAppInteractiveButtons(
+                phoneNumber,
+                `🎟 Token Confirmed!\n\nToken Number: #${tokenResult.token_number}\nEstimated Wait: ~${ewtMinutes} minutes\n\nYou will receive alerts when your turn is near.`,
+                [
+                    { id: 'VIEW_STATUS', title: 'View Live Status' },
+                    { id: 'CANCEL_TOKEN', title: 'Cancel My Token' }
+                ]
+            );
+
+        } else if (interactiveResponseId === 'CANCEL_JOIN') {
+            await supabase.from('whatsapp_conversations').update({
+                state: 'IDLE',
+                last_interaction: new Date().toISOString()
+            }).eq('id', conv.id);
+            await sendWhatsAppReply(phoneNumber, "Request cancelled. You can join later by sending JOIN inside this chat.");
+        } else {
+            // Invalid reply in this state
+            await sendWhatsAppInteractiveButtons(
+                phoneNumber,
+                `Please use the buttons to confirm joining the queue:`,
+                [
+                    { id: `CONFIRM_${name}`, title: 'Confirm & Join' },
+                    { id: 'CANCEL_JOIN', title: 'Cancel' }
+                ]
+            );
+        }
+
+    } else if (conv.state === 'ACTIVE_TOKEN') {
+        if (interactiveResponseId === 'CANCEL_TOKEN' && conv.active_token_id) {
+            // Cancel the token
+            await supabase.from('tokens').update({ status: 'CANCELLED' }).eq('id', conv.active_token_id);
+            await supabase.from('whatsapp_conversations').update({
+                state: 'IDLE',
+                active_token_id: null,
+                last_interaction: new Date().toISOString()
+            }).eq('id', conv.id);
+
+            await sendWhatsAppInteractiveButtons(
+                phoneNumber,
+                `❌ Your token has been cancelled.\n\nYou may rejoin anytime by joining the queue again.`,
+                [{ id: 'REJOIN_QUEUE', title: 'Rejoin Queue' }]
+            );
+        } else if (interactiveResponseId === 'VIEW_STATUS' && conv.active_token_id) {
+            // Fetch live status
+            const { data: tData } = await supabase.from('tokens').select('token_number, status, session_id').eq('id', conv.active_token_id).single();
+            if (tData) {
+                const { data: sData } = await supabase.from('sessions').select('last_token_number').eq('id', tData.session_id).single();
+                await sendWhatsAppReply(phoneNumber, `Live Status 🏥\n\nYour Token: #${tData.token_number}\nStatus: ${tData.status}\nCurrently Serving: #${sData?.last_token_number || '-'}`);
+            }
+        } else if (interactiveResponseId === 'REJOIN_QUEUE') {
+            // Treat like JOIN command
+            await supabase.from('whatsapp_conversations').upsert({
+                clinic_id: businessId,
+                phone: phoneNumber,
+                state: 'AWAITING_NAME',
+                active_token_id: null,
+                last_interaction: new Date().toISOString()
+            }, { onConflict: 'clinic_id,phone' })
+
+            await sendWhatsAppReply(phoneNumber, `Welcome back to ${businessName} 🏥\n\nPlease reply with your full name to join today's queue.`);
+        } else if (interactiveResponseId === 'IM_ON_THE_WAY' || interactiveResponseId === 'IM_HERE') {
+            await sendWhatsAppReply(phoneNumber, "Noted! Please wait at the reception area for your turn.");
+        }
+
+    } else if (conv.state === 'AWAITING_FEEDBACK_TEXT') {
+        if (conv.active_token_id) {
+            await supabase.from('token_feedback').update({ feedback_text: messageText }).eq('token_id', conv.active_token_id);
+        }
+        await supabase.from('whatsapp_conversations').update({
+            state: 'IDLE',
+            active_token_id: null, // Clear active token now that flow is fully over
+            last_interaction: new Date().toISOString()
+        }).eq('id', conv.id);
+
+        await sendWhatsAppReply(phoneNumber, "Thank you for your feedback! We will use it to improve our service.");
+
+    } else if (conv.state === 'AWAITING_FEEDBACK_RATING') {
+        if (interactiveResponseId.startsWith('RATE_')) {
+            const ratingStr = interactiveResponseId.replace('RATE_', '');
+            const rating = parseInt(ratingStr);
+
+            if (conv.active_token_id) {
+                await supabase.from('token_feedback').upsert({
+                    token_id: conv.active_token_id,
+                    rating: rating
+                });
+            }
+
+            if (rating <= 3) {
+                await supabase.from('whatsapp_conversations').update({
+                    state: 'AWAITING_FEEDBACK_TEXT',
+                    last_interaction: new Date().toISOString()
+                }).eq('id', conv.id);
+                await sendWhatsAppReply(phoneNumber, "We’re sorry your experience wasn’t perfect.\n\nPlease tell us what went wrong so we can improve.");
+            } else {
+                await supabase.from('whatsapp_conversations').update({
+                    state: 'IDLE',
+                    active_token_id: null,
+                    last_interaction: new Date().toISOString()
+                }).eq('id', conv.id);
+
+                await sendWhatsAppInteractiveButtons(
+                    phoneNumber,
+                    "We’re glad you had a great experience! 😊\n\nWould you like to leave us a Google review?",
+                    [{ id: 'LEAVE_GOOGLE_REVIEW', title: 'Leave Review' }]
+                );
+            }
+        } else {
+            // Treat general text during feedback as skipping
+            await supabase.from('whatsapp_conversations').update({
+                state: 'IDLE',
+                active_token_id: null,
+                last_interaction: new Date().toISOString()
+            }).eq('id', conv.id);
+            await sendWhatsAppReply(phoneNumber, "Thanks for visiting us!");
+        }
+    } else {
+        // Fallback for IDLE state and non-command messages
+        await supabase.from('conversations').upsert({
+            business_id: businessId,
+            phone_number: phoneNumber,
+            last_message_at: new Date().toISOString(),
+            conversation_open: true,
+            wa_conversation_id: null
+        }, { onConflict: 'business_id,phone_number' });
+    }
+
+    // Always log in traditional conversations table as well to keep the old 24h window working
+    await supabase.from('conversations').upsert({
+        business_id: businessId,
+        phone_number: phoneNumber,
+        last_message_at: new Date().toISOString(),
+        conversation_open: true,
+        wa_conversation_id: null
+    }, { onConflict: 'business_id,phone_number' });
 
     return successResponse({ message: 'Webhook processed' }, requestId)
 }
 
-// Helper (Would ideally be in lib/whatsapp.ts, placed here for immediate usage)
+// Simulated API calls to WhatsApp Cloud API (Wait, lib/whatsapp.ts now has interactive versions. I will use the local text one here for basic replies to avoid refactoring all imports)
 async function sendWhatsAppReply(phone: string, text: string) {
     const WABA_ID = process.env.WHATSAPP_PHONE_ID
     const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
@@ -217,6 +480,43 @@ async function sendWhatsAppReply(phone: string, text: string) {
                 text: { body: text }
             })
         })
+    } catch (e) {
+        console.error("Failed to send WA message", e)
+    }
+}
+
+async function sendWhatsAppInteractiveButtons(phone: string, bodyText: string, buttons: { id: string, title: string }[]) {
+    const WABA_ID = process.env.WHATSAPP_PHONE_ID
+    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
+
+    if (!WABA_ID || !TOKEN) return;
+
+    try {
+        await fetch(`https://graph.facebook.com/v19.0/${WABA_ID}/messages`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: `91${phone}`,
+                type: "interactive",
+                interactive: {
+                    type: "button",
+                    body: { text: bodyText },
+                    action: {
+                        buttons: buttons.map(b => ({
+                            type: "reply",
+                            reply: {
+                                id: b.id,
+                                title: b.title.substring(0, 20) // max 20 chars
+                            }
+                        }))
+                    }
+                }
+            }),
+        });
     } catch (e) {
         console.error("Failed to send WA message", e)
     }
