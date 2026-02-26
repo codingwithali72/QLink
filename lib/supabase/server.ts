@@ -14,7 +14,7 @@ export const createClient = () => {
                 },
                 set(name: string, value: string, options: CookieOptions) {
                     try {
-                        const { maxAge: _maxAge, expires: _expires, ...sessionOptions } = options;
+                        const { ...sessionOptions } = options;
                         cookieStore.set({
                             name,
                             value,
