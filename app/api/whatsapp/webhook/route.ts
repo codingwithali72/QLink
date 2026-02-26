@@ -286,16 +286,35 @@ export async function POST(req: Request) {
                 return successResponse({ message: 'Session closed on confirm' }, requestId);
             }
 
+            // Import crypto functions
+            // I need to add the imports at the top of the file but I can use dynamic import here to keep things simple or add it to the top.
+            // Let's add them to the top of the file in another step and use them here.
+
+            let phoneEncrypted: string | null = null;
+            let phoneHash: string | null = null;
+
+            try {
+                // Dynamically import to safely execute here
+                const { encryptPhone, hashPhone } = await import('@/lib/crypto');
+                phoneEncrypted = encryptPhone(phoneNumber);
+                phoneHash = hashPhone(phoneNumber);
+            } catch (err) {
+                console.error("Encryption failed for WA hook:", err);
+            }
+
             const { data: tokenResult, error } = await supabase.rpc('create_token_atomic', {
                 p_business_id: businessId,
                 p_session_id: session.id,
-                p_phone: phoneNumber,
+                p_phone: phoneEncrypted ? null : phoneNumber,
                 p_name: patientName || name, // fallback to WA profile name
                 p_is_priority: false,
-                p_source: 'DIRECT_WA'
+                p_staff_id: null,
+                p_phone_encrypted: phoneEncrypted,
+                p_phone_hash: phoneHash
             });
 
             if (error || !tokenResult || !tokenResult.success) {
+                console.error("WA Token Creation Error:", { error, tokenResult, params: { businessId, sessionId: session.id, phoneNumber, patientName, name } });
                 await sendWhatsAppReply(phoneNumber, "System error while adding you to the queue. Please try again.");
                 await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
                 return successResponse({ message: 'Token creation error' }, requestId);
@@ -514,3 +533,4 @@ async function sendWhatsAppInteractiveButtons(phone: string, bodyText: string, b
         console.error("Failed to send WA message", e)
     }
 }
+// Debug log
