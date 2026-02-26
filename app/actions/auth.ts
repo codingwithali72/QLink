@@ -63,7 +63,7 @@ export async function login(formData: FormData) {
     }
 
     revalidatePath("/", "layout");
-    redirect(`/${business.slug}/reception`);
+    redirect(`/clinic/${business.slug}/reception`);
 }
 
 export async function logout() {
