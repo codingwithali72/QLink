@@ -39,28 +39,22 @@ export async function middleware(request: NextRequest) {
                         return request.cookies.get(name)?.value
                     },
                     set(name: string, value: string, options: CookieOptions) {
-                        const { maxAge, ...sessionOptions } = options;
-                        const secureOptions = {
-                            ...sessionOptions,
-                            httpOnly: true,
-                            secure: process.env.NODE_ENV === 'production',
-                            sameSite: 'lax' as const,
-                        };
-
-                        request.cookies.set({ name, value, ...secureOptions })
-                        response = NextResponse.next()
-                        response.cookies.set({ name, value, ...secureOptions })
+                        request.cookies.set({ name, value, ...options })
+                        response = NextResponse.next({
+                            request: {
+                                headers: request.headers,
+                            },
+                        })
+                        response.cookies.set({ name, value, ...options })
                     },
                     remove(name: string, options: CookieOptions) {
-                        const secureOptions = {
-                            ...options,
-                            httpOnly: true,
-                            secure: process.env.NODE_ENV === 'production',
-                            sameSite: 'lax' as const,
-                        };
-                        request.cookies.set({ name, value: '', ...secureOptions })
-                        response = NextResponse.next()
-                        response.cookies.set({ name, value: '', ...secureOptions })
+                        request.cookies.set({ name, value: '', ...options })
+                        response = NextResponse.next({
+                            request: {
+                                headers: request.headers,
+                            },
+                        })
+                        response.cookies.set({ name, value: '', ...options })
                     },
                 },
             }

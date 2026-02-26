@@ -46,7 +46,7 @@ export async function login(formData: FormData) {
     if (staffError || !staffUser) {
         console.error("Staff user lookup failed:", staffError?.message || "User not found in staff_users table");
         await supabase.auth.signOut();
-        return { error: "No clinic associated with this account. Check with Admin." };
+        return { error: `Account verified, but NO clinic is assigned to ${user.email}. Contact your Super Admin to link this account.` };
     }
 
     // Fetch clinic slug
