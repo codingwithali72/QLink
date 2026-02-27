@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { ClinicStatusBadge } from "./_components/ClinicStatusBadge";
 import { Button } from "@/components/ui/button";
-import { Lock, StopCircle, Phone, ShieldCheck } from "lucide-react";
+import { Phone, ShieldCheck } from "lucide-react";
 import { getClinicDate } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
@@ -28,19 +28,12 @@ export default async function ClinicLandingPage({ params }: PageProps) {
 
     if (!business) return notFound();
 
-    const supabase = createAdminClient();
-    const today = getClinicDate();
 
-    // Check for today's session
-    const { data: session } = await supabase
-        .from('sessions')
-        .select('status')
-        .eq('business_id', business.id)
-        .eq('date', today)
-        .single();
 
-    const isClosedOrPaused = !session || session.status !== 'OPEN';
-    const statusMessage = session?.status === 'PAUSED' ? "Queue is currently paused." : "Queue is closed for today.";
+
+
+
+
 
     return (
         <main className="min-h-screen bg-slate-50 flex flex-col">
