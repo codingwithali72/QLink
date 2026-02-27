@@ -1,11 +1,9 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isSuperAdmin } from "./admin"; // Refactor to export isSuperAdmin or duplicate
 
 // Duplicate for isolation or import
 async function checkAuth() {
-    const supabase = createAdminClient();
     // In real app, verify via cookie session. We assume `isSuperAdmin` logic.
     // For simplicity here, relying on the same logic structure as admin.ts.
     return true;

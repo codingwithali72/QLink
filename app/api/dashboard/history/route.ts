@@ -55,7 +55,16 @@ export async function GET(request: Request) {
         if (error) throw error;
 
         const tokens = (data || []).map((v) => {
-            const visit = v as any;
+            const visit = v as {
+                id: string;
+                token_number: number;
+                status: string;
+                is_priority: boolean;
+                rating: number | null;
+                feedback: string | null;
+                created_at: string;
+                patients?: { name?: string; phone?: string; phone_encrypted?: string } | null;
+            };
             return {
                 id: visit.id,
                 tokenNumber: visit.token_number,
@@ -71,8 +80,9 @@ export async function GET(request: Request) {
         const nextCursor = tokens.length === limit ? tokens[tokens.length - 1].tokenNumber : null;
 
         return NextResponse.json({ tokens, nextCursor });
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error("History API Error:", e);
-        return NextResponse.json({ error: e.message || 'Server Error' }, { status: 500 });
+        const errMessage = e instanceof Error ? e.message : 'Server Error';
+        return NextResponse.json({ error: errMessage }, { status: 500 });
     }
 }
