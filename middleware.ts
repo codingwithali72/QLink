@@ -64,13 +64,22 @@ export async function middleware(request: NextRequest) {
         const { data: { user } } = await supabase.auth.getUser()
 
         // Protect Reception / Admin routes
-        const isAuthRoute = request.nextUrl.pathname.includes('/reception') || request.nextUrl.pathname.includes('/admin');
+        const isAdminRoute = request.nextUrl.pathname.includes('/admin');
+        const isReceptionRoute = request.nextUrl.pathname.includes('/reception');
+        const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@qlink.com";
 
-        if (isAuthRoute && !user) {
+        if ((isAdminRoute || isReceptionRoute) && !user) {
             const loginUrl = request.nextUrl.clone();
             loginUrl.pathname = '/login';
-            // Need to return a redirect, not a rewrite, to update browser URL
             return NextResponse.redirect(loginUrl);
+        }
+
+        // Fix 3: Role protection for /admin
+        if (isAdminRoute && user && user.email !== ADMIN_EMAIL) {
+            console.warn(`Unauthorized admin access attempt by ${user.email}`);
+            const homeUrl = request.nextUrl.clone();
+            homeUrl.pathname = '/'; // Redirect to their landing page/dashboard
+            return NextResponse.redirect(homeUrl);
         }
     }
 

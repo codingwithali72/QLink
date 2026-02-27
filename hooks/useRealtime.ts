@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Session, Token } from "@/types/firestore";
+import { Session, Token, Department, Doctor } from "@/types/firestore";
 import { useOfflineSync } from "./useOfflineSync";
 import { getBusinessId, getDashboardData } from "@/app/actions/queue";
 
@@ -19,9 +19,12 @@ export function useClinicRealtime(clinicSlug: string) {
     const [businessId, setBusinessId] = useState<string | null>(null);
     const [dailyTokenLimit, setDailyTokenLimit] = useState<number | null>(null);
     const [servedCount, setServedCount] = useState<number>(0);
+    const [departments, setDepartments] = useState<Department[]>([]);
+    const [doctors, setDoctors] = useState<Doctor[]>([]);
     const [error, setError] = useState<string | null>(null);
 
     const [isSynced, setIsSynced] = useState(false);
+    const { saveToLocal, readFromLocal } = useOfflineSync(clinicSlug);
 
     const supabase = useMemo(() => createClient(), []);
     const pollingInterval = useRef<NodeJS.Timeout | null>(null);
@@ -41,7 +44,15 @@ export function useClinicRealtime(clinicSlug: string) {
             const res = await getDashboardData(clinicSlug);
 
             if (res.error) {
-                setError(res.error);
+                // Fix 4: Try local fallback on error
+                const cached = await readFromLocal();
+                if (cached) {
+                    setSession(cached.session);
+                    setTokens(cached.tokens);
+                    setError(`${res.error} (Showing Offline Data)`);
+                } else {
+                    setError(res.error);
+                }
                 setIsConnected(false);
                 setLoading(false);
                 setIsSynced(true);
@@ -55,6 +66,8 @@ export function useClinicRealtime(clinicSlug: string) {
             if (typeof res.servedCount === 'number') {
                 setServedCount(res.servedCount);
             }
+            if (res.departments) setDepartments(res.departments as Department[]);
+            if (res.doctors) setDoctors(res.doctors as Doctor[]);
 
             // STABILIZATION: Ignore server results for 2.5s after a local action
             // to allow DB replication/caching to settle and prevent "ghost" state flicker.
@@ -101,7 +114,15 @@ export function useClinicRealtime(clinicSlug: string) {
             setIsSynced(true);
         } catch (err: any) {
             console.error("Dashboard Fetch Error:", err);
-            setError(err.message || "Failed to fetch dashboard data");
+            // Fix 4: Try local fallback on catch
+            const cached = await readFromLocal();
+            if (cached) {
+                setSession(cached.session);
+                setTokens(cached.tokens);
+                setError("Connectivity Lost (Showing Offline Data)");
+            } else {
+                setError(err.message || "Failed to fetch dashboard data");
+            }
             setIsConnected(false);
             setLoading(false);
             setIsSynced(true);
@@ -210,15 +231,13 @@ export function useClinicRealtime(clinicSlug: string) {
         };
     }, [businessId, fetchData, isConnected]);
 
-    const { saveToLocal } = useOfflineSync(clinicSlug);
-
     useEffect(() => {
         if (session && tokens.length > 0) {
             saveToLocal(session, tokens);
         }
     }, [session, tokens, saveToLocal]);
 
-    return { session, tokens, loading, error, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit, servedCount, setTokens: setOptimisticTokens, setSession };
+    return { session, tokens, departments, doctors, loading, error, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit, servedCount, setTokens: setOptimisticTokens, setSession };
 }
 
 // Mappers
@@ -249,5 +268,7 @@ function mapToken(t: any): Token {
         createdAt: t.created_at,
         completedAt: t.served_at,
         createdByStaffId: t.created_by_staff_id,
+        departmentId: t.departmentId,
+        doctorId: t.doctorId,
     } as any;
 }

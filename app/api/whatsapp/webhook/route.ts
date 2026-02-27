@@ -37,22 +37,32 @@ export async function POST(req: Request) {
     }
 
     // 1. Validate Meta webhook signature
-    // PHASE 3 REMEDIATION: Prevent Cryptographic Timing Attacks
-    if (APP_SECRET && signature) {
-        const expectedSignature = `sha256=${crypto
-            .createHmac('sha256', APP_SECRET)
-            .update(rawBody)
-            .digest('hex')}`
+    // CRITICAL: Mandatory in all environments to prevent spoofing.
+    if (!APP_SECRET) {
+        console.error(`[${requestId}] CRITICAL: WHATSAPP_APP_SECRET is not configured! Webhook aborted.`);
+        return errorResponse('Webhook configuration error', 500, requestId);
+    }
 
-        try {
-            const sigBuf = Buffer.from(signature, 'utf8');
-            const expectedBuf = Buffer.from(expectedSignature, 'utf8');
-            if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
-                return errorResponse('Invalid signature', 401, requestId)
-            }
-        } catch {
-            return errorResponse('Invalid signature format', 401, requestId)
+    if (!signature) {
+        console.warn(`[${requestId}] Webhook rejected: Missing x-hub-signature-256 header.`);
+        return errorResponse('Missing signature', 401, requestId);
+    }
+
+    const expectedSignature = `sha256=${crypto
+        .createHmac('sha256', APP_SECRET)
+        .update(rawBody)
+        .digest('hex')}`
+
+    try {
+        const sigBuf = Buffer.from(signature, 'utf8');
+        const expectedBuf = Buffer.from(expectedSignature, 'utf8');
+        if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+            console.warn(`[${requestId}] Webhook rejected: Invalid signature.`);
+            return errorResponse('Invalid signature', 401, requestId)
         }
+    } catch (e) {
+        console.error(`[${requestId}] Signature validation error:`, e);
+        return errorResponse('Invalid signature format', 401, requestId)
     }
 
     let body
@@ -287,87 +297,98 @@ export async function POST(req: Request) {
             // Check if we have a name from WhatsApp profile
             const waName = name || 'WhatsApp Patient';
 
-            // Proceed to atomic creation (Step 3)
-            const todayIST = new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-            const dateString = new Date(todayIST).toISOString().split('T')[0]
-            const { data: session } = await supabase
-                .from('sessions')
-                .select('id')
-                .eq('business_id', businessId)
-                .eq('date', dateString)
-                .in('status', ['OPEN', 'PAUSED'])
-                .single()
+            // Proceed to Department/Doctor Selection or atomic creation
 
-            if (!session) {
-                await sendWhatsAppReply(phoneNumber, "The session has closed. Cannot create token.");
-                await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
-                return successResponse({ message: 'Session closed on join' }, requestId);
+            // 1. Fetch departments to see if we need selection
+            const { data: departments } = await supabase
+                .from('departments')
+                .select('id, name')
+                .eq('clinic_id', businessId)
+                .eq('is_active', true);
+
+            if (departments && departments.length > 1) {
+                // Multi-department hospital: Ask user to select a department
+                await supabase.from('whatsapp_conversations').update({
+                    state: 'AWAITING_DEPARTMENT_SELECTION',
+                    last_interaction: new Date().toISOString()
+                }).eq('id', conv.id);
+
+                await sendWhatsAppInteractiveList(
+                    phoneNumber,
+                    "Please select the department you wish to visit:",
+                    "Select Department",
+                    [{
+                        title: "Available Departments",
+                        rows: departments.map(d => ({
+                            id: `DEPT_${d.id}`,
+                            title: d.name
+                        }))
+                    }]
+                );
+                return successResponse({ message: 'Sent department list' }, requestId);
             }
 
-            // Execute Clinical Visit Creation (Phase 12 RPC)
-            const { encryptPhone, hashPhone } = await import('@/lib/crypto');
-            const phoneEncrypted = encryptPhone(phoneNumber);
-            const phoneHash = hashPhone(phoneNumber);
+            // If only 1 department (or none yet), proceed automatically using the first one or generic
+            const defaultDeptId = departments?.[0]?.id || null;
 
-            const { data: result, error: rpcError } = await supabase.rpc('rpc_create_clinical_visit', {
-                p_clinic_id: businessId,
-                p_session_id: session.id,
-                p_patient_name: waName,
-                p_phone_encrypted: phoneEncrypted,
-                p_phone_hash: phoneHash,
-                p_visit_type: 'OPD',
-                p_is_priority: false,
-                p_consent_purpose: 'QUEUE_MANAGEMENT',
-                p_source: 'WHATSAPP'
-            });
-
-            if (rpcError || !result || !result.success) {
-                await sendWhatsAppReply(phoneNumber, "System error while adding you to the queue.");
-                await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
-                return successResponse({ message: 'Visit creation error' }, requestId);
-            }
-
-            // Calculate people ahead
-            const { count: aheadCount } = await supabase
-                .from('clinical_visits')
-                .select('id', { count: 'exact', head: true })
-                .eq('session_id', session.id)
-                .eq('status', 'WAITING')
-                .lt('token_number', result.token_number);
-
-            // Get current serving
-            const { data: servingVisit } = await supabase
-                .from('clinical_visits')
-                .select('token_number')
-                .eq('session_id', session.id)
-                .eq('status', 'SERVING')
-                .maybeSingle();
-
-            // Get avg time
-            const { data: bizData } = await supabase.from('businesses').select('settings').eq('id', businessId).single();
-            const settings = bizData?.settings as { avg_wait_time?: number } | null;
-            const avg = settings?.avg_wait_time || 12;
-            const ewt = (aheadCount || 0) * avg;
-
-            // Step 3: Confirmation Response
-            await supabase.from('whatsapp_conversations').update({
-                state: 'ACTIVE_TOKEN',
-                active_visit_id: result.visit_id,
-                last_interaction: new Date().toISOString()
-            }).eq('id', conv.id);
-
-            await sendWhatsAppInteractiveButtons(
-                phoneNumber,
-                `✅ Queue Confirmed\n\nYour token: #${result.token_number}\nNow serving: #${servingVisit?.token_number || '--'}\nPeople ahead: ${aheadCount || 0}\nEst. wait: ${ewt} minutes\n\nYou will receive alerts as your turn approaches.`,
-                [
-                    { id: 'VIEW_STATUS', title: 'View Live Status' },
-                    { id: 'CANCEL_START', title: 'Cancel My Token' },
-                    { id: 'CONTACT_INFO', title: 'Contact Reception' }
-                ]
-            );
+            // Bypass straight to queue insertion using new RPC
+            await createClinicalVisitFromWhatsApp(phoneNumber, conv, businessId, businessName, waName, defaultDeptId, null, supabase);
 
         } else if (interactiveResponseId === 'VIEW_STATUS_PUBLIC') {
             await sendWhatsAppReply(phoneNumber, `Currently at ${businessName}, the queue is active. Token creation is available.`);
+        }
+
+    } else if (conv.state === 'AWAITING_DEPARTMENT_SELECTION') {
+        if (interactiveResponseId.startsWith('DEPT_')) {
+            const deptId = interactiveResponseId.replace('DEPT_', '');
+
+            // Check if department has multiple doctors and non-pooled routing
+            const { data: dept } = await supabase.from('departments').select('routing_strategy').eq('id', deptId).single();
+            const { data: doctors } = await supabase.from('doctors').select('id, name').eq('department_id', deptId).eq('is_active', true);
+
+            if (dept?.routing_strategy !== 'POOLED' && doctors && doctors.length > 1) {
+                // Ask to select a doctor
+                await supabase.from('whatsapp_conversations').update({
+                    state: 'AWAITING_DOCTOR_SELECTION',
+                    context_data: { selected_department_id: deptId }, // Temporarily store in context_data if it exists, otherwise we'll just encode it in the next ID
+                    last_interaction: new Date().toISOString()
+                }).eq('id', conv.id);
+
+                await sendWhatsAppInteractiveList(
+                    phoneNumber,
+                    "Please select your preferred doctor:",
+                    "Select Doctor",
+                    [{
+                        title: "Available Doctors",
+                        rows: doctors.map(d => ({
+                            id: `DOC_${deptId}_${d.id}`, // Encode both IDs to maintain state easily
+                            title: d.name
+                        }))
+                    }, {
+                        title: "Automated",
+                        rows: [{ id: `DOC_${deptId}_ANY`, title: "Any Available Doctor", description: "First available specialist" }]
+                    }]
+                );
+            } else {
+                // Direct to queue
+                const waName = name || 'WhatsApp Patient';
+                await createClinicalVisitFromWhatsApp(phoneNumber, conv, businessId, businessName, waName, deptId, null, supabase);
+            }
+        } else {
+            await sendWhatsAppReply(phoneNumber, "Please select an option from the list to continue.");
+        }
+
+    } else if (conv.state === 'AWAITING_DOCTOR_SELECTION') {
+        if (interactiveResponseId.startsWith('DOC_')) {
+            // DOC_{deptId}_{docId}
+            const parts = interactiveResponseId.split('_');
+            const deptId = parts[1];
+            const docId = parts[2] === 'ANY' ? null : parts[2];
+
+            const waName = name || 'WhatsApp Patient';
+            await createClinicalVisitFromWhatsApp(phoneNumber, conv, businessId, businessName, waName, deptId, docId, supabase);
+        } else {
+            await sendWhatsAppReply(phoneNumber, "Please select a doctor to continue.");
         }
 
     } else if (conv.state === 'ACTIVE_TOKEN') {
@@ -565,5 +586,139 @@ async function sendWhatsAppInteractiveButtons(phone: string, bodyText: string, b
     } catch (e) {
         console.error("Failed to send WA message", e)
     }
+}
+
+async function sendWhatsAppInteractiveList(phone: string, bodyText: string, buttonText: string, sections: { title: string, rows: { id: string, title: string, description?: string }[] }[]) {
+    const WABA_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
+
+    if (!WABA_ID || !TOKEN) return;
+
+    try {
+        await fetch(`https://graph.facebook.com/v19.0/${WABA_ID}/messages`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: `91${phone}`,
+                type: "interactive",
+                interactive: {
+                    type: "list",
+                    header: {
+                        type: "text",
+                        text: "Options"
+                    },
+                    body: { text: bodyText },
+                    action: {
+                        button: buttonText.substring(0, 20),
+                        sections: sections.map(s => ({
+                            title: s.title.substring(0, 24),
+                            rows: s.rows.map(r => ({
+                                id: r.id,
+                                title: r.title.substring(0, 24),
+                                description: r.description ? r.description.substring(0, 72) : undefined
+                            }))
+                        }))
+                    }
+                }
+            }),
+        });
+    } catch (e) {
+        console.error("Failed to send WA list message", e)
+    }
+}
+
+async function createClinicalVisitFromWhatsApp(phoneNumber: string, conv: { id: string }, businessId: string, businessName: string, waName: string, deptId: string | null, docId: string | null, supabase: ReturnType<typeof createAdminClient>) {
+    const todayIST = new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    const dateString = new Date(todayIST).toISOString().split('T')[0]
+    const { data: session } = await supabase
+        .from('sessions')
+        .select('id')
+        .eq('business_id', businessId)
+        .eq('date', dateString)
+        .in('status', ['OPEN', 'PAUSED'])
+        .single()
+
+    if (!session) {
+        await sendWhatsAppReply(phoneNumber, "The session has closed. Cannot create token.");
+        await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
+        return;
+    }
+
+    // Execute Clinical Visit Creation using the updated Phase 2.1 signature
+    const { encryptPhone, hashPhone } = await import('@/lib/crypto');
+    const phoneEncrypted = encryptPhone(phoneNumber);
+    const phoneHash = hashPhone(phoneNumber);
+
+    const { data: result, error: rpcError } = await supabase.rpc('rpc_create_clinical_visit', {
+        p_clinic_id: businessId,
+        p_session_id: session.id,
+        p_patient_name: waName,
+        p_patient_phone: phoneNumber,
+        p_phone_encrypted: phoneEncrypted,
+        p_phone_hash: phoneHash,
+        p_department_id: deptId,
+        p_requested_doctor_id: docId,
+        p_visit_type: 'OPD',
+        p_is_priority: false,
+        p_source: 'WHATSAPP'
+    });
+
+    if (rpcError || !result || !result.success) {
+        await sendWhatsAppReply(phoneNumber, rpcError?.message || result?.error || "System error while adding you to the queue.");
+        await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
+        return;
+    }
+
+    // Calculate people ahead strictly within same department
+    const { count: aheadCount } = await supabase
+        .from('clinical_visits')
+        .select('id', { count: 'exact', head: true })
+        .eq('session_id', session.id)
+        .eq('status', 'WAITING')
+        .eq('department_id', deptId)
+        .lt('token_number', result.token_number);
+
+    // Get current serving
+    const { data: servingVisit } = await supabase
+        .from('clinical_visits')
+        .select('token_number')
+        .eq('session_id', session.id)
+        .eq('status', 'SERVING')
+        .eq('department_id', deptId)
+        .maybeSingle();
+
+    // Get avg time
+    const { data: bizData } = await supabase.from('businesses').select('settings').eq('id', businessId).single();
+    const settings = bizData?.settings as { avg_wait_time?: number } | null;
+    const avg = settings?.avg_wait_time || 12;
+    const ewt = (aheadCount || 0) * avg;
+
+    // Confirm Response
+    await supabase.from('whatsapp_conversations').update({
+        state: 'ACTIVE_TOKEN',
+        active_visit_id: result.visit_id,
+        last_interaction: new Date().toISOString()
+    }).eq('id', conv.id);
+
+    // If doctor assigned, fetch name
+    let docLine = '';
+    if (result.assigned_doctor_id) {
+        const { data: doc } = await supabase.from('doctors').select('name').eq('id', result.assigned_doctor_id).single();
+        if (doc) docLine = `\nDoctor: ${doc.name}`;
+    }
+
+    await sendWhatsAppInteractiveButtons(
+        phoneNumber,
+        `✅ Queue Confirmed\n\nYour token: #${result.token_number}${docLine}\nNow serving: #${servingVisit?.token_number || '--'}\nPeople ahead: ${aheadCount || 0}\nEst. wait: ${ewt} minutes\n\nYou will receive alerts as your turn approaches.`,
+        [
+            { id: 'VIEW_STATUS', title: 'View Live Status' },
+            { id: 'CANCEL_START', title: 'Cancel My Token' },
+            { id: 'CONTACT_INFO', title: 'Contact Reception' }
+        ]
+    );
 }
 // Debug log

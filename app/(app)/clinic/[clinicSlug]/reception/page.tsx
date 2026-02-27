@@ -22,7 +22,7 @@ import { getClinicDate } from "@/lib/date";
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function ReceptionPage({ params }: { params: { clinicSlug: string } }) {
-    const { session, tokens, loading, refresh, lastUpdated, isConnected, dailyTokenLimit, servedCount, setTokens } = useClinicRealtime(params.clinicSlug);
+    const { session, tokens, departments, doctors, loading, refresh, lastUpdated, isConnected, dailyTokenLimit, servedCount, setTokens } = useClinicRealtime(params.clinicSlug);
 
     // ── Per-action loading flags ────────────────────────────────────────────────
     const [nextLoading, setNextLoading] = useState(false);
@@ -57,6 +57,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const [manualName, setManualName] = useState("");
     const [manualPhone, setManualPhone] = useState("");
     const [manualIsPriority, setManualIsPriority] = useState(false);
+    const [manualDepartmentId, setManualDepartmentId] = useState<string>("any");
+    const [manualDoctorId, setManualDoctorId] = useState<string>("any");
 
     // Queue Controls
     const [isLogOpen, setIsLogOpen] = useState(false);
@@ -71,6 +73,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         customerName?: string | null;
         customerPhone?: string | null;
         feedback?: string | null;
+        departmentId?: string | null;
+        doctorId?: string | null;
     }
 
     const todayStr = getClinicDate();
@@ -209,6 +213,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         setManualIsPriority(true);
         setManualName("");
         setManualPhone("0000000000");
+        setManualDepartmentId("any");
+        setManualDoctorId("any");
         setIsAddModalOpen(true);
     };
 
@@ -275,7 +281,10 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
         setAddLoading(true);
         try {
-            const res = await createToken(params.clinicSlug, manualPhone, manualName, manualIsPriority);
+            const r_deptId = manualDepartmentId === "any" ? null : manualDepartmentId;
+            const r_docId = manualDoctorId === "any" ? null : manualDoctorId;
+
+            const res = await createToken(params.clinicSlug, manualPhone, manualName, manualIsPriority, 'OPD', r_deptId, r_docId);
             if (!res.success) {
                 if (res.is_duplicate) {
                     showToast(`Patient already has an active visit`, 'error');
@@ -287,12 +296,16 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 setManualName("");
                 setManualPhone("");
                 setManualIsPriority(false);
+                setManualDepartmentId("any");
+                setManualDoctorId("any");
                 setIsAddModalOpen(false);
             } else {
                 setIsAddModalOpen(false);
                 setManualName("");
                 setManualPhone("");
                 setManualIsPriority(false);
+                setManualDepartmentId("any");
+                setManualDoctorId("any");
                 // Background refresh
                 refresh();
                 showToast("Token Created", "success");
@@ -493,6 +506,42 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                     <Label className="font-bold">Urgent / Priority</Label>
                                     <Switch checked={manualIsPriority} onCheckedChange={setManualIsPriority} />
                                 </div>
+
+                                {departments && departments.length > 0 && (
+                                    <div className="space-y-2">
+                                        <Label className="font-bold text-sm">Target Department</Label>
+                                        <select
+                                            value={manualDepartmentId}
+                                            onChange={(e) => {
+                                                setManualDepartmentId(e.target.value);
+                                                setManualDoctorId("any");
+                                            }}
+                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                                        >
+                                            <option value="any">General / Auto-Route</option>
+                                            {departments.map(d => (
+                                                <option key={d.id} value={d.id}>{d.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {manualDepartmentId !== "any" && doctors && doctors.filter(d => d.department_id === manualDepartmentId).length > 0 && (
+                                    <div className="space-y-2">
+                                        <Label className="font-bold text-sm">Assigned Doctor (Optional)</Label>
+                                        <select
+                                            value={manualDoctorId}
+                                            onChange={(e) => setManualDoctorId(e.target.value)}
+                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                                        >
+                                            <option value="any">Auto-Balance (Fastest Available)</option>
+                                            {doctors.filter(d => d.department_id === manualDepartmentId).map(d => (
+                                                <option key={d.id} value={d.id}>Dr. {d.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
                                 <Input value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Patient Name" />
                                 <Input value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="Phone number" />
                                 <Button type="submit" disabled={addLoading} className="w-full h-12 bg-blue-600 text-white font-bold">Create Token</Button>
@@ -507,10 +556,22 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             <Badge className="bg-blue-600 text-white">{waitingTokens.length}</Badge>
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                            {visibleWaitingTokens.map(t => (
-                                <TokenItem key={t.id} token={t} onCancel={handleCancelToken} onToggleArrived={handleToggleArrived} isCallLoading={nextLoading || skipLoading} />
-                            ))}
-                            {visibleWaitingTokens.length === 0 && <div className="text-center py-20 text-muted-foreground">Box is empty</div>}
+                            {visibleWaitingTokens.map(t => {
+                                const deptName = departments?.find(d => d.id === t.departmentId)?.name;
+                                const docName = doctors?.find(d => d.id === t.doctorId)?.name;
+                                return (
+                                    <TokenItem
+                                        key={t.id}
+                                        token={t}
+                                        onCancel={handleCancelToken}
+                                        onToggleArrived={handleToggleArrived}
+                                        isCallLoading={nextLoading || skipLoading}
+                                        departmentName={deptName}
+                                        doctorName={docName}
+                                    />
+                                );
+                            })}
+                            {visibleWaitingTokens.length === 0 && <div className="text-center py-20 text-muted-foreground">Queue is empty</div>}
                         </div>
                     </Card>
 
@@ -606,6 +667,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                 <th className="px-6 py-3">Token</th>
                                                 <th className="px-6 py-3">Patient</th>
                                                 <th className="px-6 py-3">Phone</th>
+                                                <th className="px-6 py-3">Routing</th>
                                                 <th className="px-6 py-3">Feedback</th>
                                                 <th className="px-6 py-3 text-right">Status</th>
                                             </tr>
@@ -621,6 +683,11 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                         <td className="px-6 py-4 font-mono font-bold">{formatToken(t.tokenNumber, t.isPriority)}</td>
                                                         <td className="px-6 py-4 font-medium">{t.customerName || '—'}</td>
                                                         <td className="px-6 py-4 text-slate-500">{t.customerPhone || '—'}</td>
+                                                        <td className="px-6 py-4 text-xs font-medium">
+                                                            {t.departmentId ? <span className="block">{departments?.find(d => d.id === t.departmentId)?.name || 'General'}</span> : null}
+                                                            {t.doctorId ? <span className="block text-blue-600">Dr. {doctors?.find(d => d.id === t.doctorId)?.name}</span> : null}
+                                                            {!t.departmentId && !t.doctorId && '—'}
+                                                        </td>
                                                         <td className="px-6 py-4 max-w-xs truncate italic text-orange-600">
                                                             {t.feedback ? <>&ldquo;{t.feedback}&rdquo;</> : "—"}
                                                         </td>

@@ -43,6 +43,8 @@ export interface ExportRow {
     source: string | null;
     rating: number | null;
     feedback: string | null;
+    department_name: string | null;
+    doctor_name: string | null;
 }
 
 export async function exportPatientList(
@@ -56,9 +58,9 @@ export async function exportPatientList(
     const staff = await getStaffWithRole(supabase);
     if (!staff) return { error: "Unauthorized" };
 
-    // 2. RBAC gate: OWNER, SUPER_ADMIN, RECEPTIONIST
-    if (!["OWNER", "SUPER_ADMIN", "RECEPTIONIST"].includes(staff.role)) {
-        return { error: "Access denied. Export requires OWNER, SUPER_ADMIN, or RECEPTIONIST role." };
+    // 2. RBAC gate: OWNER, SUPER_ADMIN
+    if (!["OWNER", "SUPER_ADMIN"].includes(staff.role)) {
+        return { error: "Access denied. Export requires OWNER or SUPER_ADMIN role." };
     }
 
     // 3. Resolve the clinic and verify ownership
@@ -75,14 +77,11 @@ export async function exportPatientList(
         return { error: "Access denied. You can only export data for your own clinic." };
     }
 
-    // 4. Fetch tokens in date range (via sessions)
-    const { data: tokens, error: fetchErr } = await supabase
-        .from("tokens")
+    // 4. Fetch clinical visits in date range (via sessions)
+    const { data: visits, error: fetchErr } = await supabase
+        .from("clinical_visits")
         .select(`
             token_number,
-            patient_name,
-            patient_phone,
-            patient_phone_encrypted,
             status,
             is_priority,
             rating,
@@ -90,9 +89,12 @@ export async function exportPatientList(
             created_at,
             served_at,
             source,
-            sessions!inner ( date )
+            sessions!inner ( date, business_id ),
+            patients ( name, phone, phone_encrypted ),
+            departments ( name ),
+            doctors ( name )
         `)
-        .eq("business_id", business.id)
+        .eq("sessions.business_id", business.id)
         .gte("sessions.date", dateFrom)
         .lte("sessions.date", dateTo)
         .order("created_at", { ascending: true })
@@ -100,30 +102,48 @@ export async function exportPatientList(
 
     if (fetchErr) return { error: fetchErr.message };
 
-    // 5. Decrypt phones (only at export time)
-    const rows: ExportRow[] = (tokens || []).map((t) => {
-        let phone: string | null = t.patient_phone || null;
+    interface ExportVisitRow {
+        token_number: number;
+        status: string;
+        is_priority: boolean;
+        created_at: string;
+        served_at: string | null;
+        source: string;
+        rating: number | null;
+        feedback: string | null;
+        patients: { name: string; phone: string | null; phone_encrypted: string | null } | { name: string; phone: string | null; phone_encrypted: string | null }[] | null;
+        departments: { name: string } | { name: string }[] | null;
+        doctors: { name: string } | { name: string }[] | null;
+    }
 
-        // Prefer encrypted field — decrypt if available
-        if (t.patient_phone_encrypted) {
+    // 5. Decrypt phones and map to ExportRow
+    const rows: ExportRow[] = (visits || []).map((v: ExportVisitRow) => {
+        // Handle Supabase potential array returns for foreign key joins
+        const getFirstObj = <T>(obj: T | T[]): T => Array.isArray(obj) ? obj[0] : obj;
+        const patient = getFirstObj(v.patients) || {} as { name: string; phone: string | null; phone_encrypted: string | null };
+        let phone: string | null = patient.phone || null;
+
+        if (patient.phone_encrypted) {
             try {
-                phone = decryptPhone(t.patient_phone_encrypted);
+                phone = decryptPhone(patient.phone_encrypted);
             } catch {
                 phone = "[decryption_error]";
             }
         }
 
         return {
-            token_number: t.token_number,
-            patient_name: t.patient_name,
+            token_number: v.token_number,
+            patient_name: patient.name || null,
             patient_phone: phone,
-            status: t.status,
-            is_priority: t.is_priority,
-            created_at: t.created_at,
-            served_at: t.served_at,
-            source: t.source,
-            rating: t.rating,
-            feedback: t.feedback,
+            status: v.status,
+            is_priority: v.is_priority,
+            created_at: v.created_at,
+            served_at: v.served_at,
+            source: v.source,
+            rating: v.rating,
+            feedback: v.feedback,
+            department_name: getFirstObj(v.departments)?.name || null,
+            doctor_name: getFirstObj(v.doctors)?.name || null,
         };
     });
 
@@ -154,12 +174,14 @@ export async function exportPatientList(
     });
 
     // 8. Build CSV
-    const headers = ["token_number", "patient_name", "patient_phone", "status", "is_priority", "created_at", "served_at", "source", "rating", "feedback"];
+    const headers = ["token_number", "department", "doctor", "patient_name", "patient_phone", "status", "is_priority", "created_at", "served_at", "source", "rating", "feedback"];
     const csvLines = [
         headers.join(","),
         ...rows.map((r) =>
             [
                 r.token_number,
+                `"${(r.department_name || "General").replace(/"/g, '""')}"`,
+                `"${(r.doctor_name || "").replace(/"/g, '""')}"`,
                 `"${(r.patient_name || "").replace(/"/g, '""')}"`,
                 `"${(r.patient_phone || "").replace(/"/g, '""')}"`,
                 r.status,

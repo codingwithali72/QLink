@@ -9,11 +9,13 @@ interface TokenItemProps {
     onCancel: (id: string) => void;
     onToggleArrived?: (id: string, isArrived: boolean) => void;
     isCallLoading?: boolean;
+    departmentName?: string;
+    doctorName?: string;
 }
 
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
-export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArrived, isCallLoading }: TokenItemProps) {
+export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArrived, isCallLoading, departmentName, doctorName }: TokenItemProps) {
     const isLate = token.status === 'WAITING_LATE';
     const isRemote = token.source === 'DIRECT_WA' || token.source === 'WEB_LINK';
     const needsArrival = isRemote && !token.isArrived;
@@ -46,17 +48,25 @@ export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArri
                     <p className="font-bold text-sm text-foreground truncate w-full">
                         {token.customerName}
                     </p>
-                    <div className="flex items-center gap-2">
-                        <p className="text-[10px] text-muted-foreground font-mono truncate">
-                            {token.customerPhone}
-                        </p>
-                        {isRemote && (
-                            <span className={cn(
-                                "text-[8px] font-bold px-1 rounded uppercase tracking-widest",
-                                token.isArrived ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-                            )}>
-                                Remote
-                            </span>
+                    <div className="flex flex-col gap-1 mt-0.5">
+                        <div className="flex items-center gap-2">
+                            <p className="text-[10px] text-muted-foreground font-mono truncate">
+                                {token.customerPhone}
+                            </p>
+                            {isRemote && (
+                                <span className={cn(
+                                    "text-[8px] font-bold px-1 rounded uppercase tracking-widest",
+                                    token.isArrived ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                                )}>
+                                    Remote
+                                </span>
+                            )}
+                        </div>
+                        {(departmentName || doctorName) && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                                {departmentName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 leading-none">{departmentName}</span>}
+                                {doctorName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900 leading-none">Dr. {doctorName}</span>}
+                            </div>
                         )}
                     </div>
                 </div>

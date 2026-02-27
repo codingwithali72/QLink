@@ -45,6 +45,25 @@ export type Token = {
     isArrived?: boolean;
     graceExpiresAt?: string | null;
     source?: string;
+    departmentId?: string | null;
+    doctorId?: string | null;
+};
+
+export type Department = {
+    id: string;
+    clinic_id: string;
+    name: string;
+    is_active: boolean;
+    routing_strategy: 'POOLED' | 'SINGLE_DOCTOR' | 'ROUND_ROBIN';
+};
+
+export type Doctor = {
+    id: string;
+    department_id: string;
+    user_id?: string;
+    name: string;
+    specialization?: string;
+    is_active: boolean;
 };
 
 export type AuditLog = {

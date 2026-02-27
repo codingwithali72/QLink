@@ -153,7 +153,9 @@ export async function createToken(
     phone: string,
     name: string = "",
     isPriority: boolean = false,
-    visitType: string = 'OPD'
+    visitType: string = 'OPD',
+    departmentId: string | null = null,
+    doctorId: string | null = null
 ): Promise<TokenResponse> {
     if (!clinicSlug) return { success: false, error: "Missing clinic slug" };
 
@@ -202,6 +204,8 @@ export async function createToken(
             p_patient_phone: phoneEncrypted ? null : cleanPhone,
             p_phone_encrypted: phoneEncrypted,
             p_phone_hash: phoneHash,
+            p_department_id: departmentId,
+            p_requested_doctor_id: doctorId,
             p_visit_type: visitType,
             p_is_priority: isPriority,
             p_staff_id: actualStaffId,
@@ -616,7 +620,11 @@ export async function getDashboardData(clinicSlug: string) {
             .limit(1)
             .maybeSingle();
 
-        if (!session) return { session: null, tokens: [], dailyTokenLimit: businessData?.daily_token_limit || null, businessId: business.id };
+        // Fetch Departments and Doctors for the frontend
+        const { data: departments } = await supabase.from('departments').select('*').eq('clinic_id', business.id).eq('is_active', true);
+        const { data: doctors } = await supabase.from('doctors').select('*').in('department_id', (departments || []).map(d => d.id)).eq('is_active', true);
+
+        if (!session) return { session: null, tokens: [], dailyTokenLimit: businessData?.daily_token_limit || null, businessId: business.id, departments: departments || [], doctors: doctors || [] };
 
         // JOIN Clinical Visits with Patients
         // PHASE 1 N+1 FIX: Only fetch ACTIVE tokens to prevent memory explosion.
@@ -639,7 +647,9 @@ export async function getDashboardData(clinicSlug: string) {
                 patients: { name?: string, phone?: string, phone_encrypted?: string },
                 registration_complete_time?: string,
                 source?: string,
-                token_number: number
+                token_number: number,
+                department_id?: string,
+                doctor_id?: string
             };
             const patient = visit.patients;
             let decryptedPhone = patient?.phone;
@@ -654,10 +664,12 @@ export async function getDashboardData(clinicSlug: string) {
                 customerName: patient?.name,
                 isArrived: !!visit.registration_complete_time,
                 source: visit.source || 'QR',
+                departmentId: visit.department_id,
+                doctorId: visit.doctor_id
             };
         });
 
-        return { session, tokens: safeTokens, dailyTokenLimit: businessData?.daily_token_limit || null, businessId: business.id, servedCount: servedCount || 0 };
+        return { session, tokens: safeTokens, dailyTokenLimit: businessData?.daily_token_limit || null, businessId: business.id, servedCount: servedCount || 0, departments: departments || [], doctors: doctors || [] };
     } catch (e) {
         console.error("Dashboard Data Fetch Error:", e);
         return { session: null, tokens: [], dailyTokenLimit: null, businessId: null, error: (e as Error).message };
@@ -678,7 +690,7 @@ export async function getTokensForDate(clinicSlug: string, date: string, limit: 
 
         const { data, count } = await supabase
             .from('clinical_visits')
-            .select('id, token_number, status, is_priority, rating, feedback, created_at, patients(name, phone, phone_encrypted)', { count: 'exact' })
+            .select('id, token_number, status, is_priority, rating, feedback, created_at, department_id, doctor_id, patients(name, phone, phone_encrypted)', { count: 'exact' })
             .eq('session_id', session.id)
             .order('token_number', { ascending: true })
             .range(offset, offset + limit - 1);
@@ -690,6 +702,8 @@ export async function getTokensForDate(clinicSlug: string, date: string, limit: 
                 id: string,
                 token_number: number,
                 status: string,
+                department_id?: string,
+                doctor_id?: string,
                 patients?: { name?: string, phone?: string, phone_encrypted?: string }
             };
             const patient = visit.patients;
@@ -707,6 +721,8 @@ export async function getTokensForDate(clinicSlug: string, date: string, limit: 
                 rating: v.rating,
                 feedback: v.feedback,
                 createdAt: v.created_at,
+                departmentId: visit.department_id,
+                doctorId: visit.doctor_id,
             };
         });
 
