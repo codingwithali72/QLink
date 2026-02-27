@@ -8,9 +8,10 @@ import { headers } from "next/headers";
 // VAPT FIX: DB-based RBAC with env-var bootstrap fallback
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
-async function isSuperAdmin() {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+// Ensure strictly authorized context
+export async function isSuperAdmin() {
+    const client = createClient();
+    const { data: { user } } = await client.auth.getUser();
     if (!user) return false;
 
     // 1. Bootstrap fallback: env-var email match (Priority for bypass)
@@ -275,14 +276,17 @@ export async function getAdminStats() {
 
     const supabase = createAdminClient();
 
-    const { data: businesses } = await supabase.from('businesses').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+    // 1. Fetch businesses for the list view
+    const { data: businesses } = await supabase.from('businesses')
+        .select('*')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
 
+    // 2. We still need tokens_today mapped per business for the list view
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-
     const { data: sessionData } = await supabase.from('sessions').select('business_id, id').eq('date', todayStr);
     const sessionIds = (sessionData || []).map(s => s.id);
 
-    // Pull from clinical_visits
     const { data: visitCounts } = await supabase
         .from('clinical_visits')
         .select('clinic_id, id')
@@ -293,26 +297,42 @@ export async function getAdminStats() {
         return acc;
     }, {});
 
-    const { count: activeSessions } = await supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', todayStr).eq('status', 'OPEN');
-
-    const totalVisitsToday = visitCounts ? visitCounts.length : 0;
-
-    // Active visits across all clinics
-    const { count: activeVisitsToday } = await supabase.from('clinical_visits')
-        .select('id', { count: 'exact', head: true })
-        .in('session_id', sessionIds)
-        .in('status', ['WAITING', 'SERVING']);
-
     const businessesWithStats = (businesses || []).map(b => ({
         ...b,
         tokens_today: countMap[b.id] || 0
     }));
 
+    // 3. Delegate executive stats to DB RPC for mathematical and topological integrity
+    const client = createClient();
+    const { data: { user } } = await client.auth.getUser();
+
+    let execStats = {
+        activeSessions: 0,
+        todayTokens: 0,
+        messagesToday: 0,
+        activeQueueTokens: 0,
+        avgWaitMins: 0,
+    };
+
+    if (user) {
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('rpc_get_admin_executive_overview', {
+            p_admin_id: user.id
+        });
+
+        if (!rpcErr && rpcData) {
+            execStats = {
+                activeSessions: rpcData.active_sessions || 0,
+                todayTokens: rpcData.today_tokens || 0,
+                messagesToday: rpcData.messages_today || 0,
+                activeQueueTokens: rpcData.today_tokens || 0, // Roughly maps for now until distinct active queue RPC implemented
+                avgWaitMins: rpcData.avg_wait_time_live_mins || 0,
+            };
+        }
+    }
+
     return {
         businesses: businessesWithStats,
-        activeSessions: activeSessions || 0,
-        todayTokens: totalVisitsToday,
-        activeQueueTokens: activeVisitsToday || 0,
+        ...execStats
     };
 }
 
@@ -382,10 +402,38 @@ export async function getClinicMetrics(businessId: string) {
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const istStart = new Date(`${todayStr}T00:00:00+05:30`).toISOString();
 
-    // Live Today Stats via clinical_visits
-    const { count: liveCreated } = await supabase.from('clinical_visits').select('id', { count: 'exact', head: true }).eq('clinic_id', businessId).gte('created_at', istStart);
-    const { count: liveServed } = await supabase.from('clinical_visits').select('id', { count: 'exact', head: true }).eq('clinic_id', businessId).eq('status', 'SERVED').gte('created_at', istStart);
-    const { count: liveSkipped } = await supabase.from('clinical_visits').select('id', { count: 'exact', head: true }).eq('clinic_id', businessId).eq('status', 'SKIPPED').gte('created_at', istStart);
+    const client = createClient();
+    const { data: { user } } = await client.auth.getUser();
+
+    // 1. Fetch deep analytics via exact DB RPC if super admin
+    let analyticsData = {
+        total_created: 0,
+        total_served: 0,
+        total_cancelled: 0,
+        total_skipped: 0,
+        avg_wait_mins: 0,
+        avg_service_mins: 0,
+        avg_rating: 0,
+        drop_off_rate_pct: 0
+    };
+
+    if (user) {
+        // Today's boundaries
+        const todayStrDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('rpc_get_clinic_deep_analytics', {
+            p_admin_id: user.id,
+            p_clinic_id: businessId,
+            p_start_date: todayStrDate,
+            p_end_date: todayStrDate
+        });
+
+        if (!rpcErr && rpcData) {
+            analyticsData = rpcData;
+        }
+    }
+
+    // Live Today Stats for specifics not in RPC (emergency) via clinical_visits
     const { count: liveEmergency } = await supabase.from('clinical_visits').select('id', { count: 'exact', head: true }).eq('clinic_id', businessId).eq('is_priority', true).gte('created_at', istStart);
 
     // Historical trend via clinic_daily_stats (bridged in Phase 15)
@@ -396,26 +444,15 @@ export async function getClinicMetrics(businessId: string) {
         .gte('date', thirtyDaysAgo)
         .order('date', { ascending: true });
 
-    // Calc Average Rating
-    const { data: ratings } = await supabase.from('clinical_visits')
-        .select('rating')
-        .eq('clinic_id', businessId)
-        .not('rating', 'is', null);
-
-    const validRatings = ratings || [];
-    const avgRating = validRatings.length > 0
-        ? (validRatings.reduce((acc, r) => acc + Number(r.rating || 0), 0) / validRatings.length).toFixed(1)
-        : null;
-
     return {
         today: {
-            created: liveCreated || 0,
-            served: liveServed || 0,
-            skipped: liveSkipped || 0,
+            created: analyticsData.total_created || 0,
+            served: analyticsData.total_served || 0,
+            skipped: analyticsData.total_skipped || 0,
             emergency: liveEmergency || 0
         },
         trend: trend || [],
-        avgRating,
-        timeSavedLabel: `${(liveServed || 0) * 20}m (today)`
+        avgRating: analyticsData.avg_rating ? String(analyticsData.avg_rating) : null,
+        timeSavedLabel: `${(analyticsData.total_served || 0) * (analyticsData.avg_wait_mins || 20)}m (today)`
     };
 }

@@ -619,12 +619,20 @@ export async function getDashboardData(clinicSlug: string) {
         if (!session) return { session: null, tokens: [], dailyTokenLimit: businessData?.daily_token_limit || null, businessId: business.id };
 
         // JOIN Clinical Visits with Patients
+        // PHASE 1 N+1 FIX: Only fetch ACTIVE tokens to prevent memory explosion.
         const { data: visits } = await supabase
             .from('clinical_visits')
             .select('*, patients(name, phone, phone_encrypted)')
             .eq('session_id', session.id)
-            .in('status', ['WAITING', 'SERVING', 'SKIPPED', 'CANCELLED', 'SERVED'])
+            .in('status', ['WAITING', 'SERVING', 'SKIPPED'])
             .order('token_number', { ascending: true });
+
+        // Aggregate historical count without hydrating full objects
+        const { count: servedCount } = await supabase
+            .from('clinical_visits')
+            .select('*', { count: 'exact', head: true })
+            .eq('session_id', session.id)
+            .eq('status', 'SERVED');
 
         const safeTokens = (visits || []).map((v) => {
             const visit = v as unknown as {
@@ -649,7 +657,7 @@ export async function getDashboardData(clinicSlug: string) {
             };
         });
 
-        return { session, tokens: safeTokens, dailyTokenLimit: businessData?.daily_token_limit || null, businessId: business.id };
+        return { session, tokens: safeTokens, dailyTokenLimit: businessData?.daily_token_limit || null, businessId: business.id, servedCount: servedCount || 0 };
     } catch (e) {
         console.error("Dashboard Data Fetch Error:", e);
         return { session: null, tokens: [], dailyTokenLimit: null, businessId: null, error: (e as Error).message };

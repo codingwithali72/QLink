@@ -40,68 +40,82 @@ export async function GET(req: Request) {
 
         let successCount = 0;
         let failCount = 0;
+        const BATCH_SIZE = 10;
 
-        // 3. Process each message — decrypts phone from tokens table (DPDP compliant)
-        for (const log of pendingLogs) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const payload = log.provider_response as { components?: any[], visit_id?: string, phone_hash?: string, phone?: string };
-            if (!payload || !payload.components) {
-                await supabase.from('message_logs').update({ status: 'FAILED' }).eq('id', log.id);
-                failCount++;
-                continue;
-            }
+        // 3. Process each message in batches with Promise.allSettled to prevent timeouts
+        for (let i = 0; i < pendingLogs.length; i += BATCH_SIZE) {
+            const batch = pendingLogs.slice(i, i + BATCH_SIZE);
 
-            // DPDP: Resolve phone from encrypted tokens table, not from JSONB payload
-            // Supports both new (token_id lookup) and legacy (direct phone) payloads
-            let resolvedPhone: string | null = null;
-            // DPDP: Resolve phone from patients table (linked to clinical_visits)
-            const lookupVisitId = payload.visit_id || log.visit_id;
-
-            if (lookupVisitId) {
-                try {
-                    const { data: visitRow } = await supabase
-                        .from('clinical_visits')
-                        .select('patients(phone_encrypted, phone)')
-                        .eq('id', lookupVisitId)
-                        .maybeSingle();
-
-                    const visitRecord = visitRow as unknown as { patients: { phone_encrypted?: string, phone?: string } | null };
-                    const patient = visitRecord?.patients;
-
-                    if (patient?.phone_encrypted) {
-                        resolvedPhone = decryptPhone(patient.phone_encrypted);
-                    } else if (patient?.phone) {
-                        resolvedPhone = patient.phone;
-                    }
-                } catch (decryptErr) {
-                    console.error(`[wa-worker] Failed to resolve phone for visit ${lookupVisitId}:`, decryptErr);
+            const batchPromises = batch.map(async (log) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const payload = log.provider_response as { components?: any[], visit_id?: string, phone_hash?: string, phone?: string };
+                if (!payload || !payload.components) {
+                    await supabase.from('message_logs').update({ status: 'FAILED' }).eq('id', log.id);
+                    return { success: false };
                 }
-            }
 
-            // Last-resort: direct phone in payload (legacy support — will be removed once all rows migrated)
-            if (!resolvedPhone && payload.phone) {
-                resolvedPhone = payload.phone;
-            }
+                // DPDP: Resolve phone from encrypted tokens table, not from JSONB payload
+                let resolvedPhone: string | null = null;
+                const lookupVisitId = payload.visit_id || log.visit_id;
 
-            if (!resolvedPhone) {
-                await supabase.from('message_logs').update({ status: 'FAILED' }).eq('id', log.id);
-                failCount++;
-                continue;
-            }
+                if (lookupVisitId) {
+                    try {
+                        const { data: visitRow } = await supabase
+                            .from('clinical_visits')
+                            .select('patients(phone_encrypted, phone)')
+                            .eq('id', lookupVisitId)
+                            .maybeSingle();
 
-            try {
-                await sendWhatsApp(
-                    resolvedPhone,
-                    log.message_type,
-                    payload.components,
-                    log.business_id,
-                    (log as unknown as { visit_id?: string }).visit_id || undefined
-                );
-                successCount++;
-            } catch (err) {
-                console.error(`Failed to send WA message for log ${log.id}`, err);
-                await supabase.from('message_logs').update({ status: 'FAILED' }).eq('id', log.id);
-                failCount++;
+                        const visitRecord = visitRow as unknown as { patients: { phone_encrypted?: string, phone?: string } | null };
+                        const patient = visitRecord?.patients;
+
+                        if (patient?.phone_encrypted) {
+                            resolvedPhone = decryptPhone(patient.phone_encrypted);
+                        } else if (patient?.phone) {
+                            resolvedPhone = patient.phone;
+                        }
+                    } catch (decryptErr) {
+                        console.error(`[wa-worker] Failed to resolve phone for visit ${lookupVisitId}:`, decryptErr);
+                    }
+                }
+
+                if (!resolvedPhone && payload.phone) {
+                    resolvedPhone = payload.phone;
+                }
+
+                if (!resolvedPhone) {
+                    await supabase.from('message_logs').update({ status: 'FAILED' }).eq('id', log.id);
+                    return { success: false };
+                }
+
+                try {
+                    await sendWhatsApp(
+                        resolvedPhone,
+                        log.message_type,
+                        payload.components,
+                        log.business_id,
+                        (log as unknown as { visit_id?: string }).visit_id || undefined
+                    );
+                    // Mark as SUCCESS so it doesn't get stuck in PROCESSING forever
+                    await supabase.from('message_logs').update({ status: 'SUCCESS' }).eq('id', log.id);
+                    return { success: true };
+                } catch (err) {
+                    console.error(`Failed to send WA message for log ${log.id}`, err);
+                    await supabase.from('message_logs').update({ status: 'FAILED' }).eq('id', log.id);
+                    return { success: false };
+                }
+            });
+
+            // Await the batch settling
+            const results = await Promise.allSettled(batchPromises);
+
+            // Tally results
+            for (const res of results) {
+                if (res.status === 'fulfilled' && res.value.success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
             }
         }
 

@@ -37,13 +37,21 @@ export async function POST(req: Request) {
     }
 
     // 1. Validate Meta webhook signature
+    // PHASE 3 REMEDIATION: Prevent Cryptographic Timing Attacks
     if (APP_SECRET && signature) {
         const expectedSignature = `sha256=${crypto
             .createHmac('sha256', APP_SECRET)
             .update(rawBody)
             .digest('hex')}`
-        if (signature !== expectedSignature) {
-            return errorResponse('Invalid signature', 401, requestId)
+
+        try {
+            const sigBuf = Buffer.from(signature, 'utf8');
+            const expectedBuf = Buffer.from(expectedSignature, 'utf8');
+            if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+                return errorResponse('Invalid signature', 401, requestId)
+            }
+        } catch {
+            return errorResponse('Invalid signature format', 401, requestId)
         }
     }
 
@@ -92,16 +100,8 @@ export async function POST(req: Request) {
     // Phase 6 WhatsApp Interactive Additions - State Machine Webhook
     // -------------------------------------------------------------------------------------------------
 
-    // Deduplication check
-    const { data: existingMsg } = await supabase
-        .from('whatsapp_messages')
-        .select('id')
-        .eq('id', waMessageId)
-        .single()
-
-    if (existingMsg) {
-        return successResponse({ message: 'Duplicate webhook ignored' }, requestId)
-    }
+    // Phase 4 REMEDIATION: Webhook Idempotency Race Condition
+    // REMOVED SELECT-then-INSERT. Using DB-level atomic insert.
 
     // Identify interactive response
     let interactiveResponseId = '';
@@ -115,14 +115,22 @@ export async function POST(req: Request) {
         }
     }
 
-    // Log incoming message
-    await supabase.from('whatsapp_messages').insert({
+    // Atomic Insert to prevent double processing of the same webhook id
+    const { error: insertDupError } = await supabase.from('whatsapp_messages').insert({
         id: waMessageId,
         phone: phoneNumber,
         direction: 'INBOUND',
         message_type: message.type || 'text',
         status: 'received'
     });
+
+    if (insertDupError) {
+        // 23505 is PostgreSQL unique_violation
+        if (insertDupError.code === '23505') {
+            return successResponse({ message: 'Duplicate webhook ignored' }, requestId)
+        }
+        console.error("Webhook msg insert error:", insertDupError);
+    }
 
     // We need clinic_id context. For new joins, it will be parsed from JOIN_SLUG.
     // For existing conversations, we get it from whatsapp_conversations state.

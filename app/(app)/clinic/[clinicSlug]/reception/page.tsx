@@ -22,7 +22,7 @@ import { getClinicDate } from "@/lib/date";
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
 export default function ReceptionPage({ params }: { params: { clinicSlug: string } }) {
-    const { session, tokens, loading, refresh, lastUpdated, isConnected, dailyTokenLimit, setTokens } = useClinicRealtime(params.clinicSlug);
+    const { session, tokens, loading, refresh, lastUpdated, isConnected, dailyTokenLimit, servedCount, setTokens } = useClinicRealtime(params.clinicSlug);
 
     // ── Per-action loading flags ────────────────────────────────────────────────
     const [nextLoading, setNextLoading] = useState(false);
@@ -156,9 +156,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     }, [tokens]);
 
     const totalServedCount = useMemo(() => {
-        if (selectedDate === todayStr) return tokens.filter(t => t.status === 'SERVED').length;
+        if (selectedDate === todayStr) return servedCount;
         return displayedTokens.filter(t => t.status === 'SERVED').length;
-    }, [tokens, displayedTokens, selectedDate, todayStr]);
+    }, [servedCount, displayedTokens, selectedDate, todayStr]);
 
     const activeTokensCount = useMemo(() => {
         return tokens.filter(t => t.status === 'WAITING' || t.status === 'SERVING').length;

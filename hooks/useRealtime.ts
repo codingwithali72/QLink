@@ -18,6 +18,7 @@ export function useClinicRealtime(clinicSlug: string) {
     const [isConnected, setIsConnected] = useState(false);
     const [businessId, setBusinessId] = useState<string | null>(null);
     const [dailyTokenLimit, setDailyTokenLimit] = useState<number | null>(null);
+    const [servedCount, setServedCount] = useState<number>(0);
     const [error, setError] = useState<string | null>(null);
 
     const [isSynced, setIsSynced] = useState(false);
@@ -50,6 +51,9 @@ export function useClinicRealtime(clinicSlug: string) {
             setDailyTokenLimit(res.dailyTokenLimit);
             if (res.businessId && !businessId) {
                 setBusinessId(res.businessId);
+            }
+            if (typeof res.servedCount === 'number') {
+                setServedCount(res.servedCount);
             }
 
             // STABILIZATION: Ignore server results for 2.5s after a local action
@@ -214,7 +218,7 @@ export function useClinicRealtime(clinicSlug: string) {
         }
     }, [session, tokens, saveToLocal]);
 
-    return { session, tokens, loading, error, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit, setTokens: setOptimisticTokens, setSession };
+    return { session, tokens, loading, error, lastUpdated, isConnected, businessId, refresh: debouncedFetch, dailyTokenLimit, servedCount, setTokens: setOptimisticTokens, setSession };
 }
 
 // Mappers

@@ -15,6 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AlertOctagon } from "lucide-react";
 
+import { getPlatformSystemHealth } from "@/app/actions/admin_extensions";
+
 export interface Business {
     id: string;
     name: string;
@@ -27,6 +29,7 @@ export interface Business {
     settings?: {
         whatsapp_enabled?: boolean;
         qr_intake_enabled?: boolean;
+        dpdp_strict?: boolean;
         daily_token_limit?: number;
         daily_message_limit?: number;
         [key: string]: unknown;
@@ -41,11 +44,27 @@ export interface AdminStats {
     businesses: Business[];
     failedMessagesToday?: number;
     activeQueueTokens?: number;
+    avgWaitMins?: number;
 }
 
 export default function AdminPage() {
     const [stats, setStats] = useState<AdminStats | null>(null);
     const [loading, setLoading] = useState(true);
+
+    // System Health State
+    interface SystemHealth {
+        webhooks: {
+            total_sampled: number;
+            failed: number;
+            pending: number;
+            processing: number;
+            successRate: string;
+        };
+        db: {
+            status: string;
+        };
+    }
+    const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
 
     // Analytics State
     interface Analytics {
@@ -138,6 +157,7 @@ export default function AdminPage() {
     interface ClinicSettings {
         whatsapp_enabled?: boolean;
         qr_intake_enabled?: boolean;
+        dpdp_strict?: boolean;
         daily_token_limit?: number;
         daily_message_limit?: number;
         [key: string]: unknown;
@@ -148,9 +168,15 @@ export default function AdminPage() {
     const fetchStats = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await getAdminStats();
+            const [res, healthRes] = await Promise.all([
+                getAdminStats(),
+                getPlatformSystemHealth()
+            ]);
+
             if (res.error) showToast(res.error, 'error');
             else setStats(res as unknown as AdminStats);
+
+            if (!healthRes.error) setSystemHealth(healthRes as unknown as SystemHealth);
         } catch (e: unknown) {
             console.error('[fetchStats] Error:', e);
             showToast('Service signal lost. Please refresh.', 'error');
@@ -162,6 +188,10 @@ export default function AdminPage() {
     useEffect(() => {
         fetchStats();
         fetchAnalytics('today');
+
+        // Background polling for health
+        const interval = setInterval(fetchStats, 60000);
+        return () => clearInterval(interval);
     }, [fetchAnalytics, fetchStats]);
 
     async function handleCreate(e: React.FormEvent) {
@@ -281,11 +311,80 @@ export default function AdminPage() {
                             ))}
                         </div>
                     )}
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium bg-secondary/30 w-fit px-3 py-1 rounded-full border border-border/40">
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium bg-secondary/30 w-fit px-3 py-1 rounded-full border border-border/40 mt-4">
                         <Activity className="w-3 h-3" />
-                        * Time Saved = Tokens Served × 20 min (avg physical queue wait estimate)
+                        * Based on real assessment times calculated directly at the DB layer via RPC.
                     </div>
                 </Card>
+
+                {/* ── SYSTEM HEALTH SECTION ── */}
+                {systemHealth && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* Webhook Pulse */}
+                        <Card className="col-span-1 border-border/60 shadow-medium p-6 bg-card/40 backdrop-blur-md">
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <Activity className={cn("w-4 h-4", Number(systemHealth.webhooks.successRate) > 95 ? "text-emerald-500" : "text-orange-500")} />
+                                        <h3 className="font-extrabold text-sm tracking-tight text-foreground uppercase">Meta Health</h3>
+                                    </div>
+                                </div>
+                                <div className={cn("px-2.5 py-1 rounded-lg text-[10px] font-black", Number(systemHealth.webhooks.successRate) > 95 ? "bg-emerald-500/10 text-emerald-500" : "bg-orange-500/10 text-orange-500")}>
+                                    {systemHealth.webhooks.successRate}% OK
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="bg-secondary/30 p-2 rounded-lg border border-border/40">
+                                    <div className="text-muted-foreground mb-1 uppercase tracking-widest text-[8px] font-bold">Failed</div>
+                                    <div className={cn("text-lg font-black", systemHealth.webhooks.failed > 0 ? "text-rose-500" : "text-foreground")}>{systemHealth.webhooks.failed}</div>
+                                </div>
+                                <div className="bg-secondary/30 p-2 rounded-lg border border-border/40">
+                                    <div className="text-muted-foreground mb-1 uppercase tracking-widest text-[8px] font-bold">Processing</div>
+                                    <div className="text-lg font-black">{systemHealth.webhooks.processing + systemHealth.webhooks.pending}</div>
+                                </div>
+                            </div>
+                        </Card>
+
+                        {/* Cost & Limits */}
+                        <Card className="col-span-1 border-border/60 shadow-medium p-6 bg-card/40 backdrop-blur-md">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="flex items-center gap-2">
+                                    <MessageSquare className="w-4 h-4 text-indigo-500" />
+                                    <h3 className="font-extrabold text-sm tracking-tight text-foreground uppercase">Outbound Vol</h3>
+                                </div>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                                <span className="text-3xl font-black text-foreground">{stats.messagesToday || 0}</span>
+                                <span className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Sent Today</span>
+                            </div>
+                            <div className="mt-2 text-[10px] text-muted-foreground leading-tight max-w-[150px]">
+                                * Assumes strictly 24-hr session replies (Free Tier Utility)
+                            </div>
+                        </Card>
+
+                        {/* Live Latency/Wait averages overall */}
+                        <Card className="col-span-1 md:col-span-2 border-border/60 shadow-medium p-6 bg-card/40 backdrop-blur-md border-r-4 border-r-primary">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-primary" />
+                                    <h3 className="font-extrabold text-sm tracking-tight text-foreground uppercase">Global Median Wait</h3>
+                                </div>
+                                <div className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-primary/10 text-primary">
+                                    LIVE NETWORK
+                                </div>
+                            </div>
+                            <div className="flex gap-8 items-end">
+                                <div>
+                                    <div className="text-4xl font-black text-foreground tracking-tighter shadow-sm">{stats.avgWaitMins || 0}<span className="text-xl text-muted-foreground/60 tracking-normal"> min</span></div>
+                                </div>
+                                <div className="space-y-1 mb-1">
+                                    <div className="text-xs text-muted-foreground"><span className="font-black text-emerald-500">&bull;</span> {stats.activeSessions} active sessions reporting</div>
+                                    <div className="text-xs text-muted-foreground"><span className="font-black text-blue-500">&bull;</span> {stats.todayTokens} total tokens indexing</div>
+                                </div>
+                            </div>
+                        </Card>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
@@ -488,6 +587,7 @@ export default function AdminPage() {
 
                                             <div className="w-px h-6 bg-border/60 mx-1 hidden sm:block" />
 
+
                                             <div className="flex bg-secondary/30 p-1 rounded-xl gap-1">
                                                 <Button
                                                     variant="ghost"
@@ -595,23 +695,35 @@ export default function AdminPage() {
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="flex items-center justify-between bg-amber-500/10 p-3 rounded-lg border border-amber-500/20">
+                                <div>
+                                    <Label className="text-sm font-bold text-amber-500 flex items-center gap-1"><AlertOctagon className="w-3.5 h-3.5" /> DPDP Strict Logging</Label>
+                                    <p className="text-[10px] text-amber-500/80 mt-1">Enforce mathematical consent tracking and audit logs.</p>
+                                </div>
+                                <Switch
+                                    checked={clinicSettings.dpdp_strict ?? true}
+                                    onCheckedChange={(c) => setClinicSettings({ ...clinicSettings, dpdp_strict: c })}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 pt-2">
                                 <div className="space-y-2">
-                                    <Label className="text-xs text-slate-400 uppercase">Max tokens/day</Label>
+                                    <Label className="text-xs text-slate-400 uppercase tracking-widest font-black">Daily Tokens (Max)</Label>
                                     <Input
                                         type="number"
                                         value={clinicSettings.daily_token_limit || 0}
                                         onChange={(e) => setClinicSettings({ ...clinicSettings, daily_token_limit: parseInt(e.target.value) })}
-                                        className="bg-black/20 border-slate-700"
+                                        className="bg-black/20 border-slate-700 font-mono"
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-xs text-slate-400 uppercase">Max msgs/day</Label>
+                                    <Label className="text-xs text-indigo-400 uppercase tracking-widest font-black flex items-center gap-1"><MessageSquare className="w-3 h-3" /> Msgs Limit</Label>
                                     <Input
                                         type="number"
                                         value={clinicSettings.daily_message_limit || 0}
                                         onChange={(e) => setClinicSettings({ ...clinicSettings, daily_message_limit: parseInt(e.target.value) })}
-                                        className="bg-black/20 border-slate-700"
+                                        className="bg-black/20 border-slate-700 font-mono text-indigo-400"
+                                        title="Caps outbound Meta messages to control costs"
                                     />
                                 </div>
                             </div>
