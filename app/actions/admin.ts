@@ -165,24 +165,22 @@ export async function resetBusinessSession(businessId: string) {
     if (!await isSuperAdmin()) return { error: "Unauthorized" };
     const supabase = createAdminClient();
 
-    // Get admin user id for audit
     const client = createClient();
     const { data: { user } } = await client.auth.getUser();
 
-    // VAPT FIX: Atomic force-close via Postgres RPC (locks session, cancels waiting, closes, logs)
-    const { data, error } = await supabase.rpc('rpc_force_close_session', {
+    // VAPT FIX: Atomic force-close via CLINICAL version of RPC
+    const { data, error } = await supabase.rpc('rpc_force_close_session_clinical', {
         p_business_id: businessId,
         p_staff_id: user?.id || null,
     });
 
     if (error) return { error: error.message };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = data as any;
+    const result = data as { success?: boolean; error?: string; cancelled_tokens?: number };
     if (result && result.success === false) return { error: result.error || 'Force close failed' };
 
     await logAdminAction('RESET_SESSION', 'SESSION', businessId, undefined, {
-        cancelled_tokens: result?.cancelled_tokens || 0,
+        cancelled_visits: result?.cancelled_tokens || 0,
     });
     revalidatePath('/admin');
     return { success: true };
@@ -277,46 +275,30 @@ export async function getAdminStats() {
 
     const supabase = createAdminClient();
 
-    // 1. Get Businesses (exclude soft-deleted)
     const { data: businesses } = await supabase.from('businesses').select('*').is('deleted_at', null).order('created_at', { ascending: false });
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const istStart = new Date(`${todayStr}T00:00:00+05:30`).toISOString();
 
-    // 2. Get today's token counts per business (strictly filtered by session date)
-    const { data: sessionData } = await supabase
-        .from('sessions')
-        .select('business_id, id')
-        .eq('date', todayStr);
-
+    const { data: sessionData } = await supabase.from('sessions').select('business_id, id').eq('date', todayStr);
     const sessionIds = (sessionData || []).map(s => s.id);
 
-    const { data: tokenCounts } = await supabase
-        .from('tokens')
-        .select('business_id, id')
+    // Pull from clinical_visits
+    const { data: visitCounts } = await supabase
+        .from('clinical_visits')
+        .select('clinic_id, id')
         .in('session_id', sessionIds);
 
-    const countMap = (tokenCounts || []).reduce((acc: Record<string, number>, t) => {
-        acc[t.business_id] = (acc[t.business_id] || 0) + 1;
+    const countMap = (visitCounts || []).reduce((acc: Record<string, number>, v) => {
+        acc[v.clinic_id] = (acc[v.clinic_id] || 0) + 1;
         return acc;
     }, {});
 
     const { count: activeSessions } = await supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('date', todayStr).eq('status', 'OPEN');
 
-    // Total tokens across all clinics today
-    const { count: todayTokens } = tokenCounts ? { count: tokenCounts.length } : { count: 0 };
+    const totalVisitsToday = visitCounts ? visitCounts.length : 0;
 
-    const { count: messagesToday } = await supabase.from('message_logs').select('id', { count: 'exact', head: true }).gte('created_at', istStart);
-    const { count: totalMessages } = await supabase.from('message_logs').select('id', { count: 'exact', head: true });
-
-    // Failed messages strictly from today
-    const { count: failedMessages } = await supabase.from('message_logs')
-        .select('id', { count: 'exact', head: true })
-        .gte('created_at', istStart)
-        .in('status', ['FAILED', 'PERMANENTLY_FAILED']);
-
-    // Active tokens across all clinics today
-    const { count: activeQueuesToday } = await supabase.from('tokens')
+    // Active visits across all clinics
+    const { count: activeVisitsToday } = await supabase.from('clinical_visits')
         .select('id', { count: 'exact', head: true })
         .in('session_id', sessionIds)
         .in('status', ['WAITING', 'SERVING']);
@@ -329,11 +311,8 @@ export async function getAdminStats() {
     return {
         businesses: businessesWithStats,
         activeSessions: activeSessions || 0,
-        todayTokens: todayTokens || 0,
-        totalMessages: totalMessages || 0,
-        messagesToday: messagesToday || 0,
-        failedMessagesToday: failedMessages || 0,
-        activeQueueTokens: activeQueuesToday || 0,
+        todayTokens: totalVisitsToday,
+        activeQueueTokens: activeVisitsToday || 0,
     };
 }
 
@@ -396,7 +375,6 @@ export async function getAnalytics(dateFrom?: string, dateTo?: string) {
     };
 }
 
-// Clinic-specific heavy detailed metrics
 export async function getClinicMetrics(businessId: string) {
     if (!await isSuperAdmin()) return { error: "Unauthorized" };
     const supabase = createAdminClient();
@@ -404,13 +382,13 @@ export async function getClinicMetrics(businessId: string) {
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const istStart = new Date(`${todayStr}T00:00:00+05:30`).toISOString();
 
-    // Live Today Stats
-    const { count: liveCreated } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', istStart);
-    const { count: liveServed } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'SERVED').gte('created_at', istStart);
-    const { count: liveSkipped } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'SKIPPED').gte('created_at', istStart);
-    const { count: liveEmergency } = await supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('is_priority', true).gte('created_at', istStart);
+    // Live Today Stats via clinical_visits
+    const { count: liveCreated } = await supabase.from('clinical_visits').select('id', { count: 'exact', head: true }).eq('clinic_id', businessId).gte('created_at', istStart);
+    const { count: liveServed } = await supabase.from('clinical_visits').select('id', { count: 'exact', head: true }).eq('clinic_id', businessId).eq('status', 'SERVED').gte('created_at', istStart);
+    const { count: liveSkipped } = await supabase.from('clinical_visits').select('id', { count: 'exact', head: true }).eq('clinic_id', businessId).eq('status', 'SKIPPED').gte('created_at', istStart);
+    const { count: liveEmergency } = await supabase.from('clinical_visits').select('id', { count: 'exact', head: true }).eq('clinic_id', businessId).eq('is_priority', true).gte('created_at', istStart);
 
-    // Historical Rolling 30 Days Trend
+    // Historical trend via clinic_daily_stats (bridged in Phase 15)
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const { data: trend } = await supabase.from('clinic_daily_stats')
         .select('date, total_tokens, avg_wait_time_minutes, served_count')
@@ -418,23 +396,16 @@ export async function getClinicMetrics(businessId: string) {
         .gte('date', thirtyDaysAgo)
         .order('date', { ascending: true });
 
-    // Calculate Average Rating across all tokens
-    const { data: ratings } = await supabase.from('tokens')
+    // Calc Average Rating
+    const { data: ratings } = await supabase.from('clinical_visits')
         .select('rating')
-        .eq('business_id', businessId)
+        .eq('clinic_id', businessId)
         .not('rating', 'is', null);
 
-    const validRatings = ratings?.filter(r => r.rating !== null) || [];
+    const validRatings = ratings || [];
     const avgRating = validRatings.length > 0
-        ? (validRatings.reduce((acc, r) => acc + Number(r.rating), 0) / validRatings.length).toFixed(1)
+        ? (validRatings.reduce((acc, r) => acc + Number(r.rating || 0), 0) / validRatings.length).toFixed(1)
         : null;
-
-    // Time Saved calculation (Total Served * 20 mins)
-    const totalServedHistory = trend?.reduce((acc, row) => acc + (row.served_count || 0), 0) || 0;
-    const totalServedEver = totalServedHistory + (liveServed || 0);
-    const timeSavedMins = totalServedEver * 20; // 20 min estimated average physical wait
-    const timeSavedHours = Math.floor(timeSavedMins / 60);
-    const timeSavedLabel = timeSavedHours > 0 ? `${timeSavedHours}h ${timeSavedMins % 60}m` : `${timeSavedMins}m`;
 
     return {
         today: {
@@ -445,6 +416,6 @@ export async function getClinicMetrics(businessId: string) {
         },
         trend: trend || [],
         avgRating,
-        timeSavedLabel
+        timeSavedLabel: `${(liveServed || 0) * 20}m (today)`
     };
 }

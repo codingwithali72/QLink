@@ -276,9 +276,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
         setAddLoading(true);
         try {
             const res = await createToken(params.clinicSlug, manualPhone, manualName, manualIsPriority);
-            if (res.error) {
+            if (!res.success) {
                 if (res.is_duplicate) {
-                    showToast(`Token #${res.existing_token_number} already active`, 'error');
+                    showToast(`Patient already has an active visit`, 'error');
                 } else if (res.limit_reached) {
                     showToast(`Daily limit reached`, 'error');
                 } else {

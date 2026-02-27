@@ -113,7 +113,7 @@ export async function startSession(clinicSlug: string) {
         const today = getClinicDate();
 
         // Check if session exists
-        const { data: existing } = await supabase.from('sessions').select('id').eq('business_id', business.id).eq('date', today).single();
+        const { data: existing } = await supabase.from('sessions').select('id').eq('business_id', business.id).eq('date', today).maybeSingle();
 
         if (existing) {
             // Re-open if closed
@@ -128,7 +128,14 @@ export async function startSession(clinicSlug: string) {
             if (error) throw error;
         }
 
-        await logAudit(business.id, 'START_SESSION');
+        // Use the new standard security audit log
+        await supabase.from('security_audit_logs').insert({
+            clinic_id: business.id,
+            actor_id: user.id,
+            action_type: 'SESSION_START',
+            table_name: 'sessions'
+        });
+
         revalidatePath(`/${clinicSlug}`);
         return { success: true };
     } catch (e) {
@@ -136,219 +143,126 @@ export async function startSession(clinicSlug: string) {
     }
 }
 
-// 2. CREATE TOKEN
-export async function createToken(clinicSlug: string, phone: string, name: string = "", isPriority: boolean = false) {
-    if (!clinicSlug) return { error: "Missing clinic slug" };
+// 2. CREATE CLINICAL VISIT (NABH & DPDP COMPLIANT)
+export type TokenResponse =
+    | { success: true; token: { id: string; token_number: number } }
+    | { success: false; error: string; is_duplicate?: boolean; limit_reached?: boolean; existing_token_id?: string };
+
+export async function createToken(
+    clinicSlug: string,
+    phone: string,
+    name: string = "",
+    isPriority: boolean = false,
+    visitType: string = 'OPD'
+): Promise<TokenResponse> {
+    if (!clinicSlug) return { success: false, error: "Missing clinic slug" };
 
     const supabase = createAdminClient();
     const user = await getAuthenticatedUser();
     const actualStaffId = user?.id || null;
 
-    // DPDP VAPT Fix: Only authenticated staff can bypass rate limits
+    // Rate Limiting for Public Intake
     if (!actualStaffId) {
         const ip = headers().get('x-forwarded-for') || headers().get('x-real-ip') || 'unknown-ip';
-        const rateLimit = checkRateLimit(ip, 5, 2 * 60 * 1000); // 5 tokens per IP per 2 mins
-        if (!rateLimit.success) {
-            return { error: "Too many requests. Please wait a moment." };
-        }
+        const rateLimit = checkRateLimit(ip, 5, 2 * 60 * 1000);
+        if (!rateLimit.success) return { success: false, error: "Too many requests. Please wait a moment." };
     }
 
-    // 0. SECURITY INJECTION SHIELD & INPUT SANITIZATION
-    // DPDP VAPT Fix: Do not trust client-provided staff IDs. Only authenticated
-    // staff sessions (JWT) can set isPriority = true.
-    if (!actualStaffId) {
-        isPriority = false;
-    }
+    if (!actualStaffId) isPriority = false;
 
-    // Input sanitization: Trim, restrict to 50 chars, and robust PII/XSS mitigation
-    const safeName = name
-        .trim()
-        .substring(0, 50)
-        .replace(/<[^>]*>?/gm, '') // Strip all HTML tags
-        .replace(/[&"'/<>]/g, (s) => ({
-            '&': '&amp;',
-            '"': '&quot;',
-            "'": '&#39;',
-            '/': '&#47;',
-            '<': '&lt;',
-            '>': '&gt;'
-        }[s] || s)); // Standard HTML entity encoding
+    const safeName = name.trim().substring(0, 50).replace(/<[^>]*>?/gm, '');
+    const cleanPhone = normalizeIndianPhone(phone);
 
-    // Allow empty phone for emergency walk-ins. Convert legacy 0000000000 to null.
-    const isEmergencyFake = phone === "0000000000" || phone.trim() === "";
-    const cleanPhone = isEmergencyFake ? null : normalizeIndianPhone(phone);
-
-    if (!isEmergencyFake && !cleanPhone) {
-        return { error: "Valid 10-digit Indian mobile number required" };
-    }
-
-    // Public users must provide a phone
-    if (!cleanPhone && !isPriority) {
-        return { error: "Valid 10-digit Indian mobile number required" };
-    }
+    if (!cleanPhone && !isPriority) return { success: false, error: "Valid 10-digit Indian mobile number required" };
 
     try {
         const business = await getBusinessBySlug(clinicSlug);
-        if (!business) return { error: "Clinic not found" };
+        if (!business) return { success: false, error: "Clinic not found" };
 
         const session = await getActiveSession(business.id);
-        if (!session) return { error: "Queue is CLOSED. Ask reception to start session." };
+        if (!session) return { success: false, error: "Queue is CLOSED." };
 
-        // --- PUBLIC QR INTAKE CHECK ---
-        if (!actualStaffId && business.settings) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const settings = business.settings as any;
-            if (settings.qr_intake_enabled === false) {
-                return { error: "QR intake is currently disabled for this clinic. Please see the receptionist." };
-            }
-        }
-
-        // --- RATE LIMITING (Public QR Joiner Block) ---
-        if (!actualStaffId) {
-            const reqHeaders = headers();
-            const ip = reqHeaders.get("x-forwarded-for") || reqHeaders.get("x-real-ip") || "unknown_ip";
-
-            const { data: allowed, error: rlError } = await supabase.rpc('rpc_check_rate_limit', {
-                p_ip: ip,
-                p_endpoint: 'create_token_qr',
-                p_max_hits: 3, // Max 3 tokens from same IP
-                p_window_seconds: 600 // per 10 minutes
-            });
-
-            if (rlError && !rlError.message.includes('function')) {
-                console.error("Rate Limit Verification Error:", rlError);
-            } else if (allowed === false) {
-                return { error: "You are requesting tokens too fast. Please wait 10 minutes or see the reception counter." };
-            }
-        }
-
-        // Active-token deduplication and daily limit are enforced INSIDE the
-        // create_token_atomic RPC via FOR UPDATE + count + partial unique index.
-        // No pre-check here — pre-checks outside the transaction are race-prone
-        // and were showing the wrong error ("once per day" instead of redirecting).
-
-        // Encrypt phone for storage (DPDP requirement)
-        // - patient_phone_encrypted: AES-256-GCM ciphertext stored
-        // - patient_phone_hash: HMAC-SHA256 for deduplication index
-        // - p_phone: NULL for new encrypted writes (backward compat field)
+        // Encryption path (DPDP)
         let phoneEncrypted: string | null = null;
         let phoneHash: string | null = null;
-
         if (cleanPhone) {
             try {
                 phoneEncrypted = encryptPhone(cleanPhone);
                 phoneHash = hashPhone(cleanPhone);
-            } catch (cryptoErr) {
-                // If encryption env vars are not set (dev without keys), fall back to plaintext
-                // Log the error but do not break token creation
-                console.error('[createToken] Encryption key not configured, storing plaintext:', cryptoErr);
+            } catch (e) {
+                console.error('[createToken] Encryption fallback:', e);
             }
         }
 
-        // RPC — pass encrypted form; p_phone is NULL for encrypted path
-        const { data, error } = await supabase.rpc('create_token_atomic', {
-            p_business_id: business.id,
+        // CALL CLINICAL RPC (Phase 12)
+        const { data, error } = await supabase.rpc('rpc_create_clinical_visit', {
+            p_clinic_id: business.id,
             p_session_id: session.id,
-            p_name: safeName || "Guest",
-            p_phone: phoneEncrypted ? null : cleanPhone,  // NULL when encrypted
-            p_is_priority: isPriority,
-            p_staff_id: actualStaffId,
+            p_patient_name: safeName || "Guest",
+            p_patient_phone: phoneEncrypted ? null : cleanPhone,
             p_phone_encrypted: phoneEncrypted,
             p_phone_hash: phoneHash,
+            p_visit_type: visitType,
+            p_is_priority: isPriority,
+            p_staff_id: actualStaffId,
+            p_source: actualStaffId ? 'RECEPTIONIST' : 'QR'
         });
 
         if (error) throw error;
+        const result = data as {
+            success: boolean;
+            visit_id?: string;
+            token_number?: number;
+            error?: string;
+            is_duplicate?: boolean;
+            limit_reached?: boolean
+        };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = data as any;
-
-        // Handle daily token limit reached
-        if (result && result.success === false && result.limit_reached) {
+        if (!result.success) {
             return {
                 success: false,
-                error: result.error,
-                limit_reached: true,
-                limit: result.limit,
-                count: result.count
+                error: result.error || 'Failed to create token',
+                is_duplicate: result.is_duplicate,
+                limit_reached: result.limit_reached,
+                existing_token_id: result.visit_id
             };
         }
 
-        // Handle duplicate active token specifically
-        if (result && result.success === false && result.is_duplicate) {
-            return {
-                success: false,
-                error: result.error,
-                is_duplicate: true,
-                existing_token_id: result.existing_token_id,
-                existing_token_number: result.existing_token_number,
-                existing_status: result.existing_status
-            };
-        }
+        const visit = { id: result.visit_id!, token_number: result.token_number! };
 
-        const token = { id: result.token_id, token_number: result.token_number };
-
-        // Consent logging (DPDP — log every token creation with consent metadata)
-        // QR source = patient gave explicit UI consent (checkbox)
-        // Receptionist source = implied in-person consent
-        const reqHeaders = actualStaffId ? null : headers();
-        const ip = reqHeaders?.get("x-forwarded-for") || reqHeaders?.get("x-real-ip") || null;
-        const ua = reqHeaders?.get("user-agent") || null;
-        const source = actualStaffId ? 'receptionist' : 'qr';
-
-        if (phoneHash || cleanPhone) {
-            // Non-blocking compliance log
-            supabase.from('patient_consent_logs').insert({
-                clinic_id: business.id,
-                phone_hash: phoneHash || hashPhone(cleanPhone || 'emergency'),
-                consent_text_version: 'v1.0-2026-02-24',
-                consent_given: true,
-                source,
-                ip_address: ip,
-                user_agent: ua,
-                session_id: session.id,
-            }).then(({ error: consentErr }) => {
-                if (consentErr) console.error('[createToken] Consent log failed:', consentErr);
-            });
-        }
-
-        // Audit handled inside create_token_atomic RPC (Section 8 of migration)
-        // Redundant logAudit(business.id, ...) removed to save 200ms roundtrip.
-
-        // WhatsApp (Decoupled to Background Queue to avoid blocking DB transactions on High API latency)
-        if (cleanPhone) {
-            const trackingLink = `${BASE_URL}/${clinicSlug}/t/${token.id}`;
-            // Intentionally NO `await` here. Let Vercel/Node finish it asynchronously.
+        // Async WhatsApp Alert
+        if (cleanPhone && typeof cleanPhone === 'string' && visit.id) {
+            const trackingLink = `${BASE_URL}/${clinicSlug}/t/${visit.id}`;
             queueWhatsAppMessage(
                 business.id,
-                token.id,
+                visit.id,
                 "token_created",
                 cleanPhone,
                 [
                     { type: "text", text: business.name },
-                    { type: "text", text: isPriority ? `E-${token.token_number}` : `#${token.token_number}` },
+                    { type: "text", text: isPriority ? `E-${visit.token_number}` : `#${visit.token_number}` },
                     { type: "text", text: trackingLink }
                 ]
             ).catch(err => console.error("Async WhatsApp Error:", err));
         }
 
         revalidatePath(`/${clinicSlug}`);
-        return { success: true, token };
-
+        return { success: true, token: visit };
     } catch (e) {
-        console.error("Create Token Error:", e);
-        return { error: (e as Error).message };
+        console.error("Clinical Intake Error:", e);
+        return { success: false, error: (e as Error).message };
     }
 }
 
 // SUBMIT FEEDBACK
-export async function submitFeedback(tokenId: string, rating: number, feedbackText: string = "") {
-    if (!tokenId || !rating) return { error: "Missing data" };
+export async function submitFeedback(visitId: string, rating: number, feedbackText: string = "") {
+    if (!visitId || !rating) return { error: "Missing data" };
     try {
         const supabase = createAdminClient();
         const { error } = await supabase
-            .from('tokens')
-            .update({ rating, feedback: feedbackText || null })
-            .eq('id', tokenId);
+            .from('clinical_visits')
+            .update({ rating: rating as never, feedback: feedbackText || null } as never)
+            .eq('id', visitId);
         if (error) throw error;
         return { success: true };
     } catch (e) {
@@ -358,76 +272,56 @@ export async function submitFeedback(tokenId: string, rating: number, feedbackTe
 }
 
 // PATIENT SELF-CANCEL
-// Section 5 fix: patient can cancel their own WAITING token without staff auth.
-// Security invariants enforced here (no client-side trust):
-//   1. Token must be WAITING (not SERVING, SERVED, CANCELLED, SKIPPED)
-//   2. Token must belong to the supplied clinicSlug  (cross-clinic prevention)
-//   3. Session for that clinic must be ACTIVE (OPEN or PAUSED)
-//   4. Phone must match the token's stored hash or plaintext (ownership proof)
-//   5. No staff_id required — unauthenticated patient action
-export async function patientCancelToken(clinicSlug: string, tokenId: string, phone: string) {
-    if (!clinicSlug || !tokenId || !phone) return { error: "Missing required fields" };
+export async function patientCancelToken(clinicSlug: string, visitId: string, phone: string) {
+    if (!clinicSlug || !visitId || !phone) return { error: "Missing required fields" };
 
     const cleanPhone = normalizeIndianPhone(phone);
     if (!cleanPhone) return { error: "Valid 10-digit Indian mobile number required" };
 
     try {
         const supabase = createAdminClient();
-
-        // 1. Resolve clinic — reuse getBusinessBySlug which also checks is_active / deleted_at
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Clinic not found" };
 
-        // 2. Fetch the token — join through session to enforce clinic ownership at DB level
-        const { data: token } = await supabase
-            .from('tokens')
-            .select('id, status, patient_phone, patient_phone_hash, session_id, business_id')
-            .eq('id', tokenId)
-            .eq('business_id', business.id)   // cross-clinic guard
+        const { data: visit, error: visitErr } = await supabase
+            .from('clinical_visits')
+            .select('id, status, patient_id, clinic_id')
+            .eq('id', visitId)
+            .eq('clinic_id', business.id)
             .maybeSingle();
+        if (visitErr) throw visitErr;
 
-        if (!token) return { error: "Token not found" };
+        if (!visit) return { error: "Visit not found" };
+        if (visit.status !== 'WAITING' && visit.status !== 'TRIAGE_PENDING') return { error: "Cannot cancel an active or completed visit." };
 
-        // 3. Verify session is still active (prevents cancellations on closed sessions)
-        const { data: session } = await supabase
-            .from('sessions')
-            .select('status')
-            .eq('id', token.session_id)
-            .maybeSingle();
+        const { data: patient } = await supabase
+            .from('patients')
+            .select('phone_hash, phone')
+            .eq('id', visit.patient_id)
+            .single();
 
-        if (!session || !['OPEN', 'PAUSED'].includes(session.status)) {
-            return { error: "Session is no longer active" };
-        }
-
-        // 4. Token must be in WAITING state (not already served/cancelled/serving)
-        if (token.status !== 'WAITING') {
-            return { error: `Cannot cancel a token with status: ${token.status}` };
-        }
-
-        // 5. Phone ownership check — try hash first (DPDP encrypted path), then plaintext (legacy)
         let phoneMatches = false;
-        if (token.patient_phone_hash) {
-            const { hashPhone } = await import('@/lib/crypto');
-            phoneMatches = hashPhone(cleanPhone) === token.patient_phone_hash;
-        } else if (token.patient_phone) {
-            phoneMatches = token.patient_phone === cleanPhone;
+        if (patient?.phone_hash) {
+            phoneMatches = hashPhone(cleanPhone) === patient.phone_hash;
+        } else if (patient?.phone) {
+            phoneMatches = patient.phone === cleanPhone;
         }
 
-        if (!phoneMatches) {
-            return { error: "Phone number does not match this token" };
-        }
+        if (!phoneMatches) return { error: "Phone number does not match this visit." };
 
-        // 6. Perform the cancellation
         const { error: cancelError } = await supabase
-            .from('tokens')
-            .update({ status: 'CANCELLED', previous_status: token.status, cancelled_at: new Date().toISOString() })
-            .eq('id', tokenId)
-            .eq('status', 'WAITING'); // double-guard: prevents race condition
+            .from('clinical_visits')
+            .update({ status: 'CANCELLED', previous_status: visit.status })
+            .eq('id', visitId);
 
         if (cancelError) throw cancelError;
 
-        // 7. Audit log (staff_id null = patient action)
-        await logAudit(business.id, 'PATIENT_SELF_CANCEL', { token_id: tokenId, phone_last4: cleanPhone.slice(-4) });
+        await supabase.from('security_audit_logs').insert({
+            clinic_id: business.id,
+            action_type: 'PATIENT_SELF_CANCEL',
+            table_name: 'clinical_visits',
+            record_id: visitId
+        });
 
         return { success: true };
     } catch (e) {
@@ -473,37 +367,41 @@ export async function updateToken(clinicSlug: string, tokenId: string, name: str
 }
 
 // SECURE MANUAL CALL
-export async function triggerManualCall(clinicSlug: string, tokenId: string) {
-    if (!tokenId || !clinicSlug) return { error: "Missing data" };
-
+export async function triggerManualCall(clinicSlug: string, visitId: string) {
+    if (!visitId || !clinicSlug) return { error: "Missing data" };
     try {
         const user = await getAuthenticatedUser();
-        if (!user) return { error: "Unauthorized: Staff login required to access phone numbers." };
+        if (!user) return { error: "Unauthorized" };
 
         const supabase = createAdminClient();
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Clinic not found" };
 
-        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized: You do not have access to this clinic." };
+        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized" };
 
-        const { data: token } = await supabase
-            .from('tokens')
-            .select('id, patient_phone, token_number')
-            .eq('id', tokenId)
-            .eq('business_id', business.id)
+        const { data: visit } = await supabase
+            .from('clinical_visits')
+            .select('id, patient_id')
+            .eq('id', visitId)
+            .eq('clinic_id', business.id)
             .single();
 
-        if (!token) return { error: "Token not found" };
-        if (!token.patient_phone) return { error: "No phone number available for this patient" };
+        if (!visit) return { error: "Visit not found" };
 
-        // Log the secure access event
-        await logAudit(business.id, 'manual_call', {
-            token_id: tokenId,
-            token_number: token.token_number
-        });
+        const { data: patient } = await supabase
+            .from('patients')
+            .select('phone, phone_encrypted')
+            .eq('id', visit.patient_id)
+            .single();
 
-        return { success: true, phone: token.patient_phone };
+        let phone = patient?.phone;
+        if (patient?.phone_encrypted) {
+            phone = decryptPhone(patient.phone_encrypted);
+        }
 
+        if (!phone) return { error: "No phone number available" };
+
+        return { success: true, phone };
     } catch (e) {
         return { error: (e as Error).message };
     }
@@ -532,78 +430,64 @@ export async function cancelToken(clinicSlug: string, tokenId: string) {
 
 
 
-// 8. PUBLIC TRACKING (Replaces Realtime)
-export async function getPublicTokenStatus(tokenId: string) {
-    if (!tokenId) return { error: "Invalid token ID" };
+// 8. PUBLIC TRACKING (NABH Compliant)
+export async function getPublicTokenStatus(visitId: string) {
+    if (!visitId) return { error: "Invalid ID" };
     try {
         const supabase = createAdminClient();
-
-        // Fetch the token with its session
-        // DPDP: explicitly list only non-PII columns — patient_phone and patient_name
-        // are NOT included here. The public tracking page never needs them.
-        const { data: token, error: tokenError } = await supabase
-            .from('tokens')
+        const { data: visit, error: visitError } = await supabase
+            .from('clinical_visits')
             .select(`
                 id, token_number, status, is_priority,
-                created_at, served_at, cancelled_at,
-                session_id, business_id, rating,
-                sessions!inner( status, date, business_id )
+                created_at, rating, session_id, clinic_id,
+                sessions!inner(status)
             `)
-            .eq('id', tokenId)
+            .eq('id', visitId)
             .maybeSingle();
 
-        if (tokenError) throw tokenError;
-        if (!token) return { error: "Token not found" };
+        if (visitError) throw visitError;
+        if (!visit) return { error: "Visit not found" };
 
-        // SF1 FIX: Compute tokens_ahead using SORT POSITION, not token_number comparison
-        // This correctly handles priority tokens with high token numbers
-        let tokensAhead = 0;
-        if (token.status === 'WAITING') {
-            const { data: waitingQueue } = await supabase
-                .from('tokens')
-                .select('id')
-                .eq('session_id', token.session_id)
-                .eq('status', 'WAITING')
-                .order('is_priority', { ascending: false })
-                .order('token_number', { ascending: true });
+        // Compute tokens ahead (Acuity Aware)
+        const { data: waitingQueue } = await supabase
+            .from('clinical_visits')
+            .select('id')
+            .eq('session_id', visit.session_id)
+            .eq('status', 'WAITING')
+            .order('is_priority', { ascending: false })
+            .order('token_number', { ascending: true });
 
-            // Find this token's position in the sorted queue
-            const position = (waitingQueue || []).findIndex(t => t.id === token.id);
-            tokensAhead = position > 0 ? position : 0;
-        }
+        const position = (waitingQueue || []).findIndex(v => v.id === visit.id);
+        const tokensAhead = position > 0 ? position : 0;
 
-        // Get currently serving token
-        const { data: servingToken } = await supabase
-            .from('tokens')
+        const { data: servingVisit } = await supabase
+            .from('clinical_visits')
             .select('token_number, is_priority')
-            .eq('session_id', token.session_id)
+            .eq('session_id', visit.session_id)
             .eq('status', 'SERVING')
             .maybeSingle();
 
-        const currentServing = servingToken
-            ? (servingToken.is_priority ? `E-${servingToken.token_number}` : `#${servingToken.token_number}`)
+        const currentServing = servingVisit
+            ? (servingVisit.is_priority ? `E-${servingVisit.token_number}` : `#${servingVisit.token_number}`)
             : "--";
 
         return {
             success: true,
             data: {
                 token: {
-                    id: token.id,
-                    token_number: token.token_number,
-                    // patient_name intentionally excluded — public page shows no PII
-                    status: token.status,
-                    is_priority: token.is_priority,
-                    created_at: token.created_at,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    session_status: (token as any).sessions?.status || 'CLOSED',
-                    rating: token.rating,
+                    id: visit.id,
+                    token_number: visit.token_number,
+                    status: visit.status,
+                    is_priority: visit.is_priority,
+                    session_status: ((visit as unknown as { sessions: { status: string } }).sessions?.status) || 'CLOSED',
+                    rating: visit.rating,
                 },
                 tokens_ahead: tokensAhead,
                 current_serving: currentServing,
             }
         };
     } catch (e) {
-        console.error("Public Token Error:", e);
+        console.error("Public Status Error:", e);
         return { error: (e as Error).message };
     }
 }
@@ -619,45 +503,33 @@ export async function closeQueue(clinicSlug: string) {
     return updateSessionStatus(clinicSlug, 'CLOSED');
 }
 
-// C1 + C3 FIX: Use atomic Postgres RPC with FOR UPDATE row lock
-// The SQL function serializes concurrent actions and verifies business_id ownership
-async function processQueueAction(slug: string, action: string, tokenId?: string) {
+// ADVANCED CLINICAL MUTATION RPC WRAPPER
+async function processQueueAction(slug: string, action: string, visitId?: string) {
     const supabase = createAdminClient();
     try {
         const business = await getBusinessBySlug(slug);
         if (!business) return { error: "Business not found" };
 
-        // C3 FIX: Require authenticated staff for all queue mutations
         const user = await getAuthenticatedUser();
-        if (!user) return { error: "Unauthorized: staff login required" };
+        if (!user) return { error: "Unauthorized" };
 
-        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized: You do not have access to this clinic." };
+        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized" };
 
-        // For RESUME_SESSION, look for a PAUSED session too
-        let session = await getActiveSession(business.id);
-        if (!session && action === 'RESUME_SESSION') {
-            const today = getClinicDate();
-            const { data: paused } = await supabase
-                .from('sessions').select('*')
-                .eq('business_id', business.id).eq('date', today).eq('status', 'PAUSED').maybeSingle();
-            session = paused;
-        }
+        const session = await getActiveSession(business.id);
         if (!session) return { error: "No active session" };
 
-        // C1 FIX: Single atomic RPC call — uses SELECT FOR UPDATE inside Postgres
-        const { data, error } = await supabase.rpc('rpc_process_queue_action', {
-            p_business_id: business.id,
+        // Call Phase 13 Clinical Mutation RPC
+        const { data, error } = await supabase.rpc('rpc_process_clinical_action', {
+            p_clinic_id: business.id,
             p_session_id: session.id,
             p_staff_id: user.id,
             p_action: action,
-            p_token_id: tokenId || null,
+            p_visit_id: visitId || null,
         });
 
         if (error) throw error;
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = data as any;
-        if (result && result.success === false) return { error: result.error || 'Action failed' };
+        const result = data as { success: boolean; error?: string };
+        if (!result.success) return { error: result.error || 'Action failed' };
 
         revalidatePath(`/${slug}`);
         return { success: true };
@@ -693,8 +565,8 @@ async function updateSessionStatus(slug: string, status: 'OPEN' | 'CLOSED' | 'PA
 
 
 // 8.5 Toggle Arrival Status
-export async function toggleArrivalStatus(clinicSlug: string, tokenId: string, isArrived: boolean) {
-    if (!tokenId || !clinicSlug) return { error: "Missing data" };
+export async function toggleArrivalStatus(clinicSlug: string, visitId: string, isArrived: boolean) {
+    if (!visitId || !clinicSlug) return { error: "Missing data" };
     try {
         const user = await getAuthenticatedUser();
         if (!user) return { error: "Unauthorized" };
@@ -703,21 +575,18 @@ export async function toggleArrivalStatus(clinicSlug: string, tokenId: string, i
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Business not found" };
 
-        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized: You do not have access to this clinic." };
+        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized" };
 
         const { error } = await supabase
-            .from('tokens')
+            .from('clinical_visits')
             .update({
-                is_arrived: isArrived,
-                arrived_at: isArrived ? new Date().toISOString() : null,
-                grace_expires_at: null, // Clear any grace periods
-                status: isArrived ? 'WAITING' : 'WAITING' // Always normal wait status on manual toggle
+                registration_complete_time: isArrived ? new Date().toISOString() : null,
+                status: isArrived ? 'WAITING' : 'WAITING'
             })
-            .eq('id', tokenId)
-            .eq('business_id', business.id)
+            .eq('id', visitId)
+            .eq('clinic_id', business.id);
 
         if (error) throw error;
-        await logAudit(business.id, 'ARRIVAL_TOGGLED', { token_id: tokenId, is_arrived: isArrived });
         revalidatePath(`/${clinicSlug}`);
         return { success: true };
     } catch (e) {
@@ -725,6 +594,7 @@ export async function toggleArrivalStatus(clinicSlug: string, tokenId: string, i
     }
 }
 
+// DASHBOARD DATA (CLINICAL VERSION)
 export async function getDashboardData(clinicSlug: string) {
     const supabase = createAdminClient();
     try {
@@ -735,14 +605,8 @@ export async function getDashboardData(clinicSlug: string) {
 
         const today = getClinicDate();
 
-        // Get limits from business config
-        const { data: businessData } = await supabase
-            .from('businesses')
-            .select('daily_token_limit')
-            .eq('id', business.id)
-            .single();
+        const { data: businessData } = await supabase.from('businesses').select('daily_token_limit').eq('id', business.id).single();
 
-        // Get active session
         const { data: session } = await supabase
             .from('sessions')
             .select('*')
@@ -754,32 +618,34 @@ export async function getDashboardData(clinicSlug: string) {
 
         if (!session) return { session: null, tokens: [], dailyTokenLimit: businessData?.daily_token_limit || null, businessId: business.id };
 
-        // Get tokens
-        const { data: tokens } = await supabase
-            .from('tokens')
-            .select('*')
-            .in('status', ['WAITING', 'SERVING', 'SKIPPED', 'CANCELLED', 'SERVED', 'WAITING_LATE'])
+        // JOIN Clinical Visits with Patients
+        const { data: visits } = await supabase
+            .from('clinical_visits')
+            .select('*, patients(name, phone, phone_encrypted)')
             .eq('session_id', session.id)
+            .in('status', ['WAITING', 'SERVING', 'SKIPPED', 'CANCELLED', 'SERVED'])
             .order('token_number', { ascending: true });
 
-        const safeTokens = (tokens || []).map(t => {
-            let decryptedPhone = t.patient_phone;
-            if (t.patient_phone_encrypted) {
-                try {
-                    decryptedPhone = decryptPhone(t.patient_phone_encrypted);
-                } catch (e) {
-                    console.error('[getDashboardData] Decryption failed:', e);
-                    decryptedPhone = "[decryption_error]";
-                }
+        const safeTokens = (visits || []).map((v) => {
+            const visit = v as unknown as {
+                patients: { name?: string, phone?: string, phone_encrypted?: string },
+                registration_complete_time?: string,
+                source?: string,
+                token_number: number
+            };
+            const patient = visit.patients;
+            let decryptedPhone = patient?.phone;
+            if (patient?.phone_encrypted) {
+                try { decryptedPhone = decryptPhone(patient.phone_encrypted); } catch { }
             }
             return {
-                ...t,
+                ...v,
+                patient_name: patient?.name,
                 patient_phone: decryptedPhone,
-                customerPhone: decryptedPhone, // Secondary mapping for UI components
-                customerName: t.patient_name,     // Mapping for consistency
-                isArrived: t.is_arrived,
-                graceExpiresAt: t.grace_expires_at,
-                source: t.source,
+                customerPhone: decryptedPhone,
+                customerName: patient?.name,
+                isArrived: !!visit.registration_complete_time,
+                source: visit.source || 'QR',
             };
         });
 
@@ -790,55 +656,49 @@ export async function getDashboardData(clinicSlug: string) {
     }
 }
 
-// 9. HISTORY
+// 9. HISTORY (CLINICAL)
 export async function getTokensForDate(clinicSlug: string, date: string, limit: number = 50, offset: number = 0) {
     const supabase = createAdminClient();
     try {
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { error: "Business not found" };
 
-        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized: You do not have access to this clinic." };
+        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized" };
 
-        const { data: session } = await supabase
-            .from('sessions')
-            .select('id')
-            .eq('business_id', business.id)
-            .eq('date', date)
-            .maybeSingle();
-
+        const { data: session } = await supabase.from('sessions').select('id').eq('business_id', business.id).eq('date', date).maybeSingle();
         if (!session) return { tokens: [], hasMore: false };
 
         const { data, count } = await supabase
-            .from('tokens')
-            .select('id, token_number, patient_name, patient_phone, patient_phone_encrypted, status, is_priority, rating, feedback, created_at, served_at, cancelled_at, created_by_staff_id', { count: 'exact' })
+            .from('clinical_visits')
+            .select('id, token_number, status, is_priority, rating, feedback, created_at, patients(name, phone, phone_encrypted)', { count: 'exact' })
             .eq('session_id', session.id)
             .order('token_number', { ascending: true })
             .range(offset, offset + limit - 1);
 
         const hasMore = count ? offset + (data?.length || 0) < count : false;
 
-        // Map to camelCase for consistent use in the UI
-        const tokens = (data || []).map((t: any) => { // eslint-disable-line
-            let decryptedPhone = t.patient_phone;
-            if (t.patient_phone_encrypted) {
-                try {
-                    decryptedPhone = decryptPhone(t.patient_phone_encrypted);
-                } catch (e) {
-                    console.error('[getTokensForDate] Decryption failed:', e);
-                    decryptedPhone = "[decryption_error]";
-                }
+        const tokens = (data || []).map((v) => {
+            const visit = v as unknown as {
+                id: string,
+                token_number: number,
+                status: string,
+                patients?: { name?: string, phone?: string, phone_encrypted?: string }
+            };
+            const patient = visit.patients;
+            let decryptedPhone = patient?.phone;
+            if (patient?.phone_encrypted) {
+                try { decryptedPhone = decryptPhone(patient.phone_encrypted); } catch { }
             }
             return {
-                id: t.id,
-                tokenNumber: t.token_number,
-                customerName: t.patient_name,
+                id: visit.id,
+                tokenNumber: visit.token_number,
+                customerName: patient?.name,
                 customerPhone: decryptedPhone,
-                status: t.status,
-                isPriority: t.is_priority,
-                rating: t.rating,
-                feedback: t.feedback,
-                createdAt: t.created_at,
-                servedAt: t.served_at,
+                status: visit.status,
+                isPriority: v.is_priority,
+                rating: v.rating,
+                feedback: v.feedback,
+                createdAt: v.created_at,
             };
         });
 

@@ -6,8 +6,8 @@ const WHATSAPP_API_URL = "https://graph.facebook.com/v17.0"; // Or latest versio
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function sendWhatsApp(to: string, templateName: string, components: any[], businessId: string, tokenId?: string) {
-    const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
-    const ACCESS_TOKEN = process.env.WHATSAPP_BEARER_TOKEN;
+    const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+    const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
 
     if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
         console.log("⚠️ WhatsApp Mock Send:", { to, templateName, components });
@@ -69,8 +69,8 @@ async function logMessage(businessId: string, tokenId: string | undefined, statu
 // -------------------------------------------------------------------------------------------------
 
 export async function sendWhatsAppInteractiveButtons(to: string, bodyText: string, buttons: { id: string, title: string }[], businessId: string, tokenId?: string) {
-    const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
-    const ACCESS_TOKEN = process.env.WHATSAPP_BEARER_TOKEN;
+    const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+    const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
 
     if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) return { success: true, mock: true };
 
@@ -112,8 +112,8 @@ export async function sendWhatsAppInteractiveButtons(to: string, bodyText: strin
 }
 
 export async function sendWhatsAppInteractiveList(to: string, bodyText: string, listTitle: string, options: { id: string, title: string, description?: string }[], businessId: string, tokenId?: string) {
-    const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
-    const ACCESS_TOKEN = process.env.WHATSAPP_BEARER_TOKEN;
+    const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+    const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
 
     if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) return { success: true, mock: true };
 

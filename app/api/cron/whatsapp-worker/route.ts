@@ -21,7 +21,7 @@ export async function GET(req: Request) {
         // 1. Fetch up to 50 pending messages
         const { data: pendingLogs, error: fetchErr } = await supabase
             .from('message_logs')
-            .select('id, business_id, token_id, message_type, provider_response')
+            .select('id, business_id, visit_id, message_type, provider_response')
             .eq('status', 'PENDING')
             .order('created_at', { ascending: true })
             .limit(50);
@@ -44,7 +44,7 @@ export async function GET(req: Request) {
         // 3. Process each message — decrypts phone from tokens table (DPDP compliant)
         for (const log of pendingLogs) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const payload = log.provider_response as { components?: any[], token_id?: string, phone_hash?: string, phone?: string };
+            const payload = log.provider_response as { components?: any[], visit_id?: string, phone_hash?: string, phone?: string };
             if (!payload || !payload.components) {
                 await supabase.from('message_logs').update({ status: 'FAILED' }).eq('id', log.id);
                 failCount++;
@@ -54,24 +54,27 @@ export async function GET(req: Request) {
             // DPDP: Resolve phone from encrypted tokens table, not from JSONB payload
             // Supports both new (token_id lookup) and legacy (direct phone) payloads
             let resolvedPhone: string | null = null;
-            const lookupTokenId = payload.token_id || log.token_id;
+            // DPDP: Resolve phone from patients table (linked to clinical_visits)
+            const lookupVisitId = payload.visit_id || log.visit_id;
 
-            if (lookupTokenId) {
+            if (lookupVisitId) {
                 try {
-                    const { data: tokenRow } = await supabase
-                        .from('tokens')
-                        .select('patient_phone_encrypted, patient_phone')
-                        .eq('id', lookupTokenId)
+                    const { data: visitRow } = await supabase
+                        .from('clinical_visits')
+                        .select('patients(phone_encrypted, phone)')
+                        .eq('id', lookupVisitId)
                         .maybeSingle();
 
-                    if (tokenRow?.patient_phone_encrypted) {
-                        resolvedPhone = decryptPhone(tokenRow.patient_phone_encrypted);
-                    } else if (tokenRow?.patient_phone) {
-                        // Legacy plaintext fallback (for tokens created before encryption)
-                        resolvedPhone = tokenRow.patient_phone;
+                    const visitRecord = visitRow as unknown as { patients: { phone_encrypted?: string, phone?: string } | null };
+                    const patient = visitRecord?.patients;
+
+                    if (patient?.phone_encrypted) {
+                        resolvedPhone = decryptPhone(patient.phone_encrypted);
+                    } else if (patient?.phone) {
+                        resolvedPhone = patient.phone;
                     }
                 } catch (decryptErr) {
-                    console.error(`[wa-worker] Failed to decrypt phone for token ${lookupTokenId}:`, decryptErr);
+                    console.error(`[wa-worker] Failed to resolve phone for visit ${lookupVisitId}:`, decryptErr);
                 }
             }
 
@@ -87,13 +90,12 @@ export async function GET(req: Request) {
             }
 
             try {
-                // sendWhatsApp internally updates status = SENT / FAILED based on response.
                 await sendWhatsApp(
                     resolvedPhone,
                     log.message_type,
                     payload.components,
                     log.business_id,
-                    log.token_id || undefined
+                    (log as unknown as { visit_id?: string }).visit_id || undefined
                 );
                 successCount++;
             } catch (err) {

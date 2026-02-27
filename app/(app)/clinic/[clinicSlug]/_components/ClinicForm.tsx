@@ -52,19 +52,20 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
 
         try {
             const res = await createToken(clinicSlug, phone, name, false);
-            if (res.token) {
+            if (res.success && 'token' in res) {
                 // Use window.location instead of router to avoid context issues
                 window.location.href = `/${clinicSlug}/t/${res.token.id}`;
-            } else if (res.is_duplicate) {
+            } else if (!res.success && res.is_duplicate) {
                 // Seamlessly redirect to existing active token
                 window.location.href = `/${clinicSlug}/t/${res.existing_token_id}`;
-            } else if (res.limit_reached) {
+            } else if (!res.success && res.limit_reached) {
                 setStatusMessage("Daily token limit reached. Please contact clinic.");
             } else {
-                if (res.error === "Clinic is closed" || res.error === "Queue is currently paused") {
-                    setStatusMessage(res.error === "Clinic is closed" ? "Queue is closed for today." : "Queue is currently paused.");
+                const errMsg = (!res.success && res.error) ? res.error : "Failed to create ticket";
+                if (errMsg === "Clinic is closed" || errMsg === "Queue is currently paused" || errMsg === "Queue session is closed or invalid.") {
+                    setStatusMessage(errMsg === "Clinic is closed" ? "Queue is closed for today." : "Queue is currently paused.");
                 } else {
-                    setError(res.error || "Failed to create ticket");
+                    setError(errMsg);
                 }
                 setLoading(false);
             }

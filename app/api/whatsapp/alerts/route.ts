@@ -32,70 +32,123 @@ export async function GET(req: Request) {
 
     for (const alert of alerts) {
         try {
+            let phoneNumber = alert.phone_number;
+
+            // DPDP Fix: Resolve phone from clinical_visits -> patients
+            if (!phoneNumber && (alert.visit_id || alert.token_id)) {
+                const { data: visitRow } = await supabase
+                    .from('clinical_visits')
+                    .select('patients(phone, phone_encrypted)')
+                    .eq('id', alert.visit_id || alert.token_id)
+                    .maybeSingle();
+
+                const patient = visitRow?.patients as { phone_encrypted?: string, phone?: string } | null;
+                if (patient) {
+                    if (patient.phone_encrypted) {
+                        const { decryptPhone } = await import('@/lib/crypto');
+                        phoneNumber = decryptPhone(patient.phone_encrypted);
+                    } else {
+                        phoneNumber = patient.phone;
+                    }
+                }
+            }
+
+            if (!phoneNumber) {
+                console.error("Missing phone number for alert", alert.id);
+                await supabase.from('whatsapp_alerts_queue').update({ status: 'FAILED' }).eq('id', alert.id);
+                continue;
+            }
+
             // Check 24hr conversation window
+            // Look into both tables for safety
             const { data: conv } = await supabase
                 .from('conversations')
                 .select('last_message_at')
-                .eq('phone_number', alert.phone_number)
-                .single()
+                .eq('phone_number', phoneNumber)
+                .maybeSingle();
 
-            let isWithin24h = false
-            if (conv && conv.last_message_at) {
-                const hoursSinceMessage = (Date.now() - new Date(conv.last_message_at).getTime()) / (1000 * 60 * 60)
-                isWithin24h = hoursSinceMessage <= 24
+            const { data: waConv } = await supabase
+                .from('whatsapp_conversations')
+                .select('last_interaction')
+                .eq('phone', phoneNumber)
+                .maybeSingle();
+
+            const lastInteraction = conv?.last_message_at || waConv?.last_interaction;
+            let isWithin24h = false;
+            if (lastInteraction) {
+                const hoursSinceMessage = (Date.now() - new Date(lastInteraction).getTime()) / (1000 * 60 * 60);
+                isWithin24h = hoursSinceMessage <= 24;
             }
 
-            // Phase 6: Cost Optimization Engine logic
-            // Only send Token Created, 5 Left (NEAR_TURN), Now Serving (SERVING). DELAYED is also required per Phase 3.
-
-            let messageText = ""
-            let templateName = "" // Used if outside 24 hour window (Must pre-approve Utility template in Meta)
+            let messageText = "";
+            let templateName = "";
 
             if (alert.event_type === 'NEAR_TURN') {
-                messageText = "Your turn is approaching! There are approximately 5 patients ahead of you. Please head to the waiting area."
-                templateName = "qlink_near_turn" // Example template name
+                messageText = "You are 5 patients away from your consultation. Please stay nearby.";
+                templateName = "qlink_near_turn";
+            } else if (alert.event_type === 'NEXT_IN_LINE') {
+                messageText = "You are NEXT. Please be ready.";
+                templateName = "qlink_next_in_line";
             } else if (alert.event_type === 'SERVING') {
-                messageText = "The doctor is ready for you! Please proceed to the clinic room."
-                templateName = "qlink_now_serving"
+                messageText = "It’s Your Turn! Your token is now being served. Please proceed to the consultation room.";
+                templateName = "qlink_now_serving";
             } else if (alert.event_type === 'DELAYED') {
-                messageText = "The doctor is delayed by approximately 15 mins. Thank you for your patience."
-                templateName = "qlink_delay_update"
+                messageText = "Doctor is delayed by approximately 15 minutes. Updated estimated wait: 40 minutes.";
+                templateName = "qlink_delay_update";
+            } else if (alert.event_type === 'QUEUE_UPDATE') {
+                messageText = "Queue Update: Your turn is approaching faster than expected.";
             }
 
-            let success = false
+            let success = false;
             if (isWithin24h) {
                 if (alert.event_type === 'NEAR_TURN') {
                     success = await sendWhatsAppInteractiveButtons(
-                        alert.phone_number,
-                        "🔔 Your turn is coming up!\n\nOnly 5 patients ahead of you.\n\nPlease reach the clinic in the next 10 minutes.",
+                        phoneNumber,
+                        "🚩 Almost Your Turn\n\nYou are 5 patients away from your consultation. Please stay nearby.",
                         [
-                            { id: 'IM_ON_THE_WAY', title: "I'm On The Way" },
-                            { id: 'CANCEL_TOKEN', title: 'Cancel My Token' }
+                            { id: 'IM_ON_THE_WAY', title: 'I Am On The Way' },
+                            { id: 'CANCEL_START', title: 'Cancel My Token' }
                         ]
-                    )
+                    );
+                } else if (alert.event_type === 'NEXT_IN_LINE') {
+                    success = await sendWhatsAppInteractiveButtons(
+                        phoneNumber,
+                        "🔔 Almost Your Turn\n\nYou are NEXT. Please be ready.",
+                        [
+                            { id: 'IM_HERE', title: "I Am Here" }
+                        ]
+                    );
                 } else if (alert.event_type === 'SERVING') {
                     success = await sendWhatsAppInteractiveButtons(
-                        alert.phone_number,
-                        "🟢 It's Your Turn!\n\nYour token is now being served.\n\nPlease proceed to reception.",
+                        phoneNumber,
+                        "🟢 It’s Your Turn\n\nYour token is now being served. Please proceed to the consultation room.",
                         [
-                            { id: 'IM_HERE', title: "I'm Here" }
+                            { id: 'IM_COMING', title: 'I Am Coming' },
+                            { id: 'CANCEL_START', title: 'Cancel' }
                         ]
-                    )
+                    );
                 } else if (alert.event_type === 'DELAYED') {
-                    // Just informational
-                    success = await sendWhatsAppFreeText(alert.phone_number, "The doctor is delayed by approximately 15 mins. Thank you for your patience.")
+                    success = await sendWhatsAppInteractiveButtons(
+                        phoneNumber,
+                        "⏳ Schedule Update\n\nDoctor is delayed by approximately 15 minutes.\n\nWe appreciate your patience.",
+                        [
+                            { id: 'KEEP_TOKEN', title: 'Keep My Token' },
+                            { id: 'CANCEL_START', title: 'Cancel My Token' }
+                        ]
+                    );
+                } else if (alert.event_type === 'QUEUE_UPDATE') {
+                    success = await sendWhatsAppFreeText(phoneNumber, "📢 Queue Update\n\nSomeone ahead was skipped. You are moving up faster!");
                 } else if (alert.event_type === 'FEEDBACK_REQUEST') {
-                    // Set conversation state to AWAITING_FEEDBACK_RATING
                     await supabase.from('whatsapp_conversations').upsert({
                         clinic_id: alert.business_id,
-                        phone: alert.phone_number,
+                        phone: phoneNumber,
                         state: 'AWAITING_FEEDBACK_RATING',
-                        active_token_id: alert.token_id,
+                        active_visit_id: alert.visit_id || alert.token_id,
                         last_interaction: new Date().toISOString()
-                    }, { onConflict: 'clinic_id,phone' })
+                    }, { onConflict: 'clinic_id,phone' });
 
                     success = await sendWhatsAppInteractiveList(
-                        alert.phone_number,
+                        phoneNumber,
                         "🙏 Thank you for visiting us.\n\nHow was your experience today?",
                         "Rate Us",
                         [
@@ -105,49 +158,43 @@ export async function GET(req: Request) {
                             { id: 'RATE_2', title: '⭐⭐ 2', description: 'Poor' },
                             { id: 'RATE_1', title: '⭐ 1', description: 'Very Poor' }
                         ]
-                    )
+                    );
                 } else {
-                    success = await sendWhatsAppFreeText(alert.phone_number, messageText)
+                    success = await sendWhatsAppFreeText(phoneNumber, messageText);
                 }
             } else {
-                // strict Utility Template outside 24h
-                // For feedback outside 24h, you cannot easily start conversations. We'll skip or use standard template.
                 if (alert.event_type !== 'FEEDBACK_REQUEST') {
-                    success = await sendWhatsAppTemplate(alert.phone_number, templateName)
+                    success = await sendWhatsAppTemplate(phoneNumber, templateName);
                 } else {
-                    success = true; // Skip feedback outside 24h to save costs and avoid template rejection
+                    success = true;
                 }
             }
 
             if (success) {
-                // Log the message for billing/auditing metrics
                 await supabase.from('message_logs').insert({
                     business_id: alert.business_id,
-                    phone_number: alert.phone_number,
-                    token_id: alert.token_id,
+                    phone_number: phoneNumber,
+                    visit_id: alert.visit_id || alert.token_id,
                     message_type: alert.event_type,
                     delivery_status: 'sent'
-                })
-
-                await supabase.from('whatsapp_alerts_queue').update({ status: 'COMPLETED' }).eq('id', alert.id)
+                });
+                await supabase.from('whatsapp_alerts_queue').update({ status: 'COMPLETED' }).eq('id', alert.id);
             } else {
-                await supabase.from('whatsapp_alerts_queue').update({ status: 'FAILED' }).eq('id', alert.id)
+                await supabase.from('whatsapp_alerts_queue').update({ status: 'FAILED' }).eq('id', alert.id);
             }
-
         } catch (e) {
-            console.error("Error processing alert", alert.id, e)
-            await supabase.from('whatsapp_alerts_queue').update({ status: 'FAILED' }).eq('id', alert.id)
+            console.error("Error processing alert", alert.id, e);
+            await supabase.from('whatsapp_alerts_queue').update({ status: 'FAILED' }).eq('id', alert.id);
         }
     }
 
-    return new NextResponse(`Processed ${alerts.length} alerts`, { status: 200 })
+    return new NextResponse(`Processed ${alerts.length} alerts`, { status: 200 });
 }
 
-// Simulated API calls to WhatsApp Cloud API
 async function sendWhatsAppFreeText(phone: string, text: string): Promise<boolean> {
-    const WABA_ID = process.env.WHATSAPP_PHONE_ID
-    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
-    if (!WABA_ID || !TOKEN) return false
+    const WABA_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
+    if (!WABA_ID || !TOKEN) return false;
 
     try {
         const res = await fetch(`https://graph.facebook.com/v19.0/${WABA_ID}/messages`, {
@@ -159,17 +206,17 @@ async function sendWhatsAppFreeText(phone: string, text: string): Promise<boolea
                 type: 'text',
                 text: { body: text }
             })
-        })
-        return res.ok
+        });
+        return res.ok;
     } catch {
-        return false
+        return false;
     }
 }
 
 async function sendWhatsAppTemplate(phone: string, templateName: string): Promise<boolean> {
-    const WABA_ID = process.env.WHATSAPP_PHONE_ID
-    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
-    if (!WABA_ID || !TOKEN) return false
+    const WABA_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
+    if (!WABA_ID || !TOKEN) return false;
 
     try {
         const res = await fetch(`https://graph.facebook.com/v19.0/${WABA_ID}/messages`, {
@@ -184,17 +231,16 @@ async function sendWhatsAppTemplate(phone: string, templateName: string): Promis
                     language: { code: 'en' }
                 }
             })
-        })
-        return res.ok
+        });
+        return res.ok;
     } catch {
-        return false
+        return false;
     }
 }
 
 async function sendWhatsAppInteractiveButtons(phone: string, bodyText: string, buttons: { id: string, title: string }[]): Promise<boolean> {
-    const WABA_ID = process.env.WHATSAPP_PHONE_ID
-    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
-
+    const WABA_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
     if (!WABA_ID || !TOKEN) return false;
 
     try {
@@ -216,24 +262,23 @@ async function sendWhatsAppInteractiveButtons(phone: string, bodyText: string, b
                             type: "reply",
                             reply: {
                                 id: b.id,
-                                title: b.title.substring(0, 20) // max 20 chars
+                                title: b.title.substring(0, 20)
                             }
                         }))
                     }
                 }
             }),
         });
-        return res.ok
+        return res.ok;
     } catch (e) {
-        console.error("Failed to send WA message", e)
-        return false
+        console.error("Failed to send WA message", e);
+        return false;
     }
 }
 
 async function sendWhatsAppInteractiveList(phone: string, bodyText: string, listTitle: string, options: { id: string, title: string, description?: string }[]): Promise<boolean> {
-    const WABA_ID = process.env.WHATSAPP_PHONE_ID;
-    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
-
+    const WABA_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
     if (!WABA_ID || !TOKEN) return false;
 
     try {

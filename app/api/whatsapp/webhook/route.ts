@@ -167,50 +167,83 @@ export async function POST(req: Request) {
             return successResponse({ message: 'Session closed message sent' }, requestId)
         }
 
-        // Establish Conversation State (if we need to check state here)
-        // Check if they already have an active token from ANY source
-        const { data: activeToken } = await supabase
-            .from('tokens')
-            .select('id, token_number, status, business:businesses(name)')
-            .eq('business_id', business.id)
-            .eq('patient_phone', phoneNumber)
+        // Check if there is already an active visit from ANY source
+        await supabase
+            .from('clinical_visits')
+            .select('id, token_number, status, clinic_id')
+            .eq('clinic_id', business.id)
             .eq('session_id', session.id)
             .in('status', ['WAITING', 'SERVING'])
-            .single()
+            .filter('patient_id', 'in',
+                supabase.from('patients').select('id').eq('clinic_id', business.id).eq('phone', phoneNumber)
+            )
+            .maybeSingle();
 
-        if (activeToken) {
-            // Already has active token
-            // Update conv state to ACTIVE_TOKEN if it isn't already
+        // Optimized phone lookup via patients
+        const { data: patient } = await supabase
+            .from('patients')
+            .select('id')
+            .eq('clinic_id', business.id)
+            .eq('phone', phoneNumber)
+            .maybeSingle();
+
+        let visitRecord = null;
+        if (patient) {
+            const { data: v } = await supabase
+                .from('clinical_visits')
+                .select('id, token_number, status')
+                .eq('session_id', session.id)
+                .eq('patient_id', patient.id)
+                .in('status', ['WAITING', 'SERVING'])
+                .maybeSingle();
+            visitRecord = v;
+        }
+
+        // Check if repeat visit (Step 13)
+        const { data: existingPatient } = await supabase.from('patients').select('id, name').eq('clinic_id', business.id).eq('phone', phoneNumber).maybeSingle();
+
+        if (visitRecord) {
+            // Already has active visit (Step 13 / Case: Duplicate JOIN)
             await supabase.from('whatsapp_conversations').upsert({
                 clinic_id: business.id,
                 phone: phoneNumber,
                 state: 'ACTIVE_TOKEN',
-                active_token_id: activeToken.id,
+                active_visit_id: visitRecord.id,
                 last_interaction: new Date().toISOString()
             }, { onConflict: 'clinic_id,phone' })
 
-            // Determine estimated wait directly or simple view
             await sendWhatsAppInteractiveButtons(
                 phoneNumber,
-                `🟢 You already have an active token.\n\n🎟 Token: #${activeToken.token_number}\nStatus: ${activeToken.status}\n\nWhat would you like to do?`,
+                `Welcome back, ${existingPatient?.name || 'there'}! 👋\n\n🟢 You already have an active token.\n\n🎟 Token: #${visitRecord.token_number}\nStatus: ${visitRecord.status}`,
                 [
                     { id: 'VIEW_STATUS', title: 'View Live Status' },
-                    { id: 'CANCEL_TOKEN', title: 'Cancel Token' }
+                    { id: 'CANCEL_START', title: 'Cancel My Token' }
                 ]
             );
-            return successResponse({ message: 'Sent active token interactive' }, requestId)
+            return successResponse({ message: 'Sent active visit interactive' }, requestId)
         } else {
-            // NEW USER Flow
+            // NEW or REPEAT USER Flow (Step 1 & 2)
             await supabase.from('whatsapp_conversations').upsert({
                 clinic_id: business.id,
                 phone: phoneNumber,
-                state: 'AWAITING_NAME',
-                active_token_id: null,
+                state: 'AWAITING_JOIN_CONFIRM',
+                active_visit_id: null,
                 last_interaction: new Date().toISOString()
             }, { onConflict: 'clinic_id,phone' })
 
-            await sendWhatsAppReply(phoneNumber, `Welcome to ${business.name} 🏥\n\nPlease reply with your full name to join today's queue.`);
-            return successResponse({ message: 'Sent name request' }, requestId)
+            const welcomeMsg = existingPatient
+                ? `Welcome back to ${business.name}, ${existingPatient.name}! 🏥\nSecure digital queue system.\n\nWould you like to join today’s queue?`
+                : `Welcome to ${business.name} 🏥\nSecure digital queue system.\n\nPlease confirm to join today’s queue.`;
+
+            await sendWhatsAppInteractiveButtons(
+                phoneNumber,
+                welcomeMsg,
+                [
+                    { id: 'JOIN_QUEUE', title: '1️⃣ Join Queue' },
+                    { id: 'VIEW_STATUS_PUBLIC', title: '2️⃣ View Live Status' }
+                ]
+            );
+            return successResponse({ message: 'Sent initial welcome buttons' }, requestId)
         }
     }
 
@@ -241,35 +274,12 @@ export async function POST(req: Request) {
     const businessName = conv.clinic.name;
 
     // State Machine Dispatcher
-    if (conv.state === 'AWAITING_NAME') {
-        const patientName = messageText;
-        // Proceed to confirmation
-        await supabase.from('whatsapp_conversations').update({
-            state: 'AWAITING_CONFIRMATION',
-            last_interaction: new Date().toISOString()
-        }).eq('id', conv.id);
+    if (conv.state === 'AWAITING_JOIN_CONFIRM') {
+        if (interactiveResponseId === 'JOIN_QUEUE') {
+            // Check if we have a name from WhatsApp profile
+            const waName = name || 'WhatsApp Patient';
 
-        // Store temp name in state or rely on token atomic. Actually we need to pass the name.
-        // We can temporarily update patient profile or just ask for confirmation knowing we can use the name from profile later.
-        // To be completely robust, we should store temp data. But for now we will just use the name provided in the whatsapp msg obj.
-        // Wait, the confirmation doesn't have the text typed previously.
-        // Quick fix: Update the name in the user's contacts profile in DB or rely on the WA contact name when confirming.
-        // Let's use `name` from `contact.profile.name` as fallback.
-
-        await sendWhatsAppInteractiveButtons(
-            phoneNumber,
-            `Hi ${patientName} 👋\n\nYou are joining today's queue.\n\nPlease confirm:`,
-            [
-                { id: `CONFIRM_${encodeURIComponent(patientName)}`, title: 'Confirm & Join' },
-                { id: 'CANCEL_JOIN', title: 'Cancel' }
-            ]
-        );
-
-    } else if (conv.state === 'AWAITING_CONFIRMATION') {
-        if (interactiveResponseId.startsWith('CONFIRM_')) {
-            const patientName = decodeURIComponent(interactiveResponseId.replace('CONFIRM_', ''));
-
-            // Execute Token Creation
+            // Proceed to atomic creation (Step 3)
             const todayIST = new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
             const dateString = new Date(todayIST).toISOString().split('T')[0]
             const { data: session } = await supabase
@@ -283,123 +293,138 @@ export async function POST(req: Request) {
             if (!session) {
                 await sendWhatsAppReply(phoneNumber, "The session has closed. Cannot create token.");
                 await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
-                return successResponse({ message: 'Session closed on confirm' }, requestId);
+                return successResponse({ message: 'Session closed on join' }, requestId);
             }
 
-            // Import crypto functions
-            // I need to add the imports at the top of the file but I can use dynamic import here to keep things simple or add it to the top.
-            // Let's add them to the top of the file in another step and use them here.
+            // Execute Clinical Visit Creation (Phase 12 RPC)
+            const { encryptPhone, hashPhone } = await import('@/lib/crypto');
+            const phoneEncrypted = encryptPhone(phoneNumber);
+            const phoneHash = hashPhone(phoneNumber);
 
-            let phoneEncrypted: string | null = null;
-            let phoneHash: string | null = null;
-
-            try {
-                // Dynamically import to safely execute here
-                const { encryptPhone, hashPhone } = await import('@/lib/crypto');
-                phoneEncrypted = encryptPhone(phoneNumber);
-                phoneHash = hashPhone(phoneNumber);
-            } catch (err) {
-                console.error("Encryption failed for WA hook:", err);
-            }
-
-            const { data: tokenResult, error } = await supabase.rpc('create_token_atomic', {
-                p_business_id: businessId,
+            const { data: result, error: rpcError } = await supabase.rpc('rpc_create_clinical_visit', {
+                p_clinic_id: businessId,
                 p_session_id: session.id,
-                p_phone: phoneEncrypted ? null : phoneNumber,
-                p_name: patientName || name, // fallback to WA profile name
-                p_is_priority: false,
-                p_staff_id: null,
+                p_patient_name: waName,
                 p_phone_encrypted: phoneEncrypted,
-                p_phone_hash: phoneHash
+                p_phone_hash: phoneHash,
+                p_visit_type: 'OPD',
+                p_is_priority: false,
+                p_consent_purpose: 'QUEUE_MANAGEMENT',
+                p_source: 'WHATSAPP'
             });
 
-            if (error || !tokenResult || !tokenResult.success) {
-                console.error("WA Token Creation Error:", { error, tokenResult, params: { businessId, sessionId: session.id, phoneNumber, patientName, name } });
-                await sendWhatsAppReply(phoneNumber, "System error while adding you to the queue. Please try again.");
+            if (rpcError || !result || !result.success) {
+                await sendWhatsAppReply(phoneNumber, "System error while adding you to the queue.");
                 await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
-                return successResponse({ message: 'Token creation error' }, requestId);
+                return successResponse({ message: 'Visit creation error' }, requestId);
             }
 
-            // Success Transition
+            // Calculate people ahead
+            const { count: aheadCount } = await supabase
+                .from('clinical_visits')
+                .select('id', { count: 'exact', head: true })
+                .eq('session_id', session.id)
+                .eq('status', 'WAITING')
+                .lt('token_number', result.token_number);
+
+            // Get current serving
+            const { data: servingVisit } = await supabase
+                .from('clinical_visits')
+                .select('token_number')
+                .eq('session_id', session.id)
+                .eq('status', 'SERVING')
+                .maybeSingle();
+
+            // Get avg time
+            const { data: bizData } = await supabase.from('businesses').select('settings').eq('id', businessId).single();
+            const settings = bizData?.settings as { avg_wait_time?: number } | null;
+            const avg = settings?.avg_wait_time || 12;
+            const ewt = (aheadCount || 0) * avg;
+
+            // Step 3: Confirmation Response
             await supabase.from('whatsapp_conversations').update({
                 state: 'ACTIVE_TOKEN',
-                active_token_id: tokenResult.token_id,
+                active_visit_id: result.visit_id,
                 last_interaction: new Date().toISOString()
             }).eq('id', conv.id);
 
-            const ewtMinutes = Math.round((tokenResult.ewt_seconds || 0) / 60);
-
             await sendWhatsAppInteractiveButtons(
                 phoneNumber,
-                `🎟 Token Confirmed!\n\nToken Number: #${tokenResult.token_number}\nEstimated Wait: ~${ewtMinutes} minutes\n\nYou will receive alerts when your turn is near.`,
+                `✅ Queue Confirmed\n\nYour token: #${result.token_number}\nNow serving: #${servingVisit?.token_number || '--'}\nPeople ahead: ${aheadCount || 0}\nEst. wait: ${ewt} minutes\n\nYou will receive alerts as your turn approaches.`,
                 [
                     { id: 'VIEW_STATUS', title: 'View Live Status' },
-                    { id: 'CANCEL_TOKEN', title: 'Cancel My Token' }
+                    { id: 'CANCEL_START', title: 'Cancel My Token' },
+                    { id: 'CONTACT_INFO', title: 'Contact Reception' }
                 ]
             );
 
-        } else if (interactiveResponseId === 'CANCEL_JOIN') {
-            await supabase.from('whatsapp_conversations').update({
-                state: 'IDLE',
-                last_interaction: new Date().toISOString()
-            }).eq('id', conv.id);
-            await sendWhatsAppReply(phoneNumber, "Request cancelled. You can join later by sending JOIN inside this chat.");
-        } else {
-            // Invalid reply in this state
-            await sendWhatsAppInteractiveButtons(
-                phoneNumber,
-                `Please use the buttons to confirm joining the queue:`,
-                [
-                    { id: `CONFIRM_${name}`, title: 'Confirm & Join' },
-                    { id: 'CANCEL_JOIN', title: 'Cancel' }
-                ]
-            );
+        } else if (interactiveResponseId === 'VIEW_STATUS_PUBLIC') {
+            await sendWhatsAppReply(phoneNumber, `Currently at ${businessName}, the queue is active. Token creation is available.`);
         }
 
     } else if (conv.state === 'ACTIVE_TOKEN') {
-        if (interactiveResponseId === 'CANCEL_TOKEN' && conv.active_token_id) {
-            // Cancel the token
-            await supabase.from('tokens').update({ status: 'CANCELLED' }).eq('id', conv.active_token_id);
+        if (interactiveResponseId === 'CANCEL_START' && conv.active_visit_id) {
+            // Step 9: Confirm Cancellation
             await supabase.from('whatsapp_conversations').update({
-                state: 'IDLE',
-                active_token_id: null,
+                state: 'AWAITING_CANCEL_CONFIRM',
                 last_interaction: new Date().toISOString()
             }).eq('id', conv.id);
 
             await sendWhatsAppInteractiveButtons(
                 phoneNumber,
-                `❌ Your token has been cancelled.\n\nYou may rejoin anytime by joining the queue again.`,
-                [{ id: 'REJOIN_QUEUE', title: 'Rejoin Queue' }]
+                `Are you sure you want to cancel your visit at ${businessName}?`,
+                [
+                    { id: 'CONFIRM_CANCEL', title: 'Yes, Cancel' },
+                    { id: 'KEEP_TOKEN', title: 'No, Keep It' }
+                ]
             );
-        } else if (interactiveResponseId === 'VIEW_STATUS' && conv.active_token_id) {
-            // Fetch live status
-            const { data: tData } = await supabase.from('tokens').select('token_number, status, session_id').eq('id', conv.active_token_id).single();
-            if (tData) {
-                const { data: sData } = await supabase.from('sessions').select('last_token_number').eq('id', tData.session_id).single();
-                await sendWhatsAppReply(phoneNumber, `Live Status 🏥\n\nYour Token: #${tData.token_number}\nStatus: ${tData.status}\nCurrently Serving: #${sData?.last_token_number || '-'}`);
-            }
-        } else if (interactiveResponseId === 'REJOIN_QUEUE') {
-            // Treat like JOIN command
-            await supabase.from('whatsapp_conversations').upsert({
-                clinic_id: businessId,
-                phone: phoneNumber,
-                state: 'AWAITING_NAME',
-                active_token_id: null,
-                last_interaction: new Date().toISOString()
-            }, { onConflict: 'clinic_id,phone' })
+        } else if (interactiveResponseId === 'VIEW_STATUS' && conv.active_visit_id) {
+            // Fetch live status via clinical_visits
+            const { data: vData } = await supabase.from('clinical_visits').select('token_number, status, session_id').eq('id', conv.active_visit_id).single();
+            if (vData) {
+                // Get people ahead count for clarity
+                const { count: ahead } = await supabase.from('clinical_visits').select('id', { count: 'exact', head: true })
+                    .eq('session_id', vData.session_id).eq('status', 'WAITING').lt('token_number', vData.token_number);
 
-            await sendWhatsAppReply(phoneNumber, `Welcome back to ${businessName} 🏥\n\nPlease reply with your full name to join today's queue.`);
+                await sendWhatsAppReply(phoneNumber, `Live Status 🏥\n\nYour Token: #${vData.token_number}\nStatus: ${vData.status}\nPeople Ahead: ${ahead || 0}`);
+            }
+        } else if (interactiveResponseId === 'CONTACT_INFO') {
+            await sendWhatsAppReply(phoneNumber, `Contact ${businessName} reception at +91XXXXXXXXXX or visit the front desk.`);
+        } else if (interactiveResponseId === 'REJOIN_QUEUE') {
+            await supabase.from('whatsapp_conversations').update({ state: 'AWAITING_JOIN_CONFIRM' }).eq('id', conv.id);
+            await sendWhatsAppReply(phoneNumber, "Send JOIN to start a new token request.");
         } else if (interactiveResponseId === 'IM_ON_THE_WAY' || interactiveResponseId === 'IM_HERE') {
             await sendWhatsAppReply(phoneNumber, "Noted! Please wait at the reception area for your turn.");
         }
 
+    } else if (conv.state === 'AWAITING_CANCEL_CONFIRM') {
+        if (interactiveResponseId === 'CONFIRM_CANCEL' && conv.active_visit_id) {
+            // Atomic Action Update (Step 9 confirmed)
+            await supabase.rpc('rpc_process_clinical_action', {
+                p_visit_id: conv.active_visit_id,
+                p_action: 'CANCEL',
+                p_staff_id: null
+            });
+
+            await supabase.from('whatsapp_conversations').update({
+                state: 'IDLE',
+                active_visit_id: null,
+                last_interaction: new Date().toISOString()
+            }).eq('id', conv.id);
+
+            await sendWhatsAppReply(phoneNumber, "Your token has been cancelled. Thank you.");
+        } else {
+            await supabase.from('whatsapp_conversations').update({ state: 'ACTIVE_TOKEN' }).eq('id', conv.id);
+            await sendWhatsAppReply(phoneNumber, "Great! Your token is still active.");
+        }
+
     } else if (conv.state === 'AWAITING_FEEDBACK_TEXT') {
-        if (conv.active_token_id) {
-            await supabase.from('token_feedback').update({ feedback_text: messageText }).eq('token_id', conv.active_token_id);
+        if (conv.active_visit_id) {
+            await supabase.from('token_feedback').update({ feedback_text: messageText }).eq('visit_id', conv.active_visit_id);
         }
         await supabase.from('whatsapp_conversations').update({
             state: 'IDLE',
-            active_token_id: null, // Clear active token now that flow is fully over
+            active_visit_id: null,
             last_interaction: new Date().toISOString()
         }).eq('id', conv.id);
 
@@ -410,11 +435,11 @@ export async function POST(req: Request) {
             const ratingStr = interactiveResponseId.replace('RATE_', '');
             const rating = parseInt(ratingStr);
 
-            if (conv.active_token_id) {
+            if (conv.active_visit_id) {
                 await supabase.from('token_feedback').upsert({
-                    token_id: conv.active_token_id,
+                    visit_id: conv.active_visit_id,
                     rating: rating
-                });
+                }, { onConflict: 'visit_id' });
             }
 
             if (rating <= 3) {
@@ -426,7 +451,7 @@ export async function POST(req: Request) {
             } else {
                 await supabase.from('whatsapp_conversations').update({
                     state: 'IDLE',
-                    active_token_id: null,
+                    active_visit_id: null,
                     last_interaction: new Date().toISOString()
                 }).eq('id', conv.id);
 
@@ -440,7 +465,7 @@ export async function POST(req: Request) {
             // Treat general text during feedback as skipping
             await supabase.from('whatsapp_conversations').update({
                 state: 'IDLE',
-                active_token_id: null,
+                active_visit_id: null,
                 last_interaction: new Date().toISOString()
             }).eq('id', conv.id);
             await sendWhatsAppReply(phoneNumber, "Thanks for visiting us!");
@@ -470,8 +495,8 @@ export async function POST(req: Request) {
 
 // Simulated API calls to WhatsApp Cloud API (Wait, lib/whatsapp.ts now has interactive versions. I will use the local text one here for basic replies to avoid refactoring all imports)
 async function sendWhatsAppReply(phone: string, text: string) {
-    const WABA_ID = process.env.WHATSAPP_PHONE_ID
-    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
+    const WABA_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
 
     if (!WABA_ID || !TOKEN) {
         console.warn('WhatsApp API not configured, skipping message to', phone, ":", text)
@@ -498,8 +523,8 @@ async function sendWhatsAppReply(phone: string, text: string) {
 }
 
 async function sendWhatsAppInteractiveButtons(phone: string, bodyText: string, buttons: { id: string, title: string }[]) {
-    const WABA_ID = process.env.WHATSAPP_PHONE_ID
-    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
+    const WABA_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+    const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
 
     if (!WABA_ID || !TOKEN) return;
 
