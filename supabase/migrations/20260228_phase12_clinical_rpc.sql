@@ -84,9 +84,8 @@ BEGIN
         p_clinic_id, p_session_id, v_patient_id, v_token_number, p_visit_type, p_is_priority, p_staff_id, now()
     ) RETURNING id INTO v_visit_id;
 
-    -- 8. SECURITY AUDIT
-    INSERT INTO public.security_audit_logs (clinic_id, actor_id, action_type, table_name, record_id, metadata)
-    VALUES (p_clinic_id, p_staff_id, 'VISIT_CREATED', 'clinical_visits', v_visit_id, jsonb_build_object('token', v_token_number, 'source', p_source));
+    -- 9. BILLING & USAGE METERING
+    PERFORM public.fn_increment_usage(p_clinic_id, 'TOKEN');
 
     RETURN json_build_object(
         'success', true,

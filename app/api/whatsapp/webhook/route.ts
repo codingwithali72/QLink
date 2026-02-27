@@ -291,6 +291,9 @@ export async function POST(req: Request) {
     const businessId = conv.clinic.id;
     const businessName = conv.clinic.name;
 
+    // 2.5 BILLING METERING
+    await supabase.rpc('fn_increment_usage', { p_clinic_id: businessId, p_type: 'WHATSAPP' });
+
     // State Machine Dispatcher
     if (conv.state === 'AWAITING_JOIN_CONFIRM') {
         if (interactiveResponseId === 'JOIN_QUEUE') {
