@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ClinicStatusBadge } from "./_components/ClinicStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Phone, ShieldCheck } from "lucide-react";
-import { getClinicDate } from "@/lib/date";
+
 
 export const dynamic = "force-dynamic";
 
