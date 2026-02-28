@@ -1,6 +1,6 @@
 "use client";
 
-import { cancelToken, getPublicTokenStatus, submitFeedback } from "@/app/actions/queue";
+import { cancelToken, confirmArrival, getPublicTokenStatus, submitFeedback } from "@/app/actions/queue";
 import { Button } from "@/components/ui/button";
 import { Loader2, Share2, XCircle, Clock, Star, Info, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -126,6 +126,14 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         setActionLoading(false);
     };
 
+    const handleConfirmArrival = async () => {
+        setActionLoading(true);
+        const res = await confirmArrival(params.clinicSlug, params.tokenId);
+        if (res.error) alert("Error: " + res.error);
+        else fetchStatus();
+        setActionLoading(false);
+    };
+
     const handleShare = async () => {
         if (navigator.share) {
             try {
@@ -194,6 +202,14 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                 {/* Branding & Status Header */}
                 <div className={`p-10 ${themeBg} text-white transition-colors duration-700 relative overflow-hidden`}>
                     <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+
+                    {isServing && (
+                        <>
+                            <div className="absolute inset-0 bg-emerald-400/20 animate-pulse pointer-events-none" />
+                            <div className="absolute -inset-2 bg-gradient-to-r from-emerald-400/0 via-white/30 to-emerald-400/0 skew-x-12 animate-shimmer pointer-events-none" />
+                        </>
+                    )}
+
                     <div className="flex justify-between items-start mb-10 relative z-10">
                         <div className="h-10 w-10 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center font-black text-xl border border-white/20 shadow-inner">Q</div>
                         <div className="flex items-center gap-2 bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10">
@@ -236,7 +252,7 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                         </div>
                     )}
 
-                    {/* Wait Time Indicator */}
+                    {/* Wait Time Indicator & Arrival Action */}
                     {!isDone && !isServing && !isCancelled && (
                         <div className="bg-slate-50 dark:bg-slate-800/10 p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 space-y-6">
                             <div className="flex items-center justify-between">
@@ -248,6 +264,17 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                 </div>
                                 <div className="text-2xl font-black text-indigo-600 tabular-nums">{etaText}</div>
                             </div>
+
+                            {!tokenData.is_arrived && (
+                                <Button
+                                    onClick={handleConfirmArrival}
+                                    disabled={actionLoading}
+                                    className="w-full h-16 rounded-[1.5rem] bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-600/20 animate-bounce"
+                                >
+                                    {actionLoading ? <Loader2 className="animate-spin" /> : "I'm at the Clinic"}
+                                </Button>
+                            )}
+
                             <div className="relative h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                                 <div
                                     className="absolute top-0 left-0 h-full bg-indigo-500 transition-all duration-1000"
@@ -255,7 +282,9 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                                 ></div>
                             </div>
                             <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 text-center leading-relaxed">
-                                Please stay within clinic vicinity when &quot;Tokens Ahead&quot; is under 5. We will notify you via WhatsApp if the queue moves rapidly.
+                                {tokenData.is_arrived
+                                    ? "Your arrival is confirmed. Please stay within range of the counter."
+                                    : "Please tap the button above when you physically reach the clinic premises."}
                             </p>
                         </div>
                     )}

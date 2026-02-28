@@ -136,9 +136,12 @@ export async function POST(req: Request) {
     }
 
     // Atomic Insert to prevent double processing of the same webhook id
+    // DPDP PROFILING: Mask phone in high-frequency logs (keep only last 4 digits)
+    const maskedPhone = phoneNumber.substring(0, 3) + '****' + phoneNumber.substring(7);
+
     const { error: insertDupError } = await supabase.from('whatsapp_messages').insert({
         id: waMessageId,
-        phone: phoneNumber,
+        phone: maskedPhone,
         direction: 'INBOUND',
         message_type: message.type || 'text',
         status: 'received'
@@ -440,27 +443,55 @@ export async function POST(req: Request) {
         } else if (interactiveResponseId === 'REJOIN_QUEUE') {
             await supabase.from('whatsapp_conversations').update({ state: 'AWAITING_JOIN_CONFIRM' }).eq('id', conv.id);
             await sendWhatsAppReply(phoneNumber, "Send JOIN to start a new token request.");
-        } else if ((interactiveResponseId === 'IM_HERE' || interactiveResponseId === '✅ I’m Here') && conv.active_visit_id) {
-            // Patient Self-Check-in (Phase 14)
+        } else if ((interactiveResponseId === 'IM_HERE' || interactiveResponseId === '✅ I’M HERE') && conv.active_visit_id) {
+            // Patient Self-Check-in (Professional Hospital Flow)
             const { data: vData } = await supabase.from('clinical_visits')
-                .select('clinic_id, session_id')
+                .select('clinic_id, session_id, token_number, status')
                 .eq('id', conv.active_visit_id)
                 .single();
 
             if (vData) {
-                await supabase.rpc('rpc_process_clinical_action', {
-                    p_clinic_id: vData.clinic_id,
-                    p_session_id: vData.session_id,
-                    p_staff_id: null,
-                    p_action: 'ARRIVE',
-                    p_visit_id: conv.active_visit_id
-                });
-                await sendWhatsAppReply(phoneNumber, "✅ Check-in Successful! We've notified the reception of your arrival. Please take a seat.");
+                if (vData.status === 'SERVED' || vData.status === 'SKIPPED') {
+                    // Offer Lab Return / Report Review
+                    await sendWhatsAppInteractiveButtons(
+                        phoneNumber,
+                        "Your visit was completed or skipped. Are you returning now with a laboratory report for review?",
+                        [
+                            { id: 'LAB_RETURN_CONFIRM', title: 'Yes, Report Review' },
+                            { id: 'REJOIN_QUEUE', title: 'New Visit' }
+                        ]
+                    );
+                } else {
+                    // Atomic Arrival via RPC
+                    await supabase.rpc('rpc_process_clinical_action', {
+                        p_clinic_id: vData.clinic_id,
+                        p_session_id: vData.session_id,
+                        p_staff_id: null,
+                        p_action: 'ARRIVE',
+                        p_visit_id: conv.active_visit_id
+                    });
+
+                    await sendWhatsAppReply(phoneNumber, `✅ *Check-in Successful!*\n\nToken: *#${vData.token_number}*\nStatus: *Physically Arrived*\n\nWe have notified the reception. Please proceed to the waiting area. A staff member will call you shortly.`);
+                }
             }
-        } else if (interactiveResponseId === 'IM_ON_THE_WAY' || interactiveResponseId === 'On My Way 🚶') {
-            await sendWhatsAppReply(phoneNumber, "Safe travels! See you soon at the clinic.");
-        } else if (interactiveResponseId === 'IM_COMING' || interactiveResponseId === 'Coming Now 🚶‍♂️') {
-            await sendWhatsAppReply(phoneNumber, "Thank you! Proceed to the consultation room.");
+        } else if (interactiveResponseId === 'LAB_RETURN_CONFIRM' && conv.active_visit_id) {
+            // Trigger Priority Upgrade for Report Review
+            const { data: vData } = await supabase.from('clinical_visits').select('session_id').eq('id', conv.active_visit_id).single();
+            if (vData) {
+                const { data: res } = await supabase.rpc('rpc_lab_return_requeue', {
+                    p_visit_id: conv.active_visit_id,
+                    p_session_id: vData.session_id,
+                    p_actor_id: null
+                });
+
+                if (res?.success) {
+                    await sendWhatsAppReply(phoneNumber, "✅ *Priority Upgraded: Report Review*\n\nWe have placed you back in the queue with high priority. Please stay nearby; the doctor will recall you shortly.");
+                } else {
+                    await sendWhatsAppReply(phoneNumber, "Unable to upgrade priority at this time. Please speak to the receptionist.");
+                }
+            }
+        } else if (interactiveResponseId === 'IM_ON_THE_WAY' || interactiveResponseId === 'ON MY WAY 🚶') {
+            await sendWhatsAppReply(phoneNumber, "Safe travels! 🚗\n\nPlease tap *'I'm Here'* once you reach the clinic premises to confirm your physical presence.");
         }
 
     } else if (conv.state === 'AWAITING_CANCEL_CONFIRM') {
@@ -725,13 +756,26 @@ async function createClinicalVisitFromWhatsApp(phoneNumber: string, conv: { id: 
         last_interaction: new Date().toISOString()
     }).eq('id', conv.id);
 
+    // Resolve Doctor and Department names for confirmation
+    let doctorName = "Duty Consultant";
+    let departmentName = "General OPD";
+
+    if (docId) {
+        const { data: docData } = await supabase.from('doctors').select('name').eq('id', docId).single();
+        if (docData?.name) doctorName = docData.name.startsWith("Dr.") ? docData.name : `Dr. ${docData.name}`;
+    }
+    if (deptId) {
+        const { data: deptData } = await supabase.from('departments').select('name').eq('id', deptId).single();
+        if (deptData?.name) departmentName = deptData.name;
+    }
+
     // Dispatch the NEW High-Fidelity Utility Template (7 Variables)
     const { sendTokenConfirmation } = await import('@/lib/whatsapp-dispatch');
     await sendTokenConfirmation({
         patientName: waName,
         tokenNumber: `#${result.token_number}`,
-        doctorName: docId ? "Specialist" : "General OPD", // We could fetch actual name, but passing placeholders for now
-        departmentName: "OPD",
+        doctorName: doctorName,
+        departmentName: departmentName,
         clinicName: businessName,
         clinicId: businessId,
         visitId: result.visit_id,

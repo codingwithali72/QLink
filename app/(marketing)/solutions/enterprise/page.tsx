@@ -19,14 +19,14 @@ export default function EnterprisePage() {
                     Centralized command center for multi-branch hospital networks. Compliance-first, API-first, and highly scalable. Build your own patient journey on our orchestration engine.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
-                    <Link href="/login">
+                    <Link href="https://wa.me/919320201572?text=I%20want%20to%20request%20an%20Enterprise%20proposal%20for%20my%20hospital%20network." target="_blank">
                         <Button size="lg" className="h-16 px-10 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg shadow-xl shadow-indigo-600/20">
                             Request Enterprise Proposal
                         </Button>
                     </Link>
-                    <Link href="/pricing">
-                        <Button variant="outline" size="lg" className="h-16 px-10 rounded-full border-2 font-bold text-lg">
-                            Architecture Whitepaper
+                    <Link href="https://wa.me/919320201572?text=I%20want%20to%20start%20a%20free%20trial%20of%20QLink%20Enterprise%20for%20my%20hospital." target="_blank">
+                        <Button className="font-bold bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 rounded-full px-6 shadow-xl shadow-slate-900/10 dark:shadow-white/10 transition-all hover:scale-105">
+                            Start Free Trial
                         </Button>
                     </Link>
                 </div>

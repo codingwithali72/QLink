@@ -454,9 +454,13 @@ export async function triggerManualCall(clinicSlug: string, visitId: string) {
 }
 
 // 3. NEXT
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function nextPatient(clinicSlug: string, tokenId?: string) {
-    return processQueueAction(clinicSlug, 'NEXT', tokenId);
+// Patient self-arrival check-in
+export async function confirmArrival(slug: string, tokenId: string) {
+    return processQueueAction(slug, 'ARRIVE', tokenId);
+}
+
+export async function nextPatient(clinicSlug: string, doctorId?: string) {
+    return processQueueAction(clinicSlug, 'NEXT', undefined, doctorId);
 }
 
 // 4. SKIP
@@ -550,7 +554,7 @@ export async function closeQueue(clinicSlug: string) {
 }
 
 // ADVANCED CLINICAL MUTATION RPC WRAPPER
-async function processQueueAction(slug: string, action: string, visitId?: string) {
+async function processQueueAction(slug: string, action: string, visitId?: string, doctorId?: string) {
     const supabase = createAdminClient();
     try {
         const business = await getBusinessBySlug(slug);
@@ -571,6 +575,7 @@ async function processQueueAction(slug: string, action: string, visitId?: string
             p_staff_id: user.id,
             p_action: action,
             p_visit_id: visitId || null,
+            p_doctor_id: doctorId || null
         });
 
         if (error) throw error;

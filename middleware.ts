@@ -23,6 +23,13 @@ export async function middleware(request: NextRequest) {
         }
     }
 
+    if (isTv) {
+        if (!url.pathname.startsWith("/tv")) {
+            url.pathname = `/tv${url.pathname}`;
+            return NextResponse.rewrite(url);
+        }
+    }
+
     // On Hobby Tier (root domain), paths like /login or /admin work naturally.
     // We only need to enforce authentication on them.
 

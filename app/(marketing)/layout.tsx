@@ -60,7 +60,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                                 Login
                             </Button>
                         </Link>
-                        <Link href="/login">
+                        <Link href="https://wa.me/919320201572?text=I%20want%20to%20start%20a%20free%20trial%20of%20QLink%20for%20my%20hospital." target="_blank">
                             <Button className="font-bold bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 rounded-full px-6 shadow-xl shadow-slate-900/10 dark:shadow-white/10 transition-all hover:scale-105">
                                 Start Free Trial
                             </Button>

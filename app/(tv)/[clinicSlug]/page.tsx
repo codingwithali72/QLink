@@ -39,6 +39,26 @@ export default function TVDisplayPage({ params }: { params: { clinicSlug: string
     const servingToken = useMemo(() => tokens.find(t => t.status === 'SERVING'), [tokens]);
     const [callAnimation, setCallAnimation] = useState(false);
 
+    const announceToken = useCallback((tokenNum: string) => {
+        try {
+            // Cancel any ongoing speech
+            window.speechSynthesis.cancel();
+
+            const msg = new SpeechSynthesisUtterance();
+            msg.text = `Now calling, Token Number, ${tokenNum}`;
+            msg.rate = 0.9; // Slightly slower for clarity in hospital halls
+            msg.pitch = 1.0;
+            msg.lang = 'en-IN'; // Indian English localization
+
+            // Wait for chime to finish slightly before speaking
+            setTimeout(() => {
+                window.speechSynthesis.speak(msg);
+            }, 600);
+        } catch (e) {
+            console.error("TTS Blocked:", e);
+        }
+    }, []);
+
     const playChime = useCallback(() => {
         try {
             const ctx = new AudioContext();
@@ -64,10 +84,15 @@ export default function TVDisplayPage({ params }: { params: { clinicSlug: string
         if (lastServingRef.current !== servingToken.id) {
             lastServingRef.current = servingToken.id;
             playChime();
+
+            // TTS ANNOUNCEMENT (Hospital-Grade Accessibility)
+            const tokenStr = formatToken(servingToken.tokenNumber, servingToken.isPriority);
+            announceToken(tokenStr);
+
             setCallAnimation(true);
             setTimeout(() => setCallAnimation(false), 3000);
         }
-    }, [servingToken, playChime]);
+    }, [servingToken, playChime, announceToken]);
 
     // Auto-hide cursor
     useEffect(() => {
@@ -205,12 +230,15 @@ export default function TVDisplayPage({ params }: { params: { clinicSlug: string
                                                 {zone.waiting.length > 0 ? zone.waiting.map(t => (
                                                     <div key={t.id} className="flex justify-between items-center group/item">
                                                         <div className="flex items-center gap-4">
-                                                            <div className={`w-2 h-2 rounded-full ${t.isPriority ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]' : 'bg-slate-700'}`}></div>
+                                                            <div className={`w-2 h-2 rounded-full ${t.isPriority ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]' : t.isArrived ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`}></div>
                                                             <span className="text-slate-500 font-bold tabular-nums text-lg">{t.tokenNumber}</span>
                                                         </div>
-                                                        <span className={`font-black tracking-tight text-xl ${t.isPriority ? 'text-rose-400' : 'text-slate-200'}`}>
-                                                            {t.customerName ? t.customerName.split(' ')[0] : 'Patient'}
-                                                        </span>
+                                                        <div className="flex items-center gap-3">
+                                                            {t.isArrived && <span className="text-[10px] font-black text-emerald-500 tracking-tighter">ARRIVED</span>}
+                                                            <span className={`font-black tracking-tight text-xl ${t.isPriority ? 'text-rose-400' : 'text-slate-200'}`}>
+                                                                {t.customerName ? t.customerName.split(' ')[0] : 'Patient'}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 )) : (
                                                     <div className="text-center text-slate-700 py-10 font-black tracking-widest text-xs uppercase italic">No Patients Pending</div>

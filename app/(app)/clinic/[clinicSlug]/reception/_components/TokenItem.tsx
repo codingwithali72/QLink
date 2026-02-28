@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { XCircle, Phone, MapPinCheck, Clock } from "lucide-react";
+import { XCircle, Phone, MapPinCheck, Clock, UserCheck, Smartphone, AlertTriangle, Activity, ActivitySquare } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { Token } from "@/types/firestore";
+import { motion } from "framer-motion";
 
 interface TokenItemProps {
     token: Token;
@@ -15,86 +17,94 @@ interface TokenItemProps {
 
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
-export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArrived, isCallLoading, departmentName, doctorName }: TokenItemProps) {
+const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArrived, isCallLoading, departmentName, doctorName }: TokenItemProps) {
     const isLate = token.status === 'WAITING_LATE';
     const isRemote = token.source === 'DIRECT_WA' || token.source === 'WEB_LINK';
-    const needsArrival = isRemote && !token.isArrived;
+    const isArrived = token.isArrived;
+    const needsArrival = isRemote && !isArrived;
 
     return (
-        <div className={cn(
-            "p-3 rounded-xl flex items-center justify-between group transition-all duration-300 relative",
-            token.isArrived && !token.isPriority && "border-l-4 border-l-green-500 bg-green-50/50 dark:bg-green-900/10",
-            token.isPriority
-                ? "bg-destructive/10 border border-destructive/20"
-                : isLate
-                    ? "bg-amber-100 border border-amber-300 animate-pulse dark:bg-amber-900/30 dark:border-amber-800"
-                    : !token.isArrived && "bg-accent/50 hover:bg-accent border border-transparent"
-        )}>
-            {isLate && (
-                <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm opacity-90 z-10">
-                    <Clock className="w-2.5 h-2.5" /> Ghost Patient
-                </div>
+        <motion.div
+            layout
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className={cn(
+                "p-5 rounded-[2.5rem] flex items-center justify-between group transition-all duration-500 relative border-2 overflow-hidden bg-white dark:bg-slate-900 shadow-xl hover:shadow-2xl",
+                isArrived && "border-l-[12px] border-l-emerald-500",
+                token.isPriority && "border-rose-500/30 bg-rose-500/[0.02] shadow-rose-500/5",
+                isLate && "animate-pulse-amber border-amber-500/50",
+                !isArrived && !token.isPriority && !isLate && "border-slate-100 dark:border-white/5 hover:border-indigo-500/40"
             )}
-
-            <div className="flex items-center gap-3 w-1/2">
+        >
+            <div className="flex items-center gap-6 w-1/2 relative z-10">
                 <div className={cn(
-                    "w-10 h-10 rounded-lg flex shrink-0 items-center justify-center font-bold text-sm",
+                    "w-16 h-16 rounded-[1.5rem] flex flex-col shrink-0 items-center justify-center font-black transition-all group-hover:rotate-3 group-hover:scale-110 shadow-2xl",
                     token.isPriority
-                        ? "bg-destructive text-destructive-foreground"
-                        : "bg-card text-card-foreground shadow-sm"
+                        ? "bg-rose-500 text-white shadow-rose-500/40"
+                        : isArrived
+                            ? "bg-emerald-500 text-white shadow-emerald-500/40"
+                            : "bg-slate-950 text-white shadow-slate-950/20"
                 )}>
-                    {formatToken(token.tokenNumber, token.isPriority)}
+                    <span className="text-[9px] opacity-60 uppercase mb-0.5 tracking-widest">{token.isPriority ? 'VVIP' : 'UNIT'}</span>
+                    <span className="text-2xl leading-none tracking-tighter">{token.tokenNumber}</span>
                 </div>
-                <div className="min-w-0">
-                    <p className="font-bold text-sm text-foreground truncate w-full">
-                        {token.customerName}
-                    </p>
-                    <div className="flex flex-col gap-1 mt-0.5">
-                        <div className="flex items-center gap-2">
-                            <p className="text-[10px] text-muted-foreground font-mono truncate">
-                                {token.customerPhone}
-                            </p>
-                            {isRemote && (
-                                <span className={cn(
-                                    "text-[8px] font-bold px-1 rounded uppercase tracking-widest",
-                                    token.isArrived ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-                                )}>
-                                    Remote
-                                </span>
-                            )}
-                        </div>
-                        {(departmentName || doctorName) && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                                {departmentName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 leading-none">{departmentName}</span>}
-                                {doctorName && <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-sm bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50 leading-none uppercase tracking-tight">Dr. {doctorName}</span>}
-                            </div>
+
+                <div className="min-w-0 flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                        <p className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tighter group-hover:translate-x-1 transition-transform">
+                            {token.customerName.toUpperCase()}
+                        </p>
+                        {isArrived && (
+                            <Badge className="bg-emerald-500 text-white border-0 text-[8px] font-black p-0.5 px-2 rounded-lg shadow-lg shadow-emerald-500/20">ARRIVED</Badge>
                         )}
+                        {isLate && (
+                            <Badge className="bg-amber-500 text-white border-0 text-[8px] font-black p-0.5 px-2 rounded-lg animate-pulse">ACTION REQ</Badge>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <div className="flex items-center gap-1.5">
+                            <Smartphone className="w-3.5 h-3.5 opacity-50" />
+                            {token.customerPhone}
+                        </div>
+                        {isRemote && <span className="text-[8px] px-2 py-0.5 bg-indigo-500/10 text-indigo-500 rounded-lg">REMOTE BOOKING</span>}
+                    </div>
+
+                    <div className="flex items-center gap-3 mt-1 text-[9px] font-black uppercase tracking-[0.2em]">
+                        {doctorName ? (
+                            <span className="text-blue-600 dark:text-blue-400 flex items-center gap-1.5 bg-blue-500/10 px-2 py-0.5 rounded-lg border border-blue-500/20 shadow-sm">
+                                <ActivitySquare className="w-3 h-3" /> DR. {doctorName.toUpperCase()}
+                            </span>
+                        ) : (
+                            <span className="text-slate-400">GENERIC ROUTING</span>
+                        )}
+                        {departmentName && <span className="text-slate-400 opacity-50 border-l border-slate-200 dark:border-white/10 pl-3">{departmentName}</span>}
                     </div>
                 </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 relative z-10">
                 {needsArrival && onToggleArrived && (
                     <Button
                         variant="default"
                         size="sm"
                         disabled={isCallLoading}
                         onClick={() => onToggleArrived(token.id, true)}
-                        className="h-8 text-[10px] font-bold bg-green-600 hover:bg-green-700 text-white flex gap-1 animate-in zoom-in-95 transition-all outline-none"
+                        className="h-11 px-6 text-[10px] font-black uppercase tracking-[0.2em] bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl flex gap-3 shadow-xl shadow-indigo-500/20 transition-all active:scale-95 border-b-4 border-indigo-800"
                     >
-                        <MapPinCheck className="w-3 h-3" /> Arrive
+                        <UserCheck className="w-4 h-4" /> AUTHENTICATE ARRIVAL
                     </Button>
                 )}
 
-                <div className={cn("flex items-center gap-1 transition-all duration-300", needsArrival ? "opacity-0 group-hover:opacity-100 hidden md:flex" : "opacity-0 group-hover:opacity-100")}>
+                <div className="flex items-center gap-2">
                     {token.customerPhone && (
                         <a href={`tel:${token.customerPhone}`}>
                             <Button
                                 variant="outline"
                                 size="sm"
-                                className="h-8 text-xs font-bold text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/40"
+                                className="h-11 px-4 rounded-2xl border-2 border-slate-100 dark:border-white/5 text-slate-500 hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-all font-black text-[10px]"
                             >
-                                <Phone className="w-3 h-3 mr-1" />Call
+                                <Phone className="w-4 h-4" />
                             </Button>
                         </a>
                     )}
@@ -103,12 +113,14 @@ export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArri
                         size="icon"
                         disabled={isCallLoading}
                         onClick={() => onCancel(token.id)}
-                        className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full shrink-0 transition-colors"
+                        className="h-11 w-11 text-slate-300 hover:text-rose-500 hover:bg-rose-500/10 rounded-2xl transition-all"
                     >
-                        <XCircle className="w-4 h-4" />
+                        <XCircle className="w-5 h-5" />
                     </Button>
                 </div>
             </div>
-        </div>
+
+            <div className="absolute inset-0 bg-indigo-500/0 group-hover:bg-indigo-500/[0.01] pointer-events-none transition-colors" />
+        </motion.div>
     );
 });

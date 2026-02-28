@@ -24,10 +24,11 @@ export function ROICalculator() {
     }, [patientsPerDay, avgWaitTime, staffCount]);
 
     return (
-        <Card className="p-8 rounded-[2.5rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden relative group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-[60px] -z-10 group-hover:scale-150 transition-transform duration-1000"></div>
+        <Card className="p-8 rounded-[2.5rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden relative group transition-all duration-700 hover:shadow-indigo-500/10 hover:border-indigo-500/30">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 blur-[80px] -z-10 group-hover:scale-150 transition-transform duration-1000 animate-pulse"></div>
+            <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-emerald-500/5 blur-[100px] -z-10 group-hover:scale-125 transition-transform duration-1000"></div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 relative z-10">
                 <div className="space-y-10">
                     <div>
                         <div className="flex justify-between mb-4">

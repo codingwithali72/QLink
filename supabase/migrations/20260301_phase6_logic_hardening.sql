@@ -31,6 +31,7 @@ DECLARE
     v_issued_count int;
     v_existing_visit_id uuid;
     v_appt_id uuid;
+    v_priority_score int;
 BEGIN
     -- 1. STRICT SESSION LOCK
     PERFORM id FROM public.sessions 
@@ -82,19 +83,34 @@ BEGIN
       AND status = 'SCHEDULED'
     LIMIT 1;
 
-    -- 7. ATOMIC INCREMENT
+    -- 7. ATOMIC ALLOCATION & SCORING (Phase 4 Logic)
+    -- If no doctor requested, use LEAST_BUSY strategy for the department
+    IF p_requested_doctor_id IS NULL AND p_department_id IS NOT NULL THEN
+        p_requested_doctor_id := public.rpc_allocate_doctor(p_session_id, p_department_id, NULL, 'LEAST_BUSY');
+    END IF;
+
+    -- Calculate initial priority score (Acuity Aware)
+    v_priority_score := public.rpc_calculate_priority_score(p_visit_type, p_is_priority, 0, 0);
+
+    -- 8. ATOMIC INCREMENT
     UPDATE public.sessions SET last_token_number = last_token_number + 1
     WHERE id = p_session_id
     RETURNING last_token_number INTO v_token_number;
 
-    -- 8. INSERT CLINICAL VISIT
+    -- 9. INSERT CLINICAL VISIT
     INSERT INTO public.clinical_visits (
-        clinic_id, session_id, patient_id, token_number, visit_type_v2, is_priority, created_by_staff_id, arrival_at_department_time, department_id, requested_doctor_id
+        clinic_id, session_id, patient_id, token_number, 
+        visit_type_v2, is_priority, priority_score,
+        created_by_staff_id, arrival_at_department_time, 
+        department_id, requested_doctor_id, assigned_doctor_id
     ) VALUES (
-        p_clinic_id, p_session_id, v_patient_id, v_token_number, p_visit_type, p_is_priority, p_staff_id, now(), p_department_id, p_requested_doctor_id
+        p_clinic_id, p_session_id, v_patient_id, v_token_number, 
+        p_visit_type, p_is_priority, v_priority_score,
+        p_staff_id, now(), 
+        p_department_id, p_requested_doctor_id, p_requested_doctor_id
     ) RETURNING id INTO v_visit_id;
 
-    -- 9. UPDATE APPOINTMENT IF LINKED
+    -- 10. UPDATE APPOINTMENT IF LINKED
     IF v_appt_id IS NOT NULL THEN
         UPDATE public.appointments SET 
             status = 'CHECKED_IN', 
@@ -103,7 +119,7 @@ BEGIN
         WHERE id = v_appt_id;
     END IF;
 
-    -- 10. BILLING & USAGE METERING
+    -- 11. BILLING & USAGE METERING
     PERFORM public.fn_increment_usage(p_clinic_id, 'TOKEN');
 
     RETURN json_build_object(
@@ -111,6 +127,8 @@ BEGIN
         'visit_id', v_visit_id,
         'patient_id', v_patient_id,
         'token_number', v_token_number,
+        'assigned_doctor_id', p_requested_doctor_id,
+        'priority_score', v_priority_score,
         'appointment_linked', v_appt_id IS NOT NULL
     );
 END;
@@ -154,14 +172,29 @@ BEGIN
         END IF;
 
         -- Find next (Priority-Aware & Load Balanced)
+        -- Support doctor-scoped NEXT if p_staff_id is linked to a doctor
         SELECT id INTO v_next_visit_id FROM public.clinical_visits
-        WHERE session_id = p_session_id AND status = 'WAITING'
+        WHERE session_id = p_session_id 
+          AND status = 'WAITING'
+          AND (
+            p_staff_id IS NULL OR 
+            assigned_doctor_id IN (SELECT id FROM public.doctors WHERE staff_id = p_staff_id) OR
+            assigned_doctor_id IS NULL
+          )
         ORDER BY priority_score DESC, token_number ASC LIMIT 1;
 
         IF v_next_visit_id IS NULL THEN RETURN json_build_object('success', false, 'error', 'Queue is empty'); END IF;
 
         UPDATE public.clinical_visits SET previous_status = status, status = 'SERVING', consultant_assessment_start_time = now() WHERE id = v_next_visit_id;
         RETURN json_build_object('success', true, 'visit_id', v_next_visit_id);
+
+    -- ACTION: ARRIVE (Mark as physically present)
+    ELSIF p_action = 'ARRIVE' AND p_visit_id IS NOT NULL THEN
+        UPDATE public.clinical_visits 
+        SET is_arrived = true, 
+            arrival_at_department_time = COALESCE(arrival_at_department_time, now())
+        WHERE id = p_visit_id;
+        RETURN json_build_object('success', true);
 
     -- ACTION: SKIP (Mark as No-Show for appointment)
     ELSIF p_action = 'SKIP' AND p_visit_id IS NOT NULL THEN

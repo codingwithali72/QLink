@@ -1,6 +1,6 @@
 "use client";
 
-import { createBusiness, getAdminStats, toggleBusinessStatus, deleteBusiness, getAnalytics, getClinicMetrics, updateBusinessSettings } from "@/app/actions/admin";
+import { createBusiness, getAdminStats, toggleBusinessStatus, deleteBusiness, getAnalytics, getClinicMetrics, updateBusinessSettings, getDoctorProductivityBI, getHourlyFootfallBI, getWhatsAppAnalyticsBI } from "@/app/actions/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +32,7 @@ export interface Business {
         dpdp_strict?: boolean;
         daily_token_limit?: number;
         daily_message_limit?: number;
+        operation_mode?: 'OPD' | 'HOSPITAL';
         [key: string]: unknown;
     };
 }
@@ -115,6 +116,12 @@ export default function AdminPage() {
     const [clinicMetrics, setClinicMetrics] = useState<ClinicMetrics | null>(null);
     const [clinicMetricsLoading, setClinicMetricsLoading] = useState(false);
 
+    // Phase 4 BI State
+    const [prodBI, setProdBI] = useState<any[]>([]);
+    const [footfallBI, setFootfallBI] = useState<any[]>([]);
+    const [waBI, setWaBI] = useState<any[]>([]);
+    const [biLoading, setBILoading] = useState(false);
+
     async function loadClinicMetrics(businessId: string, name: string, limit: number) {
         setViewingClinicMetricsId(businessId);
         setViewingClinicName(name);
@@ -160,6 +167,7 @@ export default function AdminPage() {
         dpdp_strict?: boolean;
         daily_token_limit?: number;
         daily_message_limit?: number;
+        operation_mode?: 'OPD' | 'HOSPITAL';
         [key: string]: unknown;
     }
     const [clinicSettings, setClinicSettings] = useState<ClinicSettings>({});
@@ -188,6 +196,21 @@ export default function AdminPage() {
     useEffect(() => {
         fetchStats();
         fetchAnalytics('today');
+
+        // Fetch Phase 4 BI Data
+        const fetchBI = async () => {
+            setBILoading(true);
+            const [p, f, w] = await Promise.all([
+                getDoctorProductivityBI(),
+                getHourlyFootfallBI(),
+                getWhatsAppAnalyticsBI()
+            ]);
+            if (!p.error) setProdBI(p.data || []);
+            if (!f.error) setFootfallBI(f.data || []);
+            if (!w.error) setWaBI(w.data || []);
+            setBILoading(false);
+        };
+        fetchBI();
 
         // Background polling for health
         const interval = setInterval(fetchStats, 60000);
@@ -233,26 +256,31 @@ export default function AdminPage() {
         <div className="min-h-screen bg-cloud-dancer dark:bg-[#0B1120] text-foreground p-4 sm:p-8 font-sans transition-colors duration-300 relative overflow-x-hidden">
             <div className="max-w-7xl mx-auto space-y-10 relative z-10">
 
-                <header className="flex flex-col md:flex-row md:items-center justify-between gap-8 pb-10 border-b border-indigo-500/10">
-                    <div className="space-y-1">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-indigo-600/30">Q</div>
-                            <h1 className="text-4xl font-black tracking-tighter text-slate-900 dark:text-white">Command Center</h1>
+                <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-8 lg:p-10 rounded-[3.5rem] mb-12 border border-white/40 dark:border-slate-800/50 shadow-2xl shadow-indigo-500/5">
+                    <div className="flex items-center gap-6 lg:gap-8">
+                        <div className="h-16 w-16 lg:h-20 lg:w-20 bg-indigo-600 rounded-[1.75rem] flex items-center justify-center text-white font-black text-3xl lg:text-4xl shadow-2xl shadow-indigo-500/40">Q</div>
+                        <div>
+                            <h1 className="text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-tight uppercase tracking-tighter">Strategic Command</h1>
+                            <div className="flex items-center gap-4 text-[10px] lg:text-[11px] font-black text-slate-400 uppercase tracking-[0.25em] mt-2">
+                                <span className="text-indigo-500 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> Platform Active</span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800"></span>
+                                <span className="flex items-center gap-1.5 hover:text-indigo-400 transition-colors cursor-default"><Settings className="w-3.5 h-3.5" /> Orchestration v2026.4</span>
+                            </div>
                         </div>
-                        <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px] pl-1 pt-2">SaaS Orchestration Engine v2026</p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-4">
+
+                    <div className="grid grid-cols-2 lg:flex items-center gap-4 lg:gap-6">
                         {[
-                            { value: stats.activeSessions, label: 'Clinics Live', icon: <Activity className="w-5 h-5" />, color: 'text-emerald-500', bg: 'bg-emerald-500/5' },
-                            { value: stats.activeQueueTokens || 0, label: 'Queue Active', icon: <Users className="w-5 h-5" />, color: 'text-amber-500', bg: 'bg-amber-500/5' },
-                            { value: stats.todayTokens, label: 'Tokens Today', icon: <TrendingUp className="w-5 h-5" />, color: 'text-indigo-500', bg: 'bg-indigo-500/5' },
-                            { value: stats.messagesToday ?? 0, label: 'Messages Sent', icon: <MessageSquare className="w-5 h-5" />, color: 'text-sky-500', bg: 'bg-sky-500/5' },
+                            { value: stats.activeSessions, label: 'Clinics Live', icon: <ActivitySquare className="w-5 h-5" />, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                            { value: stats.activeQueueTokens || 0, label: 'Queue Active', icon: <Users className="w-5 h-5" />, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+                            { value: stats.todayTokens, label: 'Total Intake', icon: <TrendingUp className="w-5 h-5" />, color: 'text-indigo-600', bg: 'bg-indigo-600/10' },
+                            { value: stats.messagesToday ?? 0, label: 'Meta Traffic', icon: <MessageSquare className="w-5 h-5" />, color: 'text-sky-500', bg: 'bg-sky-500/10' },
                         ].map((item, idx) => (
-                            <div key={idx} className="px-6 py-4 glass-panel flex items-center gap-5 border-white/40 shadow-xl shadow-indigo-900/5">
-                                <div className={cn("p-2.5 rounded-xl", item.bg, item.color)}>{item.icon}</div>
+                            <div key={idx} className="bg-white/50 dark:bg-slate-800/20 p-5 rounded-[1.5rem] border border-white/20 dark:border-slate-700/30 flex items-center gap-4 shadow-sm hover:shadow-indigo-500/5 transition-all group">
+                                <div className={cn("p-3 rounded-2xl group-hover:scale-110 transition-transform", item.bg, item.color)}>{item.icon}</div>
                                 <div>
-                                    <div className="text-3xl font-black leading-none tracking-tighter">{item.value}</div>
-                                    <div className="text-[9px] uppercase tracking-widest text-slate-400 font-black mt-1">{item.label}</div>
+                                    <div className="text-2xl font-black leading-none tracking-tighter text-slate-900 dark:text-white">{item.value}</div>
+                                    <div className="text-[8px] uppercase tracking-widest text-slate-400 font-black mt-1.5 opacity-60 leading-tight">{item.label}</div>
                                 </div>
                             </div>
                         ))}
@@ -260,216 +288,312 @@ export default function AdminPage() {
                 </header>
 
                 {/* ── ANALYTICS SECTION ── */}
-                <Card className="border-border/60 shadow-medium p-8 space-y-8 bg-card/30 backdrop-blur-md overflow-hidden relative">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />
-                    <div className="flex items-center justify-between flex-wrap gap-4 relative z-10">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-primary/10 rounded-lg text-primary"><BarChart2 className="w-5 h-5" /></div>
-                            <h2 className="font-extrabold text-xl tracking-tight">Platform Performance</h2>
+                <Card className="border-2 border-white/40 dark:border-slate-800/50 shadow-2xl shadow-indigo-500/5 p-10 space-y-10 bg-white/80 dark:bg-slate-950/80 backdrop-blur-2xl rounded-[3rem] relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/5 rounded-full blur-[100px] -mr-48 -mt-48 pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
+
+                    <div className="flex items-center justify-between flex-wrap gap-6 relative z-10">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 rounded-2xl shadow-sm"><BarChart2 className="w-6 h-6" /></div>
+                            <div>
+                                <h2 className="font-black text-2xl tracking-tighter text-slate-900 dark:text-white uppercase">Platform Performance</h2>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Cross-Tenant Operational Velocity</p>
+                            </div>
                         </div>
-                        <div className="flex bg-secondary/50 p-1 rounded-xl items-center gap-1">
+                        <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1.5 rounded-2xl items-center gap-1.5 border border-slate-200 dark:border-slate-700/30">
                             {(['today', '7days', 'alltime'] as const).map((preset) => (
                                 <button
                                     key={preset}
                                     onClick={() => fetchAnalytics(preset)}
                                     className={cn(
-                                        "px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200",
+                                        "px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
                                         datePreset === preset
-                                            ? "bg-card text-foreground shadow-sm"
-                                            : "text-muted-foreground hover:text-foreground hover:bg-card/40"
+                                            ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-md scale-105"
+                                            : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                                     )}
                                 >
-                                    {preset === 'today' ? 'Today' : preset === '7days' ? 'Last 7 Days' : 'All Time'}
+                                    {preset === 'today' ? 'Today' : preset === '7days' ? '7 Days' : 'All Time'}
                                 </button>
                             ))}
-                            <div className="w-px h-4 bg-border/50 mx-1" />
-                            <button onClick={() => fetchAnalytics(datePreset)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+                            <div className="w-[1px] h-5 bg-slate-200 dark:bg-slate-700 mx-1.5" />
+                            <button onClick={() => fetchAnalytics(datePreset)} className="p-2 rounded-xl text-slate-400 hover:text-indigo-500 transition-colors">
                                 <RefreshCw className={cn("w-4 h-4", analyticsLoading && "animate-spin")} />
                             </button>
                         </div>
                     </div>
 
                     {analyticsLoading ? (
-                        <div className="flex justify-center py-12"><Loader2 className="animate-spin w-8 h-8 text-primary/40" /></div>
+                        <div className="flex justify-center py-20"><Loader2 className="animate-spin w-10 h-10 text-indigo-500/30" /></div>
                     ) : analytics && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 relative z-10">
+                        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 relative z-10">
                             {[
-                                { label: 'Created', value: analytics.totalCreated, icon: <Users className="w-4 h-4" />, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10' },
-                                { label: 'Served', value: analytics.totalServed, icon: <Activity className="w-4 h-4" />, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10' },
-                                { label: 'Cancelled', value: analytics.totalCancelled, icon: <XCircle className="w-4 h-4" />, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500/10' },
-                                { label: 'Rating', value: analytics.avgRating ? `${analytics.avgRating} ⭐` : '—', icon: <Star className="w-4 h-4" />, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10' },
-                                { label: 'Avg Wait', value: analytics.avgWaitMins !== null ? `${analytics.avgWaitMins} min` : '—', icon: <Clock className="w-4 h-4" />, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-500/10' },
-                                { label: 'Saved Est.*', value: analytics.timeSavedLabel || '0m', icon: <TrendingUp className="w-4 h-4" />, color: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500/10' },
+                                { label: 'Intake Velocity', value: analytics.totalCreated, icon: <Users className="w-5 h-5" />, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-500/10' },
+                                { label: 'Service Output', value: analytics.totalServed, icon: <Activity className="w-5 h-5" />, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10' },
+                                { label: 'Dropout Rate', value: analytics.totalCancelled, icon: <XCircle className="w-5 h-5" />, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500/10' },
+                                { label: 'Patient Sentiment', value: analytics.avgRating ? `${analytics.avgRating} ⭐` : '—', icon: <Star className="w-5 h-5" />, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10' },
+                                { label: 'Median Dwell', value: analytics.avgWaitMins !== null ? `${analytics.avgWaitMins}m` : '—', icon: <Clock className="w-5 h-5" />, color: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500/10' },
+                                { label: 'Efficiency Gain', value: analytics.timeSavedLabel || '0m', icon: <TrendingUp className="w-5 h-5" />, color: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-700/10' },
                             ].map(({ label, value, icon, color, bg }) => (
-                                <div key={label} className="bg-card/50 rounded-2xl p-5 border border-border/40 flex flex-col gap-3 group hover:border-primary/20 transition-all duration-300">
-                                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110", bg, color)}>{icon}</div>
+                                <div key={label} className="bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] p-6 border border-slate-100 dark:border-slate-800/40 flex flex-col gap-4 group/item hover:border-indigo-500/20 hover:bg-white dark:hover:bg-slate-900 transition-all duration-500">
+                                    <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-item-hover:scale-110 shadow-sm", bg, color)}>{icon}</div>
                                     <div>
-                                        <div className={cn("text-3xl font-black tracking-tighter", color)}>{value}</div>
-                                        <div className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-1 opacity-80">{label}</div>
+                                        <div className={cn("text-3xl font-black tracking-tighter leading-none", color)}>{value}</div>
+                                        <div className="text-[9px] text-slate-400 uppercase font-black tracking-widest mt-2 opacity-80 leading-tight">{label}</div>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     )}
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium bg-secondary/30 w-fit px-3 py-1 rounded-full border border-border/40 mt-4">
-                        <Activity className="w-3 h-3" />
-                        * Based on real assessment times calculated directly at the DB layer via RPC.
+                    <div className="flex items-center gap-3 text-[9px] text-slate-400 font-extrabold bg-slate-100 dark:bg-slate-900/80 w-fit px-4 py-2 rounded-full border border-slate-200 dark:border-slate-800 shadow-inner">
+                        <Activity className="w-3.5 h-3.5 text-emerald-500" />
+                        <span className="uppercase tracking-widest">Global Telemetry • Real-time Infrastructure Monitoring</span>
                     </div>
                 </Card>
 
                 {/* ── SYSTEM HEALTH SECTION ── */}
                 {systemHealth && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {/* Webhook Pulse */}
-                        <Card className="col-span-1 border-border/60 shadow-medium p-6 bg-card/40 backdrop-blur-md">
-                            <div className="flex justify-between items-start mb-4">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <Activity className={cn("w-4 h-4", Number(systemHealth.webhooks.successRate) > 95 ? "text-emerald-500" : "text-orange-500")} />
-                                        <h3 className="font-extrabold text-sm tracking-tight text-foreground uppercase">Meta Health</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {/* Meta Pulse */}
+                        <Card className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-6 rounded-[2rem] border border-white/40 dark:border-slate-800/50 shadow-xl shadow-indigo-500/5 group">
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className={cn("p-2 rounded-xl transition-colors relative", Number(systemHealth.webhooks.successRate) > 95 ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500")}>
+                                        <Activity className="w-4 h-4" />
+                                        <div className={cn("absolute inset-0 rounded-xl animate-ping opacity-20", Number(systemHealth.webhooks.successRate) > 95 ? "bg-emerald-500" : "bg-amber-500")} />
                                     </div>
+                                    <h3 className="font-black text-[10px] tracking-widest text-slate-400 uppercase">Meta API Pulse</h3>
                                 </div>
-                                <div className={cn("px-2.5 py-1 rounded-lg text-[10px] font-black", Number(systemHealth.webhooks.successRate) > 95 ? "bg-emerald-500/10 text-emerald-500" : "bg-orange-500/10 text-orange-500")}>
+                                <div className={cn("px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border", Number(systemHealth.webhooks.successRate) > 95 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/20")}>
                                     {systemHealth.webhooks.successRate}% OK
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div className="bg-secondary/30 p-2 rounded-lg border border-border/40">
-                                    <div className="text-muted-foreground mb-1 uppercase tracking-widest text-[8px] font-bold">Failed</div>
-                                    <div className={cn("text-lg font-black", systemHealth.webhooks.failed > 0 ? "text-rose-500" : "text-foreground")}>{systemHealth.webhooks.failed}</div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-slate-50 dark:bg-slate-950/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/50">
+                                    <div className="text-slate-400 mb-1 uppercase tracking-widest text-[8px] font-black">Dropped</div>
+                                    <div className={cn("text-xl font-black", systemHealth.webhooks.failed > 0 ? "text-rose-500" : "text-slate-900 dark:text-white")}>{systemHealth.webhooks.failed}</div>
                                 </div>
-                                <div className="bg-secondary/30 p-2 rounded-lg border border-border/40">
-                                    <div className="text-muted-foreground mb-1 uppercase tracking-widest text-[8px] font-bold">Processing</div>
-                                    <div className="text-lg font-black">{systemHealth.webhooks.processing + systemHealth.webhooks.pending}</div>
+                                <div className="bg-slate-50 dark:bg-slate-950/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/50">
+                                    <div className="text-slate-400 mb-1 uppercase tracking-widest text-[8px] font-black">Active</div>
+                                    <div className="text-xl font-black text-slate-900 dark:text-white">{systemHealth.webhooks.processing + systemHealth.webhooks.pending}</div>
                                 </div>
                             </div>
                         </Card>
 
-                        {/* Cost & Limits */}
-                        <Card className="col-span-1 border-border/60 shadow-medium p-6 bg-card/40 backdrop-blur-md">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="flex items-center gap-2">
-                                    <MessageSquare className="w-4 h-4 text-indigo-500" />
-                                    <h3 className="font-extrabold text-sm tracking-tight text-foreground uppercase">Outbound Vol</h3>
+                        {/* Outbound Metering */}
+                        <Card className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-6 rounded-[2rem] border border-white/40 dark:border-slate-800/50 shadow-xl shadow-indigo-500/5">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-xl">
+                                    <MessageSquare className="w-4 h-4" />
                                 </div>
+                                <h3 className="font-black text-[10px] tracking-widest text-slate-400 uppercase">Outbound Metering</h3>
                             </div>
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-3xl font-black text-foreground">{stats.messagesToday || 0}</span>
-                                <span className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Sent Today</span>
+                            <div className="flex items-baseline gap-3">
+                                <span className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{stats.messagesToday || 0}</span>
+                                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Dispatches</span>
                             </div>
-                            <div className="mt-2 text-[10px] text-muted-foreground leading-tight max-w-[150px]">
-                                * Assumes strictly 24-hr session replies (Free Tier Utility)
+                            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                    <div className="bg-indigo-500 h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(((stats.messagesToday || 0) / 1000) * 100, 100)}%` }} />
+                                </div>
+                                <div className="flex justify-between items-center mt-2">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Base Tier Usage</span>
+                                    <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">1k Daily Cap</span>
+                                </div>
                             </div>
                         </Card>
 
-                        {/* Live Latency/Wait averages overall */}
-                        <Card className="col-span-1 md:col-span-2 border-border/60 shadow-medium p-6 bg-card/40 backdrop-blur-md border-r-4 border-r-primary">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="flex items-center gap-2">
-                                    <Clock className="w-4 h-4 text-primary" />
-                                    <h3 className="font-extrabold text-sm tracking-tight text-foreground uppercase">Global Median Wait</h3>
+                        {/* Network Latency (Strategic View) */}
+                        <Card className="lg:col-span-2 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-6 rounded-[2rem] border-2 border-indigo-500/20 shadow-2xl shadow-indigo-500/10 group overflow-hidden relative">
+                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-transparent pointer-events-none" />
+                            <div className="flex justify-between items-start mb-6 relative z-10">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-emerald-500/10 text-emerald-500 rounded-xl animate-pulse">
+                                        <RefreshCw className="w-4 h-4" />
+                                    </div>
+                                    <h3 className="font-black text-[10px] tracking-widest text-slate-400 uppercase">Global Orchestration Latency</h3>
                                 </div>
-                                <div className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-primary/10 text-primary">
-                                    LIVE NETWORK
+                                <div className="px-3 py-1 rounded-lg text-[9px] font-black bg-emerald-500/10 text-emerald-500 uppercase tracking-widest border border-emerald-500/20">
+                                    Optimal Flow
                                 </div>
                             </div>
-                            <div className="flex gap-8 items-end">
+                            <div className="flex gap-10 items-end relative z-10">
                                 <div>
-                                    <div className="text-4xl font-black text-foreground tracking-tighter shadow-sm">{stats.avgWaitMins || 0}<span className="text-xl text-muted-foreground/60 tracking-normal"> min</span></div>
+                                    <div className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter drop-shadow-sm">{stats.avgWaitMins || 0}<span className="text-xl text-slate-400 tracking-normal ml-2 lowercase font-bold">min median</span></div>
                                 </div>
-                                <div className="space-y-1 mb-1">
-                                    <div className="text-xs text-muted-foreground"><span className="font-black text-emerald-500">&bull;</span> {stats.activeSessions} active sessions reporting</div>
-                                    <div className="text-xs text-muted-foreground"><span className="font-black text-blue-500">&bull;</span> {stats.todayTokens} total tokens indexing</div>
+                                <div className="flex-1 space-y-3 mb-1">
+                                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                                        <span>Node Health</span>
+                                        <span>{stats.activeSessions} Active clusters</span>
+                                    </div>
+                                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden flex gap-0.5">
+                                        <div className="h-full bg-emerald-500 rounded-l-full" style={{ width: '70%' }} />
+                                        <div className="h-full bg-amber-500" style={{ width: '20%' }} />
+                                        <div className="h-full bg-rose-500 rounded-r-full" style={{ width: '10%' }} />
+                                    </div>
                                 </div>
                             </div>
                         </Card>
                     </div>
                 )}
 
+                {/* ── PHASE 4 STRATEGIC BI SECTION ── */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 relative z-10">
+                    {/* Physician Productivity Matrix */}
+                    <Card className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-8 rounded-[3rem] border border-white/40 dark:border-slate-800/50 shadow-2xl shadow-indigo-500/5 flex flex-col gap-8 group">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-amber-500/10 text-amber-500 rounded-2xl">< Star className="w-5 h-5" /></div>
+                                <div>
+                                    <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Physician Productivity</h3>
+                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Cross-Consultant Efficiency Matrix</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {biLoading ? (
+                            <div className="flex justify-center py-20"><Loader2 className="animate-spin w-8 h-8 text-amber-500/20" /></div>
+                        ) : prodBI.length > 0 ? (
+                            <div className="space-y-6">
+                                {prodBI.slice(0, 5).map((doc, idx) => (
+                                    <div key={idx} className="space-y-3">
+                                        <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                                            <span className="text-slate-900 dark:text-white">{doc.doctor_name} <span className="text-slate-400 opacity-60">({doc.department_name})</span></span>
+                                            <span className="text-indigo-500">{Math.round(doc.avg_consultation_mins || 0)}m avg</span>
+                                        </div>
+                                        <div className="w-full h-3 bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden flex">
+                                            <div className="bg-indigo-500 h-full" style={{ width: `${Math.min(((doc.served_count || 0) / 50) * 100, 100)}%` }} />
+                                        </div>
+                                        <div className="flex justify-between text-[8px] font-black text-slate-400 uppercase tracking-widest opacity-60">
+                                            <span>{doc.served_count || 0} Served</span>
+                                            <span>{doc.total_visits || 0} Total</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="py-10 text-center text-slate-400 font-black uppercase text-[10px] tracking-widest opacity-40">No productivity data reported</div>
+                        )}
+                    </Card>
+
+                    {/* Hourly Footfall Heatmap */}
+                    <Card className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-8 rounded-[3rem] border border-white/40 dark:border-slate-800/50 shadow-2xl shadow-indigo-500/5 flex flex-col gap-8 group">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-indigo-500/10 text-indigo-500 rounded-2xl"><TrendingUp className="w-5 h-5" /></div>
+                                <div>
+                                    <h3 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Wait-Time Heatmap</h3>
+                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Hourly Patient Footfall Trends</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {biLoading ? (
+                            <div className="flex justify-center py-20"><Loader2 className="animate-spin w-8 h-8 text-indigo-500/20" /></div>
+                        ) : footfallBI.length > 0 ? (
+                            <div className="flex items-end gap-2 h-48 pt-4">
+                                {footfallBI.slice(-12).map((hour, idx) => (
+                                    <div key={idx} className="flex-1 flex flex-col items-center gap-2 group/bar">
+                                        <div className="w-full bg-slate-100 dark:bg-slate-800/50 rounded-t-lg relative overflow-hidden flex flex-col justify-end" style={{ height: '100%' }}>
+                                            <div
+                                                className={cn("w-full transition-all duration-1000 group-hover/bar:brightness-125",
+                                                    hour.avg_wait_mins > 30 ? "bg-rose-500" : hour.avg_wait_mins > 15 ? "bg-amber-500" : "bg-emerald-500"
+                                                )}
+                                                style={{ height: `${Math.min((hour.token_count / 15) * 100, 100)}%` }}
+                                            />
+                                        </div>
+                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{hour.hour_of_day}:00</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="py-10 text-center text-slate-400 font-black uppercase text-[10px] tracking-widest opacity-40">Awaiting footfall telemetry</div>
+                        )}
+                    </Card>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
                     {/* LEFT COL: Add Clinic Form */}
-                    <div className="lg:col-span-4 space-y-6">
-                        <Card className="border-border/60 shadow-medium p-8 bg-card/50 backdrop-blur-sm group overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-blue-400 opacity-80" />
-                            <div className="flex items-center gap-4 pb-6 mb-8 border-b border-border/60">
-                                <div className="p-3 bg-primary/10 text-primary rounded-2xl group-hover:rotate-12 transition-transform duration-300 shadow-sm">
+                    <div className="lg:col-span-4 space-y-8">
+                        <Card className="border-2 border-white/40 dark:border-slate-800/50 shadow-2xl shadow-indigo-500/5 p-8 bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl rounded-[2.5rem] relative overflow-hidden group">
+                            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-600 via-sky-400 to-indigo-600 opacity-80" />
+                            <div className="flex items-center gap-5 pb-8 mb-8 border-b border-slate-100 dark:border-slate-800/50">
+                                <div className="p-4 bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 rounded-2xl group-hover:rotate-[15deg] transition-all duration-500 shadow-sm">
                                     <Plus className="w-6 h-6 stroke-[3px]" />
                                 </div>
                                 <div>
-                                    <h2 className="font-extrabold text-xl text-foreground">Provision Tenant</h2>
-                                    <p className="text-xs text-muted-foreground font-medium mt-0.5">Automated workspace deployment.</p>
+                                    <h2 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Provision Tenant</h2>
+                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Automated Orchestration</p>
                                 </div>
                             </div>
 
                             <form onSubmit={handleCreate} className="space-y-6">
                                 <div className="space-y-2">
-                                    <Label className="text-muted-foreground text-[10px] uppercase tracking-[0.2em] font-black pl-1">Display Name</Label>
+                                    <Label className="text-slate-400 text-[9px] uppercase tracking-[0.3em] font-black pl-1">Entity Name</Label>
                                     <Input
                                         value={name}
                                         onChange={e => setName(e.target.value)}
-                                        placeholder="e.g. Apollo Hospital"
+                                        placeholder="e.g. Apollo Global Health"
                                         required
-                                        className="h-12 bg-secondary/30 border-border/80 focus-visible:ring-primary rounded-xl font-medium"
+                                        className="h-14 bg-slate-50 dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/60 focus-visible:ring-indigo-500 rounded-2xl font-bold text-sm px-5"
                                     />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-muted-foreground text-[10px] uppercase tracking-[0.2em] font-black pl-1">Unique Slug</Label>
+                                        <Label className="text-slate-400 text-[9px] uppercase tracking-[0.3em] font-black pl-1">Routing Slug</Label>
                                         <Input
                                             value={slug}
                                             onChange={e => setSlug(e.target.value.toLowerCase())}
-                                            placeholder="apollo-main"
+                                            placeholder="apollo-hq"
                                             required
-                                            className="h-12 bg-secondary/30 border-border/80 focus-visible:ring-primary rounded-xl font-mono text-sm"
+                                            className="h-14 bg-slate-50 dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/60 focus-visible:ring-indigo-500 rounded-2xl font-mono text-xs px-5"
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-muted-foreground text-[10px] uppercase tracking-[0.2em] font-black pl-1">Support Phone</Label>
+                                        <Label className="text-slate-400 text-[9px] uppercase tracking-[0.3em] font-black pl-1">Support Line</Label>
                                         <Input
                                             value={phone}
                                             onChange={e => setPhone(e.target.value)}
                                             placeholder="+91..."
                                             required
-                                            className="h-12 bg-secondary/30 border-border/80 focus-visible:ring-primary rounded-xl font-medium"
+                                            className="h-14 bg-slate-50 dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/60 focus-visible:ring-indigo-500 rounded-2xl font-bold text-sm px-5"
                                         />
                                     </div>
                                 </div>
 
-                                <div className="pt-6 mt-6 border-t border-border/60 space-y-6">
+                                <div className="pt-8 mt-8 border-t border-slate-100 dark:border-slate-800/50 space-y-8">
                                     <div className="flex items-center justify-between">
-                                        <Label className="text-primary text-[10px] uppercase tracking-[0.2em] font-black pl-1">Credentials</Label>
-                                        <div className="flex bg-secondary/50 rounded-lg p-1 text-[10px]">
+                                        <Label className="text-indigo-600 dark:text-indigo-400 text-[9px] uppercase tracking-[0.3em] font-black pl-1">Auth Configuration</Label>
+                                        <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-xl p-1 text-[9px]">
                                             <button
                                                 type="button"
                                                 onClick={() => setLinkMode("new")}
-                                                className={cn("px-4 py-1.5 rounded-lg transition-all font-bold", linkMode === 'new' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
-                                            >AUTO-GEN</button>
+                                                className={cn("px-4 py-2 rounded-lg transition-all font-black uppercase tracking-widest", linkMode === 'new' ? 'bg-white dark:bg-slate-700 shadow-md text-indigo-600 dark:text-indigo-400' : 'text-slate-400 hover:text-slate-600')}
+                                            >AUTO</button>
                                             <button
                                                 type="button"
                                                 onClick={() => setLinkMode("existing")}
-                                                className={cn("px-4 py-1.5 rounded-lg transition-all font-bold", linkMode === 'existing' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
-                                            >MANUAL UUID</button>
+                                                className={cn("px-4 py-2 rounded-lg transition-all font-black uppercase tracking-widest", linkMode === 'existing' ? 'bg-white dark:bg-slate-700 shadow-md text-indigo-600 dark:text-indigo-400' : 'text-slate-400 hover:text-slate-600')}
+                                            >LINK</button>
                                         </div>
                                     </div>
 
                                     {linkMode === "new" ? (
-                                        <div className="space-y-4 animate-in slide-in-from-left-2 duration-300">
-                                            <div className="bg-primary/5 p-4 rounded-2xl border border-primary/20 space-y-1">
-                                                <div className="flex items-center gap-2 text-primary">
+                                        <div className="space-y-5 animate-in slide-in-from-left-4 duration-500">
+                                            <div className="bg-indigo-500/5 p-5 rounded-[1.5rem] border border-indigo-500/10 space-y-2">
+                                                <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
                                                     <Settings className="w-3.5 h-3.5" />
-                                                    <span className="text-[10px] font-black uppercase tracking-widest">Automatic Setup</span>
+                                                    <span className="text-[9px] font-black uppercase tracking-widest">Protocol Activation</span>
                                                 </div>
-                                                <p className="text-[11px] text-muted-foreground font-medium leading-relaxed">System will provision Auth & DB access immediately.</p>
+                                                <p className="text-[10px] text-slate-500 font-bold leading-relaxed">System will provision exclusive Auth/DB nodes immediately upon deployment.</p>
                                             </div>
                                             <div className="space-y-2">
                                                 <Input
                                                     type="email"
                                                     value={adminEmail}
                                                     onChange={e => setAdminEmail(e.target.value)}
-                                                    placeholder="owner@clinic.com"
+                                                    placeholder="owner@enterprise.com"
                                                     required={linkMode === 'new'}
-                                                    className="h-12 bg-secondary/30 border-border/80 focus-visible:ring-primary rounded-xl"
+                                                    className="h-14 bg-slate-50 dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/60 focus-visible:ring-indigo-500 rounded-2xl font-bold px-5"
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -477,26 +601,26 @@ export default function AdminPage() {
                                                     type="password"
                                                     value={adminPassword}
                                                     onChange={e => setAdminPassword(e.target.value)}
-                                                    placeholder="Store secure password"
+                                                    placeholder="Secure Administrative Key"
                                                     minLength={6}
                                                     required={linkMode === 'new'}
-                                                    className="h-12 bg-secondary/30 border-border/80 focus-visible:ring-primary rounded-xl"
+                                                    className="h-14 bg-slate-50 dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/60 focus-visible:ring-indigo-500 rounded-2xl font-bold px-5"
                                                 />
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="space-y-4 animate-in slide-in-from-right-2 duration-300">
-                                            <p className="text-[11px] text-muted-foreground leading-relaxed bg-secondary/40 p-4 rounded-2xl border border-border/40 font-medium">
-                                                Linking an existing Supabase Auth user. Paste their <b>Auth UUID</b> to grant owner permissions.
+                                        <div className="space-y-5 animate-in slide-in-from-right-4 duration-500">
+                                            <p className="text-[10px] text-slate-500 leading-relaxed bg-slate-50 dark:bg-slate-950/50 p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800/50 font-bold">
+                                                Map to existing Supabase Identity. Required for <b>Multi-Tenant Reconciliation</b>.
                                             </p>
                                             <div className="space-y-2">
                                                 <Input
                                                     type="text"
                                                     value={existingUserId}
                                                     onChange={e => setExistingUserId(e.target.value)}
-                                                    placeholder="Auth UUID (e.g. 550e8400...)"
+                                                    placeholder="Identity UUID (8-4-4-4-12)"
                                                     required={linkMode === 'existing'}
-                                                    className="h-12 bg-secondary/30 border-border/80 focus-visible:ring-primary rounded-xl font-mono text-xs"
+                                                    className="h-14 bg-slate-50 dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/60 focus-visible:ring-indigo-500 rounded-2xl font-mono text-xs px-5"
                                                 />
                                             </div>
                                         </div>
@@ -506,159 +630,159 @@ export default function AdminPage() {
                                 <Button
                                     type="submit"
                                     disabled={actionLoading}
-                                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold h-14 rounded-2xl mt-4 shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5"
+                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black h-16 rounded-[1.5rem] mt-6 shadow-2xl shadow-indigo-600/30 transition-all hover:-translate-y-1 active:scale-95 text-xs uppercase tracking-[0.2em]"
                                 >
-                                    {actionLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Deploy Workspace"}
+                                    {actionLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Deploy Environment"}
                                 </Button>
                             </form>
                         </Card>
                     </div>
 
                     {/* RIGHT COL: Tenant List */}
-                    <div className="lg:col-span-8 space-y-6">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 px-2">
+                    <div className="lg:col-span-8 space-y-8">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 px-4">
                             <div>
-                                <h2 className="font-extrabold text-2xl text-foreground tracking-tight">Active Workspaces</h2>
-                                <p className="text-xs text-muted-foreground font-medium mt-1">Found {filteredBusinesses.length} provisioned environments.</p>
+                                <h2 className="font-black text-2xl text-slate-900 dark:text-white tracking-tighter uppercase">Active Environments</h2>
+                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Deployments: {filteredBusinesses.length} Verified Segments</p>
                             </div>
-                            <div className="relative w-full sm:w-80 group">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                            <div className="relative w-full sm:w-96 group">
+                                <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                                 <Input
-                                    placeholder="Filter by name or slug..."
+                                    placeholder="Filter by name, slug or identifier..."
                                     value={adminSearchTerm}
                                     onChange={(e) => setAdminSearchTerm(e.target.value)}
-                                    className="h-11 pl-11 bg-card/50 border-border/60 text-foreground rounded-2xl focus-visible:ring-primary shadow-soft"
+                                    className="h-14 pl-14 bg-white/50 dark:bg-slate-900/50 border-slate-100 dark:border-slate-800/60 text-slate-900 dark:text-white rounded-2xl focus-visible:ring-indigo-500 shadow-inner group-hover:border-indigo-500/20 transition-all font-bold placeholder:font-black placeholder:uppercase placeholder:text-[10px] placeholder:tracking-widest"
                                 />
                             </div>
                         </div>
 
-                        <div className="grid gap-4">
+                        <div className="grid gap-6">
                             {filteredBusinesses.length === 0 && (
-                                <Card className="p-12 text-center border-dashed border-2 bg-transparent border-border/40">
-                                    <div className="bg-secondary/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <Search className="w-8 h-8 text-muted-foreground/40" />
+                                <Card className="p-20 text-center border-dashed border-[3px] bg-indigo-500/5 border-indigo-500/10 rounded-[3rem]">
+                                    <div className="bg-white dark:bg-slate-900 w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-500/5">
+                                        <Search className="w-8 h-8 text-indigo-500/20" />
                                     </div>
-                                    <h3 className="text-lg font-bold text-foreground">No matches found</h3>
-                                    <p className="text-sm text-muted-foreground mt-1">Try adjusting your search criteria.</p>
+                                    <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Zero Matches</h3>
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black mt-2">Adjust Telemetry Filter Parameters</p>
                                 </Card>
                             )}
 
                             {filteredBusinesses.map((b: Business) => (
-                                <Card key={b.id} className="group relative overflow-hidden bg-card/40 backdrop-blur-sm border-border/60 p-6 hover:bg-card/60 transition-all duration-300 shadow-soft hover:shadow-medium border-l-[6px] border-l-primary/10 hover:border-l-primary/40">
-                                    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
-                                        <div className="flex-1 space-y-4">
-                                            <div className="flex flex-wrap items-center gap-3">
-                                                <h3 className="font-black text-xl text-foreground tracking-tight">{b.name}</h3>
-                                                <Badge variant="secondary" className="px-2 py-0.5 rounded-lg text-[10px] font-mono tracking-tighter opacity-80 uppercase">/{b.slug}</Badge>
-                                                <div className={cn("px-2.5 py-1 rounded-full text-[10px] font-black flex items-center gap-2",
-                                                    b.is_active ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                                <Card key={b.id} className="group relative overflow-hidden bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/40 dark:border-slate-800/50 p-8 hover:bg-white dark:hover:bg-slate-900 transition-all duration-500 shadow-xl shadow-indigo-500/5 rounded-[2.5rem] border-l-[8px] border-l-indigo-600/10 hover:border-l-indigo-600">
+                                    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-8 relative z-10">
+                                        <div className="flex-1 space-y-5">
+                                            <div className="flex flex-wrap items-center gap-4">
+                                                <h3 className="font-black text-2xl text-slate-900 dark:text-white tracking-tighter uppercase">{b.name}</h3>
+                                                <Badge variant="secondary" className="px-3 py-1 rounded-xl text-[9px] font-black tracking-widest bg-slate-100 dark:bg-slate-800 text-slate-500 uppercase">/{b.slug}</Badge>
+                                                <div className={cn("px-3 py-1 rounded-full text-[9px] font-black flex items-center gap-2 uppercase tracking-widest",
+                                                    b.is_active ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" : "bg-rose-500/10 text-rose-600 border border-rose-500/20"
                                                 )}>
-                                                    <div className={cn("w-1.5 h-1.5 rounded-full", b.is_active ? "bg-emerald-500" : "bg-rose-500")} />
-                                                    {b.is_active ? 'PRODUCTION' : 'SUSPENDED'}
+                                                    <div className={cn("w-2 h-2 rounded-full", b.is_active ? "bg-emerald-500 animate-pulse" : "bg-rose-500")} />
+                                                    {b.is_active ? 'Production' : 'Suspended'}
                                                 </div>
                                             </div>
 
-                                            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-[11px] font-bold text-muted-foreground">
-                                                <div className="flex items-center gap-2 bg-primary/5 px-2.5 py-1.5 rounded-xl border border-primary/10 text-primary">
-                                                    <Users className="w-3.5 h-3.5" />
-                                                    <span>{b.tokens_today || 0} <span className="opacity-50 font-medium">/ {b.daily_token_limit || b.settings?.daily_token_limit || '∞'}</span> TKN</span>
+                                            <div className="flex flex-wrap items-center gap-x-8 gap-y-4 text-[10px] font-black uppercase tracking-widest">
+                                                <div className="flex items-center gap-3 bg-indigo-500/5 px-4 py-2 rounded-xl border border-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                                                    <Users className="w-4 h-4" />
+                                                    <span>{b.tokens_today || 0} <span className="opacity-40 font-black">/ {b.daily_token_limit || b.settings?.daily_token_limit || '∞'}</span> <span className="text-[8px] opacity-60 ml-1">Tokens Today</span></span>
                                                 </div>
-                                                <div className="flex items-center gap-2 text-muted-foreground/80">
-                                                    <Clock className="w-3.5 h-3.5" />
-                                                    <span>{new Date(b.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                <div className="flex items-center gap-3 text-slate-400">
+                                                    <Clock className="w-4 h-4 text-indigo-500/40" />
+                                                    <span>Created {new Date(b.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                                 </div>
-                                                <div className="flex items-center gap-2 text-muted-foreground/80 font-mono">
-                                                    <div className="w-1 h-1 rounded-full bg-border" />
+                                                <div className="flex items-center gap-3 text-slate-400 font-mono lower-case">
+                                                    <Power className="w-3.5 h-3.5 text-indigo-500/40" />
                                                     <span>{b.contact_phone}</span>
                                                 </div>
-                                                <div className="flex items-center gap-2 bg-secondary/50 px-2 py-1 rounded-lg">
-                                                    <span className="opacity-40 uppercase tracking-widest text-[8px]">UUID</span>
-                                                    <span className="font-mono text-[9px]">{b.id.split('-')[0]}...</span>
+                                                <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-800/50 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700/30">
+                                                    <span className="opacity-40 text-[8px]">UUID</span>
+                                                    <span className="font-mono text-[9px] text-slate-500">{b.id.split('-')[0]}..</span>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-2 flex-wrap">
+                                        <div className="flex items-center gap-3 flex-wrap">
                                             <Link href={`/clinic/${b.slug}/reception`} target="_blank">
-                                                <Button variant="outline" size="sm" className="h-10 rounded-xl bg-background hover:bg-secondary font-bold border-border/60 transition-all hover:scale-105 active:scale-95 shadow-soft">
-                                                    View Dashboard <ExternalLink className="w-3.5 h-3.5 ml-2 opacity-50" />
+                                                <Button variant="outline" size="sm" className="h-12 px-6 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-50 font-black border-slate-200 dark:border-slate-700 transition-all hover:-translate-y-1 active:scale-95 shadow-md flex items-center gap-3 uppercase tracking-widest text-[9px] text-indigo-600">
+                                                    Terminal Access <ExternalLink className="w-3.5 h-3.5 opacity-50" />
                                                 </Button>
                                             </Link>
 
-                                            <div className="w-px h-6 bg-border/60 mx-1 hidden sm:block" />
+                                            <div className="w-[1px] h-8 bg-slate-100 dark:bg-slate-800 mx-1 hidden sm:block" />
 
-
-                                            <div className="flex bg-secondary/30 p-1 rounded-xl gap-1">
+                                            <div className="flex bg-slate-50 dark:bg-slate-800/40 p-1.5 rounded-2xl gap-1.5 border border-slate-100 dark:border-slate-700/30">
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className={cn("h-9 w-9 rounded-lg transition-all", b.is_active ? 'text-rose-500 hover:bg-rose-500/10' : 'text-emerald-500 hover:bg-emerald-500/10')}
+                                                    className={cn("h-10 w-10 rounded-xl transition-all shadow-sm", b.is_active ? 'text-rose-500 hover:bg-rose-500/10' : 'text-emerald-500 hover:bg-emerald-500/10')}
                                                     onClick={() => setConfirmModal({
                                                         open: true,
-                                                        title: b.is_active ? "Suspend Clinic" : "Activate Clinic",
-                                                        description: `Confirm state change for ${b.name}. Public access will be ${b.is_active ? 'revoked' : 'granted'} immediately.`,
+                                                        title: b.is_active ? "Suspend Operation" : "Resume Operation",
+                                                        description: `Modify operational status for ${b.name}. Public endpoints will be ${b.is_active ? 'deactivated' : 're-indexed'} immediately.`,
                                                         action: async () => {
                                                             const res = await toggleBusinessStatus(b.id, b.is_active);
                                                             if (res.error) showToast(res.error, 'error');
                                                             else {
-                                                                showToast(`${b.name} state updated`);
+                                                                showToast(`Operational status updated for ${b.name}`);
                                                                 fetchStats();
                                                             }
                                                         }
                                                     })}
                                                 >
-                                                    <Power className="w-4 h-4 stroke-[2.5px]" />
+                                                    <Power className="w-4 h-4 stroke-[3px]" />
                                                 </Button>
 
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    title="Quick Analytics"
-                                                    className="h-9 w-9 rounded-lg text-emerald-600 hover:bg-emerald-500/10"
+                                                    title="Network Intelligence"
+                                                    className="h-10 w-10 rounded-xl text-indigo-500 hover:bg-indigo-500/10 shadow-sm"
                                                     onClick={() => loadClinicMetrics(b.id, b.name, b.daily_token_limit || (b.settings?.daily_token_limit as number) || 0)}
                                                 >
-                                                    <ActivitySquare className="w-4 h-4 stroke-[2.5px]" />
+                                                    <ActivitySquare className="w-4 h-4 stroke-[3px]" />
                                                 </Button>
 
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    title="Settings"
-                                                    className="h-9 w-9 rounded-lg text-indigo-600 hover:bg-indigo-500/10"
+                                                    title="Protocol Settings"
+                                                    className="h-10 w-10 rounded-xl text-sky-500 hover:bg-sky-500/10 shadow-sm"
                                                     onClick={() => {
                                                         setEditingClinic(b);
                                                         setClinicSettings({ ...b.settings, daily_token_limit: b.daily_token_limit || b.settings?.daily_token_limit || 200 });
                                                     }}
                                                 >
-                                                    <Settings className="w-4 h-4 stroke-[2.5px]" />
+                                                    <Settings className="w-4 h-4 stroke-[3px]" />
                                                 </Button>
 
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    title="Danger Zone"
-                                                    className="h-9 w-9 rounded-lg text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10"
+                                                    title="Terminate Segment"
+                                                    className="h-10 w-10 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-500/10 shadow-sm"
                                                     onClick={() => setConfirmModal({
                                                         open: true,
-                                                        title: "Irreversible Deletion",
-                                                        description: `This will permanently erase all data for "${b.name}". History, staff, and tokens cannot be recovered.`,
+                                                        title: "Critical Termination",
+                                                        description: `Permanently expunge ${b.name} from the orchestration layer. This action is immutable. All metadata will be purged.`,
                                                         requireDeleteConfirm: true,
-                                                        confirmText: "type DELETE to confirm",
+                                                        confirmText: "type TERMINATE to confirm",
                                                         action: async () => {
                                                             const res = await deleteBusiness(b.id);
                                                             if (res?.error) showToast(res.error, 'error');
                                                             else {
-                                                                showToast(`${b.name} deleted`);
+                                                                showToast(`Segment ${b.name} expunged`);
                                                                 fetchStats();
                                                             }
                                                         }
                                                     })}
                                                 >
-                                                    <Trash2 className="w-4 h-4 stroke-[2.5px]" />
+                                                    <Trash2 className="w-4 h-4 stroke-[3px]" />
                                                 </Button>
                                             </div>
                                         </div>
                                     </div>
+                                    <div className="absolute bottom-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl -mr-16 -mb-16 pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
                                 </Card>
                             ))}
                         </div>
@@ -704,6 +828,21 @@ export default function AdminPage() {
                                     checked={clinicSettings.dpdp_strict ?? true}
                                     onCheckedChange={(c) => setClinicSettings({ ...clinicSettings, dpdp_strict: c })}
                                 />
+                            </div>
+
+                            <div className="space-y-3 pt-2">
+                                <Label className="text-xs text-indigo-400 uppercase tracking-widest font-black flex items-center gap-1"><Activity className="w-3.5 h-3.5" /> Operation Protocol</Label>
+                                <div className="flex bg-black/20 rounded-xl p-1 gap-1">
+                                    <button
+                                        onClick={() => setClinicSettings({ ...clinicSettings, operation_mode: 'OPD' })}
+                                        className={cn("flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all", (clinicSettings.operation_mode || 'OPD') === 'OPD' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300')}
+                                    >Clinical OPD</button>
+                                    <button
+                                        onClick={() => setClinicSettings({ ...clinicSettings, operation_mode: 'HOSPITAL' })}
+                                        className={cn("flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all", clinicSettings.operation_mode === 'HOSPITAL' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300')}
+                                    >Hospital Suite</button>
+                                </div>
+                                <p className="text-[8px] text-slate-500 italic px-1">Switching to Hospital Suite enables multi-queue orchestration and triage automation.</p>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 pt-2">

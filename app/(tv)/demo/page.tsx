@@ -18,13 +18,14 @@ const DEMO_DEPARTMENTS = [
 ];
 
 const DEMO_TOKENS = [
-    { id: "t1", tokenNumber: 42, isPriority: false, status: "SERVING", doctorId: "doc1", departmentId: "dept1", customerName: "Rahul K." },
-    { id: "t2", tokenNumber: 15, isPriority: true, status: "SERVING", doctorId: "doc2", departmentId: "dept2", customerName: "Priya S." },
-    { id: "t3", tokenNumber: 43, isPriority: false, status: "WAITING", doctorId: "doc1", departmentId: "dept1", customerName: "Sneha M." },
-    { id: "t4", tokenNumber: 16, isPriority: false, status: "WAITING", doctorId: "doc2", departmentId: "dept2", customerName: "Amit V." },
-    { id: "t5", tokenNumber: 44, isPriority: false, status: "WAITING", doctorId: "doc1", departmentId: "dept1", customerName: "John D." },
-    { id: "t6", tokenNumber: 17, isPriority: false, status: "WAITING", doctorId: "doc2", departmentId: "dept2", customerName: "Riya G." },
-    { id: "t7", tokenNumber: 45, isPriority: false, status: "WAITING", doctorId: "doc1", departmentId: "dept1", customerName: "Vikram S." },
+    { id: "t1", tokenNumber: 101, isPriority: true, status: "SERVING", doctorId: "doc1", departmentId: "dept1", customerName: "Rajeev Mehta" },
+    { id: "t2", tokenNumber: 204, isPriority: false, status: "SERVING", doctorId: "doc2", departmentId: "dept2", customerName: "Ananya Iyer" },
+    { id: "t3", tokenNumber: 102, isPriority: false, status: "WAITING", doctorId: "doc1", departmentId: "dept1", customerName: "Vikram Shah" },
+    { id: "t4", tokenNumber: 103, isPriority: false, status: "WAITING", doctorId: "doc1", departmentId: "dept1", customerName: "Saritha K." },
+    { id: "t5", tokenNumber: 205, isPriority: true, status: "WAITING", doctorId: "doc2", departmentId: "dept2", customerName: "Zoya Khan" },
+    { id: "t6", tokenNumber: 206, isPriority: false, status: "WAITING", doctorId: "doc2", departmentId: "dept2", customerName: "Karan W." },
+    { id: "t7", tokenNumber: 104, isPriority: true, status: "WAITING", doctorId: "doc1", departmentId: "dept1", customerName: "Sameer D." },
+    { id: "t8", tokenNumber: 207, isPriority: false, status: "WAITING", doctorId: "doc2", departmentId: "dept2", customerName: "Nisha P." },
 ];
 
 export default function TVDemoPage() {
@@ -84,7 +85,7 @@ export default function TVDemoPage() {
                         Q
                     </div>
                     <div>
-                        <h1 className="text-5xl font-black tracking-tighter text-white leading-none mb-2">QLINK CLINICAL DEMO</h1>
+                        <h1 className="text-5xl font-black tracking-tighter text-white leading-none mb-2 uppercase tracking-tighter truncate max-w-[500px]">QLINK PREMIER CLINIC</h1>
                         <div className="flex items-center gap-4">
                             <span className="text-indigo-400 font-bold tracking-[0.2em] uppercase text-sm">Live Orchestration Dashboard</span>
                             <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
@@ -108,15 +109,11 @@ export default function TVDemoPage() {
 
             {/* Main Content */}
             <div className="flex-1 flex overflow-hidden">
-                {/* QUEUE GRID */}
                 <div className="flex-1 p-10 overflow-y-auto">
                     <div className="grid grid-cols-2 gap-10 h-full">
                         {zones.map(zone => (
                             <div key={zone.id} className="relative group rounded-[3rem] bg-white/[0.03] border border-white/5 backdrop-blur-2xl shadow-2xl overflow-hidden flex flex-col transition-all duration-700 hover:border-indigo-500/30">
-                                {/* Zone Header Decor */}
                                 <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
-
-                                {/* Doctor Identity */}
                                 <div className="p-8 pb-4 flex items-center justify-between">
                                     <div className="flex items-center gap-6">
                                         <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center border border-white/5 group-hover:scale-110 transition-transform duration-500">
@@ -127,25 +124,19 @@ export default function TVDemoPage() {
                                             <p className="text-indigo-400 font-bold tracking-widest uppercase text-xs mt-1">{zone.subtitle}</p>
                                         </div>
                                     </div>
-                                    {zone.serving && (
-                                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-widest">
-                                            <Activity className="w-3 h-3 animate-pulse" /> Active Session
-                                        </div>
-                                    )}
+                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-widest">
+                                        <Activity className="w-3 h-3 animate-pulse" /> Active Session
+                                    </div>
                                 </div>
-
                                 <div className="flex-1 p-10 pt-4 flex flex-col xl:flex-row gap-10 items-center">
-                                    {/* Large Serving Display */}
                                     <div className="flex-1 text-center w-full">
                                         <div className="text-slate-500 font-bold uppercase tracking-[0.3em] text-xs mb-6">Currently Serving</div>
                                         {zone.serving ? (
-                                            <div className="scale-100">
+                                            <div>
                                                 <h3 className="text-[12rem] xl:text-[14rem] leading-none font-black tracking-tighter text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
                                                     {formatToken(zone.serving.tokenNumber, zone.serving.isPriority)}
                                                 </h3>
-                                                <div className="text-4xl font-bold text-indigo-300 mt-6 tracking-tight truncate px-4">
-                                                    {zone.serving.customerName}
-                                                </div>
+                                                <div className="text-4xl font-bold text-indigo-300 mt-6 tracking-tight truncate px-4">{zone.serving.customerName}</div>
                                             </div>
                                         ) : (
                                             <div className="opacity-10 py-10">
@@ -154,22 +145,18 @@ export default function TVDemoPage() {
                                             </div>
                                         )}
                                     </div>
-
-                                    {/* Dynamic Next List */}
                                     <div className="w-full xl:w-[320px] bg-black/40 rounded-[2.5rem] p-8 border border-white/5 flex flex-col">
-                                        <h4 className="text-indigo-400 uppercase font-black tracking-[0.2em] mb-6 flex items-center gap-3 text-xs text-left">
+                                        <h4 className="text-indigo-400 uppercase font-black tracking-[0.2em] mb-6 flex items-center gap-3 text-xs">
                                             <Clock className="w-4 h-4" /> Queue Order
                                         </h4>
                                         <div className="space-y-4">
                                             {zone.waiting.map(t => (
-                                                <div key={t.id} className="flex justify-between items-center group/item">
-                                                    <div className="flex items-center gap-4 text-left">
+                                                <div key={t.id} className="flex justify-between items-center">
+                                                    <div className="flex items-center gap-4">
                                                         <div className={`w-2 h-2 rounded-full ${t.isPriority ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]' : 'bg-slate-700'}`}></div>
-                                                        <span className="text-slate-500 font-bold tabular-nums text-lg">#{t.tokenNumber}</span>
+                                                        <span className="text-slate-500 font-bold tabular-nums text-lg">{formatToken(t.tokenNumber, t.isPriority)}</span>
                                                     </div>
-                                                    <span className={`font-black tracking-tight text-xl ${t.isPriority ? 'text-rose-400' : 'text-slate-200'} text-right`}>
-                                                        {t.customerName.split(' ')[0]}
-                                                    </span>
+                                                    <span className={`font-black tracking-tight text-xl ${t.isPriority ? 'text-rose-400' : 'text-slate-200'}`}>{t.customerName.split(' ')[0]}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -179,62 +166,40 @@ export default function TVDemoPage() {
                         ))}
                     </div>
                 </div>
-
-                {/* Sidebar */}
                 <aside className="w-[450px] flex-shrink-0 bg-slate-950/40 backdrop-blur-3xl border-l border-white/5 flex flex-col p-10 gap-10">
-                    {/* Live Clock Card */}
-                    <div className="p-10 rounded-[3rem] bg-indigo-600/10 border border-indigo-500/20 text-center relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[50px] -z-10 group-hover:scale-150 transition-transform duration-1000"></div>
+                    <div className="p-10 rounded-[3rem] bg-indigo-600/10 border border-indigo-500/20 text-center relative overflow-hidden">
                         <div className="text-7xl font-black tracking-tighter text-white tabular-nums mb-2">
                             {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
                         </div>
-                        <div className="text-indigo-400 text-sm font-black uppercase tracking-[0.3em]">
-                            {currentTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-                        </div>
+                        <div className="text-indigo-400 text-sm font-black uppercase tracking-[0.3em]">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                     </div>
-
-                    {/* Performance Metrics */}
                     <div className="grid grid-cols-2 gap-6">
                         <div className="bg-white/5 rounded-[2rem] p-8 border border-white/5 text-center">
-                            <div className="text-6xl font-black tracking-tighter mb-2 tabular-nums text-indigo-400">5</div>
-                            <div className="text-slate-500 text-[10px] font-black uppercase tracking-widest text-center">In-Queue</div>
+                            <div className="text-6xl font-black tracking-tighter mb-2 tabular-nums text-indigo-400">12</div>
+                            <div className="text-slate-500 text-[10px] font-black uppercase tracking-widest">In-Queue</div>
                         </div>
                         <div className="bg-white/5 rounded-[2rem] p-8 border border-white/5 text-center">
-                            <div className="text-6xl font-black tracking-tighter mb-2 tabular-nums text-emerald-400">38</div>
-                            <div className="text-slate-500 text-[10px] font-black uppercase tracking-widest text-center">Completed</div>
+                            <div className="text-6xl font-black tracking-tighter mb-2 tabular-nums text-emerald-400">48</div>
+                            <div className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Served</div>
                         </div>
                     </div>
-
-                    {/* Infotainment */}
-                    <div className="flex-1 rounded-[3rem] bg-white/[0.02] border border-white/5 p-10 flex flex-col items-center justify-center text-center relative">
-                        <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/5 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                            Patient Education
-                        </div>
-                        <div className="text-[7rem] mb-10 drop-shadow-2xl">🩺</div>
-                        <h3 className="text-3xl font-black text-white mb-6 tracking-tight">Regular Screenings</h3>
-                        <p className="text-slate-400 text-xl font-medium leading-relaxed max-w-sm mx-auto">Annual check-ups are the first line of defense against chronic conditions.</p>
+                    <div className="flex-1 rounded-[3rem] bg-indigo-500/5 group p-10 flex flex-col items-center justify-center text-center relative border border-indigo-500/10">
+                        <div className="text-[8rem] mb-10 drop-shadow-2xl grayscale group-hover:grayscale-0 transition-all duration-700">🩺</div>
+                        <h3 className="text-3xl font-black text-white mb-6">Patient Education</h3>
+                        <p className="text-slate-400 text-xl font-medium leading-relaxed">Early detection saves lives. Book your annual screening today via WhatsApp.</p>
                     </div>
-
-                    {/* Compliance/Security Info */}
                     <div className="p-6 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex flex-col gap-4 text-left">
                         <div className="flex items-center gap-3">
                             <ShieldCheck className="w-6 h-6 text-indigo-400" />
                             <span className="text-sm font-black text-indigo-200 uppercase tracking-widest leading-none">Security Active</span>
                         </div>
-                        <p className="text-[10px] font-bold text-slate-500 leading-relaxed">GDPR/DPDP Compliant Data Masking is active. Patient PII is strictly protected on all public signage.</p>
+                        <p className="text-[10px] font-bold text-slate-500 leading-relaxed">QLINK Orchestration Engine v4.0. Operational Telemetry is fully encrypted and DPDP compliant.</p>
                     </div>
                 </aside>
             </div>
-
-            {/* Footer */}
-            <footer className="p-6 bg-slate-950 border-t border-white/5 text-center flex justify-between items-center px-12">
-                <div className="text-xs font-bold tracking-[0.2em] text-slate-600 uppercase">Mission-Critical Hospital Infrastructure</div>
-                <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-2 text-indigo-500/50 text-[10px] font-black uppercase tracking-widest">
-                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div> End-to-End Encrypted Sync
-                    </div>
-                    <span className="text-xs font-black text-white/20">v2.0.26</span>
-                </div>
+            <footer className="p-6 bg-slate-950 border-t border-white/5 text-center px-12 flex justify-between items-center text-xs font-bold tracking-widest text-slate-500 uppercase">
+                <span>Mission-Critical Hospital Infrastructure</span>
+                <span>v2.0.26 Digital Signage Interface</span>
             </footer>
         </div>
     );

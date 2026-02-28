@@ -1,6 +1,10 @@
 /* eslint-disable react/no-unescaped-entities */
 import { CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
+
+const WHATSAPP_BASE = "https://wa.me/919320201572";
+const getWhatsAppUrl = (plan: string) => `${WHATSAPP_BASE}?text=${encodeURIComponent(`Hi QLink Team, I am interested in the ${plan} plan for my clinic/hospital. Please share more details.`)}`;
 
 export default function PricingPage() {
     return (
@@ -37,7 +41,9 @@ export default function PricingPage() {
                             <FeatureItem excluded>Multi-Doctor Routing</FeatureItem>
                             <FeatureItem excluded>Smart TV App</FeatureItem>
                         </ul>
-                        <Button className="w-full h-12 rounded-xl font-bold bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900">Start Free Trial</Button>
+                        <Link href={getWhatsAppUrl('Starter')} target="_blank">
+                            <Button className="w-full h-12 rounded-xl font-bold bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900">Start Free Trial</Button>
+                        </Link>
                     </div>
 
                     {/* Professional Tier (Popular) */}
@@ -59,7 +65,9 @@ export default function PricingPage() {
                             <FeatureItem included>Automated Feedback Surveys</FeatureItem>
                             <FeatureItem included>Basic Analytics Reports</FeatureItem>
                         </ul>
-                        <Button className="w-full h-14 rounded-xl font-black text-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-600/20">Book a Free Demo</Button>
+                        <Link href={getWhatsAppUrl('Professional')} target="_blank">
+                            <Button className="w-full h-14 rounded-xl font-black text-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-600/20">Book a Free Demo</Button>
+                        </Link>
                         <p className="text-[10px] text-center text-slate-400 mt-3">*Subject to Fair Use Policy (5,000 msgs/mo)</p>
                     </div>
 
@@ -79,7 +87,9 @@ export default function PricingPage() {
                             <FeatureItem included>API Access (Rate Limited)</FeatureItem>
                             <FeatureItem included>Priority Email Support</FeatureItem>
                         </ul>
-                        <Button variant="outline" className="w-full h-12 rounded-xl border-2 font-bold">Contact Sales</Button>
+                        <Link href={getWhatsAppUrl('Business')} target="_blank">
+                            <Button variant="outline" className="w-full h-12 rounded-xl border-2 font-bold">Contact Sales</Button>
+                        </Link>
                     </div>
 
                     {/* Enterprise Tier */}
@@ -98,7 +108,9 @@ export default function PricingPage() {
                             <FeatureItem included textClass="text-slate-300">Private Cloud Deployment Option</FeatureItem>
                             <FeatureItem included textClass="text-slate-300">99.99% Uptime SLA</FeatureItem>
                         </ul>
-                        <Button className="w-full h-12 rounded-xl font-bold bg-white text-slate-900 hover:bg-slate-200">Book Architecture Review</Button>
+                        <Link href={getWhatsAppUrl('Enterprise')} target="_blank">
+                            <Button className="w-full h-12 rounded-xl font-bold bg-white text-slate-900 hover:bg-slate-200">Book Architecture Review</Button>
+                        </Link>
                     </div>
                 </div>
             </section>

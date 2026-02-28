@@ -19,12 +19,12 @@ export default function MidSizeHospitalsPage() {
                     Orchestrate multiple departments (OPD, Lab, Radiology) under one unified reception dashboard. Real-time dynamic routing and wait predictions.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
-                    <Link href="/login">
+                    <Link href="https://wa.me/919320201572?text=I%20want%20to%20book%20an%20architecture%20review%20for%20my%20hospital%20network." target="_blank">
                         <Button size="lg" className="h-16 px-10 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg shadow-xl shadow-indigo-600/20">
                             Book Architecture Review
                         </Button>
                     </Link>
-                    <Link href="/pricing">
+                    <Link href="https://wa.me/919320201572?text=I%20want%20to%20compare%20QLink%20Professional%20plans." target="_blank">
                         <Button variant="outline" size="lg" className="h-16 px-10 rounded-full border-2 font-bold text-lg">
                             Compare Professional Plan
                         </Button>
