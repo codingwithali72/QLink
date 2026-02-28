@@ -38,8 +38,8 @@ export default function LoginPage() {
                     <div className="h-20 w-20 bg-indigo-600 rounded-[2rem] flex items-center justify-center font-black text-5xl text-white shadow-2xl shadow-indigo-600/20 border border-white/10 mb-6">
                         Q
                     </div>
-                    <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">Command Center</h1>
-                    <p className="text-slate-500 font-bold uppercase tracking-[0.3em] text-[10px] mt-2">Enterprise Access v2026</p>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Staff Login</h1>
+                    <p className="text-slate-500 text-sm mt-1">Hospital &amp; Clinic Staff Portal</p>
                 </div>
 
                 {/* Login Card */}
@@ -47,13 +47,13 @@ export default function LoginPage() {
                     <form action={handleSubmit} className="space-y-8">
                         <div className="space-y-6">
                             <div className="space-y-3">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Work Identification</label>
+                                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Email Address</label>
                                 <div className="relative group">
                                     <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                                     <Input
                                         name="email"
                                         type="email"
-                                        placeholder="clinical@qlink.com"
+                                        placeholder="you@clinic.com"
                                         required
                                         className="h-14 pl-12 rounded-2xl bg-[#F8F9FA] dark:bg-slate-800/50 border-2 border-transparent focus:border-indigo-500/50 focus:bg-white dark:focus:bg-slate-800 transition-all font-medium"
                                     />
@@ -61,7 +61,7 @@ export default function LoginPage() {
                             </div>
 
                             <div className="space-y-3">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Clearance Pin</label>
+                                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Password</label>
                                 <div className="relative group">
                                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                                     <Input
@@ -86,13 +86,13 @@ export default function LoginPage() {
                             disabled={loading}
                             className="w-full h-16 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg tracking-tight shadow-xl shadow-indigo-600/20 active:scale-95 transition-all group"
                         >
-                            {loading ? <Loader2 className="animate-spin" /> : <>Enter Console <ArrowRight className="ml-3 w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}
+                            {loading ? <Loader2 className="animate-spin" /> : <>Sign In <ArrowRight className="ml-3 w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}
                         </Button>
                     </form>
 
                     <div className="mt-10 pt-8 border-t border-slate-100 dark:border-white/5 text-center">
                         <Link href="/pricing" className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-500 transition-colors">
-                            Upgrade to Enterprise Tier
+                            View Pricing Plans
                         </Link>
                     </div>
                 </div>

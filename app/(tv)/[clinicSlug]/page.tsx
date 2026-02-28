@@ -132,7 +132,7 @@ export default function TVDisplayPage({ params }: { params: { clinicSlug: string
     if (loading) return (
         <div className="h-screen bg-[#020617] flex flex-col items-center justify-center text-white font-sans">
             <Loader2 className="animate-spin text-indigo-500 w-24 h-24 mb-6 opacity-20" />
-            <h1 className="text-xl font-black tracking-[0.5em] text-indigo-300 uppercase animate-pulse">Synchronizing Grid</h1>
+            <h1 className="text-xl font-bold tracking-widest text-indigo-300 uppercase animate-pulse">Loading Queue...</h1>
         </div>
     );
 
