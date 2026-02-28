@@ -504,8 +504,9 @@ export async function getPublicTokenStatus(visitId: string) {
             .select('id')
             .eq('session_id', visit.session_id)
             .eq('status', 'WAITING')
-            .order('is_priority', { ascending: false })
-            .order('token_number', { ascending: true });
+            .order('is_priority', { ascending: false })          // 1. Emergency first
+            .order('registration_complete_time', { ascending: true, nullsFirst: false }) // 2. Arrived before remote
+            .order('token_number', { ascending: true });           // 3. FIFO within same tier
 
         const position = (waitingQueue || []).findIndex(v => v.id === visit.id);
         const tokensAhead = position > 0 ? position : 0;
