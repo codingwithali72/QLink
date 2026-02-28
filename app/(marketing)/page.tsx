@@ -484,6 +484,3 @@ function MessageBubble({ children, from, highlight }: { children: React.ReactNod
     </div>
   )
 }
-function Badge({ children }: { children: React.ReactNode }) {
-  return <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-black uppercase tracking-widest rounded-full">{children}</span>
-}

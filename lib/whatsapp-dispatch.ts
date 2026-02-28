@@ -197,9 +197,6 @@ export async function sendTokenConfirmation(data: TokenConfirmationData): Promis
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://qlink.app';
     const trackingUrl = `${baseUrl}/t/${data.visitId}`;
-    const mapsUrl = data.mapsQuery
-        ? `https://maps.google.com/?q=${encodeURIComponent(data.mapsQuery)}`
-        : null;
 
     return sendWhatsAppUtilityTemplate({
         to: data.phone,

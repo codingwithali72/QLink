@@ -251,7 +251,21 @@ async function sendWhatsAppTemplate(phone: string, templateName: string, variabl
     if (!WABA_ID || !TOKEN) return false;
 
     try {
-        const payload: any = {
+        interface WhatsAppTemplatePayload {
+            messaging_product: string;
+            to: string;
+            type: string;
+            template: {
+                name: string;
+                language: { code: string };
+                components?: {
+                    type: string;
+                    parameters: { type: string; text: string }[];
+                }[];
+            };
+        }
+
+        const payload: WhatsAppTemplatePayload = {
             messaging_product: 'whatsapp',
             to: `91${phone}`,
             type: 'template',

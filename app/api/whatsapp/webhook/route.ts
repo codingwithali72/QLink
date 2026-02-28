@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { successResponse, errorResponse, generateRequestId } from '@/lib/api-response'
-import { sendWhatsAppUtilityTemplate } from '@/lib/whatsapp-dispatch'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'qlink_wa_token'
 const APP_SECRET = process.env.WHATSAPP_APP_SECRET || ''
@@ -719,7 +718,6 @@ async function createClinicalVisitFromWhatsApp(phoneNumber: string, conv: { id: 
     const { data: bizData } = await supabase.from('businesses').select('settings').eq('id', businessId).single();
     const settings = bizData?.settings as { avg_wait_time?: number } | null;
     const avg = settings?.avg_wait_time || 12;
-    const ewt = (aheadCount || 0) * avg;
 
     await supabase.from('whatsapp_conversations').update({
         state: 'ACTIVE_TOKEN',
