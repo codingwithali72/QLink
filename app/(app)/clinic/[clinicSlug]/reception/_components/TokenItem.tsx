@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { XCircle, Phone, MapPinCheck, Clock, UserCheck, Smartphone, AlertTriangle, Activity, ActivitySquare } from "lucide-react";
+import { XCircle, Phone, UserCheck, Smartphone, ActivitySquare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { memo } from "react";
 import { cn } from "@/lib/utils";
@@ -15,9 +15,7 @@ interface TokenItemProps {
     doctorName?: string;
 }
 
-const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
-
-const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArrived, isCallLoading, departmentName, doctorName }: TokenItemProps) {
+export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArrived, isCallLoading, departmentName, doctorName }: TokenItemProps) {
     const isLate = token.status === 'WAITING_LATE';
     const isRemote = token.source === 'DIRECT_WA' || token.source === 'WEB_LINK';
     const isArrived = token.isArrived;

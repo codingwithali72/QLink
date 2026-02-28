@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, SkipForward, Users, AlertOctagon, LogOut, PlayCircle, Plus, RefreshCw, Moon, Sun, Calendar, ChevronDown, ChevronUp, Search, Pencil, AlertTriangle, Activity, ActivitySquare, Smartphone, Zap, UserPlus } from "lucide-react";
+import { Loader2, SkipForward, Users, AlertOctagon, LogOut, PlayCircle, RefreshCw, Moon, Sun, Calendar, ChevronDown, ChevronUp, Search, Pencil, AlertTriangle, Activity, ActivitySquare, Smartphone, Zap, UserPlus, UserCheck, Clock, XCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -825,8 +825,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     <DoctorLoadPanel
                         doctors={doctors || []}
                         tokens={tokens || []}
-                        onNextDoctor={handleNext}
-                        isActionLoading={nextLoading}
                     />
                 </div>
             </div>

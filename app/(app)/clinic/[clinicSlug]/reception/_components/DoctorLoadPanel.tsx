@@ -2,20 +2,16 @@
 
 import { useMemo } from "react";
 import { Doctor, Token } from "@/types/firestore";
-import { Users, UserCheck, Activity, AlertCircle, Clock, Loader2, PlayCircle } from "lucide-react";
+import { Users, UserCheck, Activity, AlertCircle, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 
 interface DoctorLoadPanelProps {
     doctors: Doctor[];
     tokens: Token[];
-    onNextDoctor?: (doctorId: string) => void;
-    isActionLoading?: boolean;
-    className?: string;
 }
 
-export function DoctorLoadPanel({ doctors, tokens, onNextDoctor, isActionLoading, className }: DoctorLoadPanelProps) {
+export function DoctorLoadPanel({ doctors, tokens }: DoctorLoadPanelProps) {
     const statsByDoctor = useMemo(() => {
         return doctors.map(doc => {
             const docTokens = tokens.filter(t => t.doctorId === doc.id);

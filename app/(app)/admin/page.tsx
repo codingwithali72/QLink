@@ -116,10 +116,13 @@ export default function AdminPage() {
     const [clinicMetrics, setClinicMetrics] = useState<ClinicMetrics | null>(null);
     const [clinicMetricsLoading, setClinicMetricsLoading] = useState(false);
 
-    // Phase 4 BI State
-    const [prodBI, setProdBI] = useState<any[]>([]);
-    const [footfallBI, setFootfallBI] = useState<any[]>([]);
-    const [waBI, setWaBI] = useState<any[]>([]);
+    // Phase 4 BI State - typed interfaces to avoid any
+    interface ProdBIRow { doctor_name: string; department_name: string; avg_consultation_mins: number; served_count: number; total_visits: number; }
+    interface FootfallBIRow { avg_wait_mins: number; token_count: number; hour_of_day: number; }
+    interface WaBIRow { [key: string]: string | number; }
+    const [prodBI, setProdBI] = useState<ProdBIRow[]>([]);
+    const [footfallBI, setFootfallBI] = useState<FootfallBIRow[]>([]);
+    const [waBI, setWaBI] = useState<WaBIRow[]>([]);
     const [biLoading, setBILoading] = useState(false);
 
     async function loadClinicMetrics(businessId: string, name: string, limit: number) {

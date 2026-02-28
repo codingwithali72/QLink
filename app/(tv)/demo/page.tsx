@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, Clock, UserRound, Maximize, Activity, ShieldCheck, ArrowRight } from "lucide-react";
+import { Loader2, Clock, UserRound, Maximize, Activity, ShieldCheck } from "lucide-react";
 
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
