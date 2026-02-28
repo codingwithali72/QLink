@@ -4,6 +4,9 @@ import * as Icons from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROICalculator } from "./_components/ROICalculator";
 
+const WHATSAPP_URL = "https://wa.me/919320201572?text=I%20want%20to%20start%20a%20free%20trial%20of%20QLink%20for%20my%20hospital.";
+const SALES_URL = "https://wa.me/919320201572?text=I%20want%20to%20talk%20to%20sales%20about%20QLink%20Enterprise%20solutions.";
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-cloud-dancer dark:bg-[#0B1120] font-sans selection:bg-electric-cyan/30">
@@ -31,7 +34,7 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/login">
+            <Link href={WHATSAPP_URL} target="_blank">
               <Button size="lg" className="w-full sm:w-auto h-16 px-10 text-xl font-black rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xl shadow-indigo-600/30 hover:scale-105 transition-all duration-300">
                 Start Free Trial
               </Button>
@@ -54,7 +57,7 @@ export default function Home() {
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center font-black text-2xl shadow-lg border border-white/10">Q</div>
                     <div>
-                      <div className="font-black text-white text-xl tracking-tighter uppercase leading-none mb-1">DR. ALI CLINIC</div>
+                      <div className="font-black text-white text-xl tracking-tighter uppercase leading-none mb-1 text-left">DR. ALI CLINIC</div>
                       <div className="flex items-center gap-2">
                         <span className="text-indigo-400 font-bold tracking-widest text-[9px] uppercase">Live Orchestration Dashboard</span>
                         <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse"></div>
@@ -68,7 +71,7 @@ export default function Home() {
 
                 <div className="w-full text-center py-6">
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mb-4">Currently Serving</p>
-                  <h2 className="text-[9rem] font-black text-white tracking-tighter leading-none drop-shadow-[0_0_30px_rgba(255,255,255,0.1)] group-hover:scale-110 transition-transform duration-500 tabular-nums">#42</h2>
+                  <h2 className="text-[9.5rem] font-black text-white tracking-tighter leading-none drop-shadow-[0_0_30px_rgba(255,255,255,0.1)] group-hover:scale-110 transition-transform duration-500 tabular-nums">#42</h2>
                   <div className="mt-6 text-2xl font-black text-indigo-300 tracking-tight">Rahul K.</div>
                 </div>
 
@@ -86,7 +89,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 2. Receptionist Command Center Mockup */}
+              {/* 2. Receptionist Command Center Mockup (Production Grade) */}
               <div className="hidden lg:flex flex-col h-full bg-white dark:bg-slate-900 p-8 border-r border-slate-200/50 dark:border-slate-800/50 overflow-hidden relative group/reception">
                 <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-indigo-500/5 to-transparent pointer-events-none"></div>
 
@@ -106,41 +109,66 @@ export default function Home() {
                 </div>
 
                 <div className="space-y-6 text-left">
-                  <div className="p-5 rounded-[2rem] bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800">
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Doctor Real-time Load</span>
-                      <Icons.Activity className="w-4 h-4 text-indigo-500" />
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="flex-1 h-2 bg-emerald-500 rounded-full shadow-[0_0_12px_rgba(16,185,129,0.5)]"></div>
-                      <div className="flex-1 h-2 bg-amber-500 rounded-full shadow-[0_0_12px_rgba(245,158,11,0.5)]"></div>
-                      <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-800 rounded-full"></div>
-                    </div>
+                  {/* Load Monitoring Header */}
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
+                      <Icons.Activity className="w-3.5 h-3.5" /> Load Monitoring
+                    </h3>
+                    <span className="text-[9px] bg-indigo-500/10 dark:bg-indigo-500/20 px-2 py-0.5 rounded-full text-indigo-600 dark:text-indigo-400 font-bold border border-indigo-500/10">
+                      HEATMAP
+                    </span>
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="p-4 rounded-2xl border border-indigo-500/30 bg-indigo-500/5 flex justify-between items-center group/item hover:bg-indigo-500/10 transition-all cursor-pointer">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center font-black text-sm shadow-sm group-hover/item:scale-110 transition-transform">42</div>
+                  {/* Doctor Load Grid */}
+                  <div className="grid grid-cols-1 gap-3">
+                    {/* Dr. Ali Card */}
+                    <div className="relative bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+                      <div className="flex justify-between items-start mb-2">
                         <div>
-                          <div className="text-xs font-black text-slate-900 dark:text-white uppercase leading-none mb-1">Rahul K.</div>
-                          <div className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest flex items-center gap-1">
-                            <Icons.Timer className="w-2 h-2" /> Serving 08:12
-                          </div>
+                          <h4 className="font-bold text-xs text-slate-900 dark:text-white">Dr. Ali</h4>
+                          <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Cardiology</p>
+                        </div>
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px]">
+                        <div className="flex items-center gap-1.5">
+                          <Icons.Users className="w-3 h-3 text-slate-400" />
+                          <span className="font-black text-slate-700 dark:text-slate-300">8</span>
+                          <span className="text-[8px] font-bold text-slate-400 uppercase">Wait</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 border-l border-slate-200 dark:border-slate-800 pl-3">
+                          <Icons.UserCheck className="w-3 h-3 text-indigo-500" />
+                          <span className="font-black text-indigo-600 dark:text-indigo-400">1</span>
+                          <span className="text-[8px] font-bold text-slate-400 uppercase">In</span>
                         </div>
                       </div>
-                      <div className="px-2 py-1 rounded-md bg-indigo-600 text-[8px] font-black text-white uppercase tracking-widest">Active</div>
+                      <div className="mt-3 h-1 w-full bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500 w-[60%]" />
+                      </div>
                     </div>
 
-                    <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex justify-between items-center opacity-60 hover:opacity-100 transition-opacity cursor-pointer">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center font-black text-sm text-slate-400">43</div>
+                    {/* Dr. Sharma Card */}
+                    <div className="relative bg-slate-50 dark:bg-slate-950/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm opacity-60">
+                      <div className="flex justify-between items-start mb-2">
                         <div>
-                          <div className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase leading-none mb-1">Priya S.</div>
-                          <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Waiting • 5m Ahead</div>
+                          <h4 className="font-bold text-xs text-slate-900 dark:text-white">Dr. Sharma</h4>
+                          <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">General OPD</p>
+                        </div>
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px]">
+                        <div className="flex items-center gap-1.5">
+                          <Icons.Users className="w-3 h-3 text-slate-400" />
+                          <span className="font-black text-slate-700 dark:text-slate-300">2</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 border-l border-slate-200 dark:border-slate-800 pl-3">
+                          <Icons.UserCheck className="w-3 h-3 text-indigo-500" />
+                          <span className="font-black text-indigo-600 dark:text-indigo-400">1</span>
                         </div>
                       </div>
-                      <Icons.ChevronRight className="w-4 h-4 text-slate-300" />
+                      <div className="mt-3 h-1 w-full bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 w-[20%]" />
+                      </div>
                     </div>
                   </div>
 
@@ -165,7 +193,7 @@ export default function Home() {
               </div>
 
               {/* 3. WhatsApp Mockup */}
-              <div className="bg-[#EFEAE2] dark:bg-[#0c131d] p-4 relative flex items-center justify-center overflow-hidden">
+              <div className="bg-[#EFEAE2] dark:bg-[#0c131d] p-4 relative flex items-center justify-center overflow-hidden text-left">
                 <div className="absolute inset-0 opacity-[0.05] dark:opacity-[0.02]" style={{ backgroundImage: "url('https://upload.wikimedia.org/wikipedia/commons/5/5e/WhatsApp_icon.png')", backgroundSize: '100px' }}></div>
                 <div className="w-full max-w-[320px] bg-[#EFEAE2] dark:bg-[#0B141A] rounded-[48px] shadow-2xl border-[12px] border-slate-800 dark:border-slate-950 flex flex-col h-full max-h-[580px] relative z-10 overflow-hidden transform hover:rotate-1 hover:scale-[1.02] transition-transform duration-700">
                   {/* WhatsApp Header */}
@@ -176,14 +204,14 @@ export default function Home() {
                         <Icons.Check className="w-2.5 h-2.5 text-white stroke-[4]" />
                       </div>
                     </div>
-                    <div className="min-w-0 text-left">
+                    <div className="min-w-0">
                       <p className="font-bold text-sm leading-tight truncate">QLink Hospital</p>
                       <p className="text-[10px] opacity-80 leading-tight">Verified Business Account</p>
                     </div>
                   </div>
 
                   {/* Messages Context */}
-                  <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto scrollbar-hide py-6 text-left">
+                  <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto scrollbar-hide py-6">
                     <div className="text-center py-2">
                       <span className="bg-[#D1E4F5] dark:bg-[#182229] dark:text-[#8696a0] text-[#54656f] text-[9px] font-bold px-3 py-1 rounded-lg uppercase tracking-widest shadow-sm border border-black/5 dark:border-white/5">Today</span>
                     </div>
@@ -237,7 +265,7 @@ export default function Home() {
       </section>
 
       {/* 3. TRUST BAND & SECURITY */}
-      <section className="relative z-20 -mt-10 mb-20">
+      <section className="relative z-20 -mt-10 mb-20 text-center">
         <div className="max-w-5xl mx-auto px-6">
           <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-3xl border border-white dark:border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-wrap justify-center items-center gap-8 md:gap-16">
             <TrustBadge icon={<Icons.ShieldCheck className="w-5 h-5" />} text="DPDP-Ready Governance" />
@@ -307,7 +335,7 @@ export default function Home() {
               <FeatureListItem>No expensive SMS fees. Unlimited WhatsApp alerts included.</FeatureListItem>
               <FeatureListItem>Interactive Department & Doctor Selection right in the chat.</FeatureListItem>
             </ul>
-            <Link href="https://wa.me/919320201572?text=I%20want%20to%20have%20QLink%20software%20for%20my%20hospital." target="_blank">
+            <Link href={WHATSAPP_URL} target="_blank">
               <Button className="bg-[#25D366] hover:bg-[#1DA851] text-white font-bold h-12 px-8 rounded-full shadow-lg shadow-[#25D366]/20 flex items-center gap-2">
                 <Icons.MessageCircle className="w-5 h-5" /> Try the WhatsApp Demo
               </Button>
@@ -333,7 +361,7 @@ export default function Home() {
                 <span>Use current Reception Laptops</span> <Icons.CheckCircle2 className="text-green-500 w-5 h-5" />
               </li>
             </ul>
-            <Link href="/tv/demo">
+            <Link href="/demo">
               <Button variant="outline" className="w-full h-12 rounded-xl font-bold flex items-center justify-center gap-2 group">
                 <Icons.Monitor className="w-5 h-5 text-indigo-500 group-hover:scale-110 transition-transform" />
                 Launch TV Dashboard Demo
@@ -409,6 +437,7 @@ export default function Home() {
             price="₹1,999"
             desc="Perfect for single-doctor clinics moving off paper registers."
             features={["Unlimited Walk-ins", "Basic Queue Display", "Up to 500 WhatsApp Alerts"]}
+            target={WHATSAPP_URL}
           />
           <PricingCard
             name="Professional"
@@ -416,6 +445,7 @@ export default function Home() {
             desc="The standard for polyclinics. Zero hidden messaging costs."
             features={["Multi-Doctor Routing", "Smart TV Integration", "Unlimited WhatsApp Alerts", "Basic Analytics"]}
             isPopular
+            target={WHATSAPP_URL}
           />
           <PricingCard
             name="Enterprise"
@@ -424,6 +454,7 @@ export default function Home() {
             features={["HIS / EMR Integrations", "Advanced Analytics Heatmaps", "SLA & Dedicated Support", "DPDP Private Instances"]}
             buttonText="Contact Sales"
             buttonVariant="outline"
+            target={SALES_URL}
           />
         </div>
       </section>
@@ -434,10 +465,10 @@ export default function Home() {
           <h2 className="text-4xl md:text-6xl font-black tracking-tighter mb-6">Ready to digitize your front desk?</h2>
           <p className="text-xl text-indigo-100 mb-10 font-medium">Join hundreds of modern clinics saving 10+ hours per week.</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/login">
+            <Link href={WHATSAPP_URL} target="_blank">
               <Button size="lg" className="h-16 px-10 rounded-full bg-white text-indigo-900 hover:bg-slate-100 font-black text-lg shadow-2xl">Start Free Trial Now</Button>
             </Link>
-            <Link href="https://wa.me/919320201572?text=I%20want%20to%20have%20QLink%20software%20for%20my%20hospital." target="_blank">
+            <Link href={SALES_URL} target="_blank">
               <Button size="lg" variant="outline" className="h-16 px-10 rounded-full border-2 border-indigo-400 text-white hover:bg-indigo-800 font-bold text-lg">Talk to Sales</Button>
             </Link>
           </div>
@@ -463,8 +494,8 @@ function StepCard({ step, title, desc, icon }: { step: string, title: string, de
         {icon}
         <div className="absolute -top-3 -right-3 w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-[10px]">{step}</div>
       </div>
-      <h3 className="text-xl font-black text-slate-900 dark:text-white mb-3">{title}</h3>
-      <p className="text-slate-600 dark:text-slate-400 font-medium text-sm leading-relaxed">{desc}</p>
+      <h3 className="text-xl font-black text-slate-900 dark:text-white mb-3 text-left">{title}</h3>
+      <p className="text-slate-600 dark:text-slate-400 font-medium text-sm leading-relaxed text-left">{desc}</p>
     </div>
   )
 }
@@ -500,7 +531,7 @@ function AnalyticsCard({ title, value, trend, color }: { title: string, value: s
   return (
     <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 text-left">
       <p className="text-slate-400 font-bold text-sm uppercase mb-2">{title}</p>
-      <h3 className="text-5xl font-black text-white tracking-tighter mb-4">{value}</h3>
+      <h3 className="text-5xl font-black text-white tracking-tighter mb-4 tabular-nums">{value}</h3>
       <p className={`font-bold text-sm ${color}`}>{trend}</p>
     </div>
   )
@@ -514,25 +545,17 @@ interface PricingCardProps {
   isPopular?: boolean;
   buttonText?: string;
   buttonVariant?: string;
+  target?: string;
 }
 
-function PricingCard({ name, price, desc, features, isPopular, buttonText = "Start Free Trial", buttonVariant = "default" }: PricingCardProps) {
-  const ButtonComp = ({ children, className }: { children: React.ReactNode, className?: string }) => {
-    const variantStr = buttonVariant as "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
-    return (
-      <Link href="/login" className="w-full">
-        <Button className={className} variant={variantStr}>{children}</Button>
-      </Link>
-    );
-  };
-
+function PricingCard({ name, price, desc, features, isPopular, buttonText = "Start Free Trial", buttonVariant = "default", target = WHATSAPP_URL }: PricingCardProps) {
   return (
     <div className={`p-8 rounded-3xl flex flex-col h-full bg-white dark:bg-slate-900 border ${isPopular ? 'border-indigo-500 shadow-2xl shadow-indigo-600/10 scale-105 z-10' : 'border-slate-200 dark:border-slate-800'}`}>
       {isPopular && <div className="bg-indigo-600 text-white text-xs font-black uppercase tracking-widest text-center py-1 -mt-8 -mx-8 mb-8 rounded-t-3xl">Most Popular</div>}
       <h3 className="text-2xl font-black text-slate-900 dark:text-white">{name}</h3>
       <p className="text-slate-500 dark:text-slate-400 text-sm mt-3 h-10">{desc}</p>
       <div className="my-8">
-        <span className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter">{price}</span>
+        <span className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter tabular-nums">{price}</span>
         {price !== "Custom" && <span className="text-slate-500 font-bold">/mo</span>}
       </div>
       <ul className="mb-10 space-y-4 flex-1">
@@ -542,7 +565,14 @@ function PricingCard({ name, price, desc, features, isPopular, buttonText = "Sta
           </li>
         ))}
       </ul>
-      <ButtonComp className="w-full h-14 rounded-xl font-bold text-lg">{buttonText}</ButtonComp>
+      <Link href={target} target="_blank" className="w-full">
+        <Button
+          className={`w-full h-14 rounded-xl font-bold text-lg ${buttonVariant === 'outline' ? 'border-2' : ''}`}
+          variant={buttonVariant as "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"}
+        >
+          {buttonText}
+        </Button>
+      </Link>
     </div>
   )
 }
