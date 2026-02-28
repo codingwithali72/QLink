@@ -67,7 +67,7 @@ async function logAdminAction(
     }
 }
 
-export async function createBusiness(name: string, slug: string, phone: string, email?: string, password?: string, existingUserId?: string) {
+export async function createBusiness(name: string, slug: string, phone: string, email?: string, password?: string, existingUserId?: string, operationMode: 'OPD' | 'HOSPITAL' | 'CLINIC' = 'OPD') {
     if (!await isSuperAdmin()) return { error: "Unauthorized" };
 
     const supabase = createAdminClient();
@@ -119,6 +119,7 @@ export async function createBusiness(name: string, slug: string, phone: string, 
             max_active_tokens: 50,
             daily_message_limit: 300,
             whatsapp_enabled: true,
+            operation_mode: operationMode,
             // DPDP & System limits
             retention_days: Math.max(1, Math.min(90, 365)),
             billing_status: 'ACTIVE',

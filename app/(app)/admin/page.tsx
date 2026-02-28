@@ -137,6 +137,7 @@ export default function AdminPage() {
     const [name, setName] = useState("");
     const [slug, setSlug] = useState("");
     const [phone, setPhone] = useState("");
+    const [operationMode, setOperationMode] = useState<'OPD' | 'HOSPITAL' | 'CLINIC'>('OPD');
     const [linkMode, setLinkMode] = useState<"new" | "existing">("new");
     const [adminEmail, setAdminEmail] = useState("");
     const [adminPassword, setAdminPassword] = useState("");
@@ -227,7 +228,8 @@ export default function AdminPage() {
             phone,
             linkMode === 'new' ? adminEmail : undefined,
             linkMode === 'new' ? adminPassword : undefined,
-            linkMode === 'existing' ? existingUserId : undefined
+            linkMode === 'existing' ? existingUserId : undefined,
+            operationMode
         );
         setActionLoading(false);
 
@@ -239,6 +241,7 @@ export default function AdminPage() {
             setAdminEmail("");
             setAdminPassword("");
             setExistingUserId("");
+            setOperationMode('OPD');
             showToast("Workspace created successfully!");
             fetchStats();
         }
@@ -558,6 +561,34 @@ export default function AdminPage() {
                                             required
                                             className="h-14 bg-slate-50 dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/60 focus-visible:ring-indigo-500 rounded-2xl font-bold text-sm px-5"
                                         />
+                                    </div>
+                                </div>
+
+                                {/* FACILITY TYPE SELECTOR */}
+                                <div className="space-y-3">
+                                    <Label className="text-slate-400 text-[9px] uppercase tracking-[0.3em] font-black pl-1">Facility Type</Label>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {[
+                                            { id: 'OPD', label: 'OPD Clinic', icon: '🏥', desc: 'Single-queue outpatient' },
+                                            { id: 'HOSPITAL', label: 'Multi-Queue Hospital', icon: '🏨', desc: 'Multi-dept. routing' },
+                                            { id: 'CLINIC', label: 'Speciality', icon: '🩺', desc: 'Specialist or lab' },
+                                        ].map((mode) => (
+                                            <button
+                                                key={mode.id}
+                                                type="button"
+                                                onClick={() => setOperationMode(mode.id as 'OPD' | 'HOSPITAL' | 'CLINIC')}
+                                                className={cn(
+                                                    "flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 transition-all duration-300 text-center group/mode",
+                                                    operationMode === mode.id
+                                                        ? "border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/20 scale-105"
+                                                        : "border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 hover:border-indigo-500/30"
+                                                )}
+                                            >
+                                                <span className="text-2xl">{mode.icon}</span>
+                                                <span className={cn("text-[8px] font-black uppercase tracking-widest leading-tight", operationMode === mode.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500')}>{mode.label}</span>
+                                                <span className="text-[7px] text-slate-400 leading-tight hidden group-hover/mode:block">{mode.desc}</span>
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
 
@@ -1038,23 +1069,25 @@ export default function AdminPage() {
             </Dialog>
 
             {/* TOAST DISPLAY */}
-            {toast && (
-                <div className={cn(
-                    "fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] px-6 py-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border backdrop-blur-xl animate-in slide-in-from-bottom-6 duration-500 flex items-center gap-4 min-w-[320px] justify-center",
-                    toast.type === 'success'
-                        ? "bg-emerald-500/90 dark:bg-emerald-600/90 border-emerald-400/30 text-white"
-                        : "bg-rose-500/90 dark:bg-rose-600/90 border-rose-400/30 text-white"
-                )}>
-                    {toast.type === 'success' ? (
-                        <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                            <Activity className="w-3 h-3 text-white" />
-                        </div>
-                    ) : (
-                        <XCircle className="w-5 h-5 text-white" />
-                    )}
-                    <span className="font-extrabold text-sm tracking-tight">{toast.message}</span>
-                </div>
-            )}
-        </div>
+            {
+                toast && (
+                    <div className={cn(
+                        "fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] px-6 py-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border backdrop-blur-xl animate-in slide-in-from-bottom-6 duration-500 flex items-center gap-4 min-w-[320px] justify-center",
+                        toast.type === 'success'
+                            ? "bg-emerald-500/90 dark:bg-emerald-600/90 border-emerald-400/30 text-white"
+                            : "bg-rose-500/90 dark:bg-rose-600/90 border-rose-400/30 text-white"
+                    )}>
+                        {toast.type === 'success' ? (
+                            <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
+                                <Activity className="w-3 h-3 text-white" />
+                            </div>
+                        ) : (
+                            <XCircle className="w-5 h-5 text-white" />
+                        )}
+                        <span className="font-extrabold text-sm tracking-tight">{toast.message}</span>
+                    </div>
+                )
+            }
+        </div >
     );
 }
