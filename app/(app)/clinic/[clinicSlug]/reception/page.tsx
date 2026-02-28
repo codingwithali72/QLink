@@ -611,7 +611,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             </>
                         ) : (
                             <Button onClick={handleStartSession} className="col-span-3 h-24 text-2xl font-black rounded-[3rem] bg-emerald-600 hover:bg-emerald-500 shadow-3xl shadow-emerald-600/40 uppercase tracking-[0.3em] text-white border-t-2 border-white/20 border-b-[12px] border-emerald-800">
-                                Start Today's Queue
+                                Start Today&apos;s Queue
                             </Button>
                         )}
                     </div>
