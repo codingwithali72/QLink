@@ -119,10 +119,8 @@ export default function AdminPage() {
     // Phase 4 BI State - typed interfaces to avoid any
     interface ProdBIRow { doctor_name: string; department_name: string; avg_consultation_mins: number; served_count: number; total_visits: number; }
     interface FootfallBIRow { avg_wait_mins: number; token_count: number; hour_of_day: number; }
-    interface WaBIRow { [key: string]: string | number; }
     const [prodBI, setProdBI] = useState<ProdBIRow[]>([]);
     const [footfallBI, setFootfallBI] = useState<FootfallBIRow[]>([]);
-    const [waBI, setWaBI] = useState<WaBIRow[]>([]);
     const [biLoading, setBILoading] = useState(false);
 
     async function loadClinicMetrics(businessId: string, name: string, limit: number) {
@@ -210,7 +208,7 @@ export default function AdminPage() {
             ]);
             if (!p.error) setProdBI(p.data || []);
             if (!f.error) setFootfallBI(f.data || []);
-            if (!w.error) setWaBI(w.data || []);
+            void w; // WhatsApp BI fetched but not yet rendered
             setBILoading(false);
         };
         fetchBI();
