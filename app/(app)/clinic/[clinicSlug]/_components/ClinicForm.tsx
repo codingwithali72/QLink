@@ -157,7 +157,7 @@ export function ClinicForm({ clinicSlug }: { clinicSlug: string }) {
                 <label htmlFor="consent" className="text-xs text-slate-600 leading-relaxed cursor-pointer">
                     <ShieldCheck className="inline w-3.5 h-3.5 mr-1 text-blue-500 align-middle" />
                     I consent to QLink and this clinic processing my mobile number and name
-                    {' '}solely for queue management, in accordance with the{' '}
+                    {' '}solely for OPD orchestration, in accordance with the{' '}
                     <span className="font-semibold text-slate-800">DPDP Act 2023</span>.
                     My data will be deleted after 30 days.
                 </label>

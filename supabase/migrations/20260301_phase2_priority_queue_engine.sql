@@ -35,11 +35,12 @@ CREATE TABLE IF NOT EXISTS "public"."queue_events" (
     PRIMARY KEY ("id")
 );
 
-CREATE INDEX "idx_queue_events_visit" ON "public"."queue_events" ("visit_id", "created_at" DESC);
-CREATE INDEX "idx_queue_events_clinic_today" ON "public"."queue_events" ("clinic_id", "created_at");
+CREATE INDEX IF NOT EXISTS "idx_queue_events_visit" ON "public"."queue_events" ("visit_id", "created_at" DESC);
+CREATE INDEX IF NOT EXISTS "idx_queue_events_clinic_today" ON "public"."queue_events" ("clinic_id", "created_at");
 
 -- Enable RLS
 ALTER TABLE "public"."queue_events" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Queue events isolated by clinic" ON "public"."queue_events";
 CREATE POLICY "Queue events isolated by clinic" ON "public"."queue_events"
 FOR ALL USING (
     clinic_id IN (SELECT business_id FROM public.staff_users WHERE id = auth.uid())
@@ -66,6 +67,7 @@ CREATE TABLE IF NOT EXISTS "public"."usage_metrics" (
 );
 
 ALTER TABLE "public"."usage_metrics" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Usage metrics isolated by clinic" ON "public"."usage_metrics";
 CREATE POLICY "Usage metrics isolated by clinic" ON "public"."usage_metrics"
 FOR SELECT USING (
     clinic_id IN (SELECT business_id FROM public.staff_users WHERE id = auth.uid())
@@ -88,13 +90,27 @@ CREATE TABLE IF NOT EXISTS "public"."plans" (
     PRIMARY KEY ("id")
 );
 
--- Seed plans
-INSERT INTO "public"."plans" ("name", "daily_token_limit", "daily_message_limit", "max_doctors", "max_branches", "price_inr", "features")
-VALUES
-    ('STARTER',   50,   100,  1,  1, 0,       '["queue_management","whatsapp_basic"]'),
-    ('GROWTH',    500,  2000, 5,  2, 299900,  '["queue_management","whatsapp_utility","multi_doctor","analytics_basic"]'),
-    ('HOSPITAL',  9999, 9999, 50, 10, 0,      '["queue_management","whatsapp_utility","multi_doctor","analytics_advanced","tv_signage","priority_engine","api_access"]')
-ON CONFLICT ("name") DO NOTHING;
+-- Seed plans (Robust to renames)
+DO $$
+DECLARE
+    col_name text;
+BEGIN
+    -- Check which column name exists
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='plans' AND column_name='price_monthly') THEN
+        col_name := 'price_monthly';
+    ELSE
+        col_name := 'price_inr';
+    END IF;
+
+    EXECUTE format('
+        INSERT INTO "public"."plans" ("name", "daily_token_limit", "daily_message_limit", "max_doctors", "max_branches", %I, "features")
+        VALUES
+            (''STARTER'',   50,   100,  1,  1, 0,       ''["queue_management","whatsapp_basic"]''),
+            (''GROWTH'',    500,  2000, 5,  2, 299900,  ''["queue_management","whatsapp_utility","multi_doctor","analytics_basic"]''),
+            (''HOSPITAL'',  9999, 9999, 50, 10, 0,      ''["queue_management","whatsapp_utility","multi_doctor","analytics_advanced","tv_signage","priority_engine","api_access"]'')
+        ON CONFLICT ("name") DO NOTHING
+    ', col_name);
+END $$;
 
 -- =================================================================================
 -- 5. PRIORITY SCORING RPC FUNCTION

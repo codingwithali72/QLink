@@ -338,12 +338,91 @@ export async function getAdminStats() {
 
         execStats.messagesToday = execStats.messagesToday || 0; // The RPC tracks `whatsapp_messages` (inbound), this adds context.
         Object.assign(execStats, { messagesFailedToday: failedMsgs || 0 });
+
+        // Phase 5 Billing: Active Subscriptions total
+        const { count: activeSubs } = await supabase.from('subscriptions')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'ACTIVE');
+
+        Object.assign(execStats, { activeSubscriptions: activeSubs || 0 });
     }
 
     return {
         businesses: businessesWithStats,
         ...execStats
     };
+}
+
+// ─── BI COMMAND CENTER FUNCTIONS (Phase 4 & 5) ──────────────────────────────
+
+/**
+ * Sibtain.md L33: "Provider productivity metrics via comparative horizontal bar charts"
+ */
+export async function getDoctorProductivityBI(clinicId?: string) {
+    if (!await isSuperAdmin()) return { error: "Unauthorized" };
+    const supabase = createAdminClient();
+    let query = supabase.from('v_doctor_productivity').select('*');
+    if (clinicId) query = query.eq('clinic_id', clinicId);
+
+    const { data, error } = await query.order('avg_consultation_mins', { ascending: false });
+    if (error) return { error: error.message };
+    return { data: data || [] };
+}
+
+/**
+ * Sibtain.md L32: "Time-series line graphs ... allowing administrators to predict peak OPD hours"
+ */
+export async function getHourlyFootfallBI(clinicId?: string) {
+    if (!await isSuperAdmin()) return { error: "Unauthorized" };
+    const supabase = createAdminClient();
+    let query = supabase.from('v_hourly_footfall').select('*');
+    if (clinicId) query = query.eq('clinic_id', clinicId);
+
+    // Last 7 days heatmap
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    query = query.gte('visit_date', sevenDaysAgo);
+
+    const { data, error } = await query.order('visit_date', { ascending: false }).order('hour_of_day', { ascending: true });
+    if (error) return { error: error.message };
+    return { data: data || [] };
+}
+
+/**
+ * Sibtain.md WhatsApp Engine: "Template cost tracker, Retry rate monitor"
+ */
+export async function getWhatsAppAnalyticsBI(clinicId?: string) {
+    if (!await isSuperAdmin()) return { error: "Unauthorized" };
+    const supabase = createAdminClient();
+    let query = supabase.from('v_whatsapp_analytics').select('*');
+    if (clinicId) query = query.eq('clinic_id', clinicId);
+
+    const { data, error } = await query.order('log_date', { ascending: false });
+    if (error) return { error: error.message };
+    return { data: data || [] };
+}
+
+/**
+ * Phase 5 Billing: Get billing/usage compliance status for a clinic
+ */
+export async function getClinicBillingStatus(clinicId: string) {
+    if (!await isSuperAdmin()) return { error: "Unauthorized" };
+    const supabase = createAdminClient();
+
+    const { data: sub } = await supabase.from('subscriptions')
+        .select(`
+            *,
+            plans (*)
+        `)
+        .eq('clinic_id', clinicId)
+        .maybeSingle();
+
+    const { data: usage } = await supabase.from('usage_metrics')
+        .select('*')
+        .eq('clinic_id', clinicId)
+        .eq('date', new Date().toISOString().split('T')[0])
+        .maybeSingle();
+
+    return { subscription: sub, usage_today: usage };
 }
 
 // Scalable Global Analytics (Hits aggregated table, no full table live-scans)

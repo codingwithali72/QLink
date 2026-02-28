@@ -56,6 +56,8 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        "cloud-dancer": "hsl(var(--cloud-dancer))",
+        "electric-cyan": "hsl(var(--electric-cyan))",
       },
       borderRadius: {
         lg: "var(--radius)",

@@ -34,3 +34,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# logs and diagnostic files
+*.log
+build_*.txt
+eslint_*.txt
+eslint_*.json
+lint_*.txt
+lint_*.json
+full_build_err_*.txt
+ts_errors*.txt
+functions.txt
+ts.txt
+chaos_results.json
+*.tsbuildinfo

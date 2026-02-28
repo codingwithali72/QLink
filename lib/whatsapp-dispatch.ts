@@ -23,7 +23,7 @@ const WHATSAPP_API_VERSION = 'v22.0';
  */
 function normalizeToE164(phone: string): string | null {
     if (!phone) return null;
-    let clean = phone.replace(/\D/g, '');
+    const clean = phone.replace(/\D/g, '');
     if (clean.length === 10) return `91${clean}`;
     if (clean.length === 12 && clean.startsWith('91')) return clean;
     return null;
@@ -130,8 +130,9 @@ export async function sendWhatsAppUtilityTemplate({
 
         return { success: true, messageId };
 
-    } catch (e: any) {
-        console.error("WhatsApp Dispatch Logic Exception:", e);
+    } catch (e: unknown) {
+        const error = e as Error;
+        console.error("WhatsApp Dispatch Logic Exception:", error);
 
         const { data: logEntry } = await supabase.from('whatsapp_logs').insert({
             clinic_id: clinicId,
@@ -140,7 +141,7 @@ export async function sendWhatsAppUtilityTemplate({
             template_name: templateName,
             payload: payload,
             status: 'failed',
-            error_message: e.message || "Network Timeout"
+            error_message: error.message || "Network Timeout"
         }).select('id').single();
 
         if (logEntry?.id) {
@@ -151,6 +152,70 @@ export async function sendWhatsAppUtilityTemplate({
             });
         }
 
-        return { success: false, error: e.message };
+        return { success: false, error: error.message };
     }
 }
+
+// =================================================================================
+// EWT-POWERED TOKEN CONFIRMATION BUILDER
+// Sibtain.md L138: "The Outbound Payload: the bot sends a message containing the token,
+//   the EWT, a Google Maps link to the clinic, and a unique 'Live Tracking' URL."
+// =================================================================================
+export interface TokenConfirmationData {
+    patientName: string;
+    tokenNumber: string;
+    doctorName: string;
+    departmentName: string;
+    clinicName: string;
+    clinicId: string;
+    visitId: string;
+    phone: string;
+    patientsAhead: number;
+    /** Clinic's actual avg consultation seconds (from departments.avg_consultation_time_seconds) */
+    avgConsultationSeconds: number;
+    /** Google Maps Place ID or coordinate string for the clinic */
+    mapsQuery?: string;
+}
+
+/**
+ * Sends the token confirmation WhatsApp message with:
+ * - Dynamic EWT using EWMA calculation
+ * - Live Tracking URL
+ * - Google Maps link to clinic
+ * - Keyboard-friendly quick reply buttons (STATUS / CANCEL)
+ */
+export async function sendTokenConfirmation(data: TokenConfirmationData): Promise<{ success: boolean; error?: string }> {
+    const { calculateEWT, isCurrentlyPeakHour } = await import('@/lib/ewt');
+
+    const ewt = calculateEWT({
+        patientsAhead: data.patientsAhead,
+        consultationTimeSamples: data.avgConsultationSeconds > 0
+            ? [data.avgConsultationSeconds] // Seed with known avg; grows with real samples
+            : [],
+        isPeakHour: isCurrentlyPeakHour()
+    });
+
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://qlink.app';
+    const trackingUrl = `${baseUrl}/t/${data.visitId}`;
+    const mapsUrl = data.mapsQuery
+        ? `https://maps.google.com/?q=${encodeURIComponent(data.mapsQuery)}`
+        : null;
+
+    return sendWhatsAppUtilityTemplate({
+        to: data.phone,
+        templateName: 'token_confirmed_utility',
+        clinicId: data.clinicId,
+        tokenId: data.visitId,
+        variables: [
+            { type: 'text', text: data.clinicName },              // {{1}} Clinic name
+            { type: 'text', text: data.tokenNumber },             // {{2}} Token #
+            { type: 'text', text: ewt.label },                    // {{3}} EWT label ("~12 mins")
+            { type: 'text', text: String(data.patientsAhead) },   // {{4}} Patients ahead
+            { type: 'text', text: data.doctorName },              // {{5}} Doctor name
+            { type: 'text', text: data.departmentName },          // {{6}} Department
+            { type: 'text', text: trackingUrl },                  // {{7}} Live tracking URL
+            ...(mapsUrl ? [{ type: 'text' as const, text: mapsUrl }] : []), // {{8}} Maps (optional)
+        ]
+    });
+}
+

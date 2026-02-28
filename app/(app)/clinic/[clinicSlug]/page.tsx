@@ -87,7 +87,7 @@ export default async function ClinicLandingPage({ params }: PageProps) {
                                         <ShieldCheck className="w-3.5 h-3.5" /> DPDP Compliant
                                     </h4>
                                     <p className="text-[10px] text-blue-700 leading-relaxed">
-                                        By joining via WhatsApp, you consent to our processing of your phone number solely for queue management. Your data is automatically deleted after 30 days.
+                                        By joining via WhatsApp, you consent to our processing of your phone number solely for OPD orchestration. Your data is automatically deleted after 30 days.
                                     </p>
                                 </div>
                             </div>

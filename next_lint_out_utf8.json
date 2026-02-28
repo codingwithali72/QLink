@@ -1,0 +1,3653 @@
+﻿node.exe : [{"filePath":"C:\\User
+s\\ASUS\\OneDrive\\Desktop\\qless
+\\app\\(app)\\clinic\\[clinicSlug
+]\\t\\[tokenId]\\page.tsx","messa
+ges":[{"ruleId":"react-hooks/exha
+ustive-deps","severity":1,"messag
+e":"React Hook useCallback has 
+an unnecessary dependency: 
+'params.clinicSlug'. Either 
+exclude it or remove the 
+dependency array.","line":68,"col
+umn":8,"nodeType":"ArrayExpressio
+n","endLine":68,"endColumn":54,"s
+uggestions":[{"desc":"Update the 
+dependencies array to be: 
+[params.tokenId, isOffline]","fix
+":{"range":[3261,3307],"text":"[p
+arams.tokenId, isOffline]"}}]}],"
+suppressedMessages":[{"ruleId":"@
+typescript-eslint/no-explicit-any
+","severity":2,"message":"Unexpec
+ted any. Specify a different type
+.","line":25,"column":48,"nodeTyp
+e":"TSAnyKeyword","messageId":"un
+expectedAny","endLine":25,"endCol
+umn":51,"suggestions":[{"messageI
+d":"suggestUnknown","fix":{"range
+":[1232,1235],"text":"unknown"},"
+desc":"Use `unknown` instead, 
+this will force you to 
+explicitly, and safely assert 
+the type is correct."},{"messageI
+d":"suggestNever","fix":{"range":
+[1232,1235],"text":"never"},"desc
+":"Use `never` instead, this is 
+useful when instantiating 
+generic type parameters that you 
+don't need to know the type of."}
+],"suppressions":[{"kind":"direct
+ive","justification":""}]}],"erro
+rCount":0,"fatalErrorCount":0,"wa
+rningCount":1,"fixableErrorCount"
+:0,"fixableWarningCount":0,"sourc
+e":"\"use 
+client\";\r\n\r\nimport { 
+cancelToken, 
+getPublicTokenStatus, 
+submitFeedback } from \"@/app/act
+ions/queue\";\r\nimport { Button 
+} from \"@/components/ui/button\"
+;\r\nimport { Loader2, Share2, 
+XCircle, Clock, Star, Info, 
+ShieldCheck, CheckCircle2 } from 
+\"lucide-react\";\r\nimport { 
+useState, useEffect, 
+useCallback, useRef } from 
+\"react\";\r\n\r\n// Format 
+Helper\r\nconst formatToken = 
+(num: number, isPriority: 
+boolean) => isPriority ? 
+`E-${num}` : 
+`#${num}`;\r\n\r\n// Γ¡É Google 
+Reviews link\r\nconst 
+GOOGLE_REVIEW_URL = \"https://www
+.google.com/search?q=prime+care+c
+linic+mumbai+reviews\";\r\n\r\nex
+port default function 
+TicketPage({ params }: { params: 
+{ clinicSlug: string; tokenId: 
+string } }) {\r\n    const 
+[actionLoading, 
+setActionLoading] = 
+useState(false);\r\n    const 
+[isOffline, setIsOffline] = 
+useState(false);\r\n    const 
+[rating, setRating] = 
+useState(0);\r\n    const 
+[hoverRating, setHoverRating] = 
+useState(0);\r\n    const 
+[feedbackText, setFeedbackText] 
+= useState(\"\");\r\n    const 
+[feedbackSubmitted, 
+setFeedbackSubmitted] = 
+useState(false);\r\n    const 
+[feedbackLoading, 
+setFeedbackLoading] = 
+useState(false);\r\n\r\n    // 
+Polling State\r\n    // 
+eslint-disable-next-line @typescr
+ipt-eslint/no-explicit-any\r\n   
+ const [tokenData, setTokenData] 
+= useState<any>(null);\r\n    
+const [tokensAhead, 
+setTokensAhead] = 
+useState(0);\r\n    const 
+[currentServingDisplay, 
+setCurrentServingDisplay] = 
+useState(\"--\");\r\n    const 
+[loading, setLoading] = 
+useState(true);\r\n    const 
+[syncError, setSyncError] = 
+useState(false);\r\n\r\n    
+const prevTokensAheadRef = 
+useRef<number | null>(null);\r\n 
+   const [queueAlert, 
+setQueueAlert] = useState<{ 
+type: 'fast' | 'next' | 
+'shifted'; msg: string } | 
+null>(null);\r\n\r\n    const 
+fetchStatus = useCallback(async 
+() => {\r\n        if 
+(isOffline) return;\r\n        
+try {\r\n            const res = 
+await getPublicTokenStatus(params
+.tokenId);\r\n            if 
+(res.success && res.data) {\r\n  
+              const newAhead = 
+res.data.tokens_ahead;\r\n       
+         const prev = prevTokensA
+headRef.current;\r\n\r\n         
+       if (prev !== null && 
+res.data.token.status === 
+'WAITING') {\r\n                 
+   const delta = prev - 
+newAhead;\r\n                    
+if (newAhead === 0) {\r\n        
+                setQueueAlert({ 
+type: 'next', msg: '≡ƒöö You are 
+NEXT. Please come to the 
+reception counter now.' });\r\n  
+                      if 
+(navigator?.vibrate) 
+navigator.vibrate([300, 100, 
+300]);\r\n                    } 
+else if (delta >= 3) {\r\n       
+                 setQueueAlert({ 
+type: 'fast', msg: `ΓÜí Queue 
+moved faster than expected. You 
+are now ${newAhead} ahead.` 
+});\r\n                    } 
+else if (delta < 0) {\r\n        
+                setQueueAlert({ 
+type: 'shifted', msg: 'Γä╣∩╕Å A 
+priority case was added. Your 
+position shifted.' });\r\n       
+             }\r\n               
+ }\r\n                
+prevTokensAheadRef.current = 
+newAhead;\r\n\r\n                
+setTokenData(res.data.token);\r\n
+                
+setTokensAhead(newAhead);\r\n    
+            setCurrentServingDisp
+lay(res.data.current_serving);\r\
+n                
+setSyncError(false);\r\n         
+   } else {\r\n                
+setSyncError(true);\r\n          
+  }\r\n        } catch (error) 
+{\r\n            
+console.error(error);\r\n        
+    setSyncError(true);\r\n      
+  } finally {\r\n            
+setLoading(false);\r\n        
+}\r\n    }, [params.tokenId, 
+isOffline, 
+params.clinicSlug]);\r\n\r\n    
+useEffect(() => {\r\n        
+fetchStatus();\r\n        const 
+interval = 
+setInterval(fetchStatus, 
+10000);\r\n        const 
+handleVisibilityChange = () => 
+{\r\n            if 
+(document.visibilityState === 
+'visible') fetchStatus();\r\n    
+    };\r\n        document.addEve
+ntListener('visibilitychange', 
+handleVisibilityChange);\r\n     
+   return () => {\r\n            
+clearInterval(interval);\r\n     
+       document.removeEventListen
+er('visibilitychange', 
+handleVisibilityChange);\r\n     
+   };\r\n    }, 
+[fetchStatus]);\r\n\r\n    
+useEffect(() => {\r\n        
+const handleOnline = () => 
+setIsOffline(false);\r\n        
+const handleOffline = () => 
+setIsOffline(true);\r\n        wi
+ndow.addEventListener('online', 
+handleOnline);\r\n        window.
+addEventListener('offline', 
+handleOffline);\r\n        
+return () => {\r\n            win
+dow.removeEventListener('online',
+ handleOnline);\r\n            wi
+ndow.removeEventListener('offline
+', handleOffline);\r\n        
+};\r\n    }, []);\r\n\r\n    if 
+(loading) {\r\n        return 
+(\r\n            <div 
+className=\"min-h-screen flex 
+flex-col items-center 
+justify-center bg-cloud-dancer 
+dark:bg-[#0B1120]\">\r\n         
+       <Loader2 className=\"w-12 
+h-12 animate-spin 
+text-indigo-600 mb-4 
+opacity-20\" />\r\n              
+  <p className=\"text-sm 
+font-black text-indigo-900/30 
+uppercase 
+tracking-[0.3em]\">Patient 
+Concierge</p>\r\n            
+</div>\r\n        );\r\n    
+}\r\n\r\n    if (syncError || 
+!tokenData) {\r\n        return 
+<div className=\"p-8 text-center 
+mt-10 text-slate-500 font-medium 
+bg-cloud-dancer 
+dark:bg-[#0B1120] 
+min-h-screen\">Ticket session 
+expired or not found.</div>;\r\n 
+   }\r\n\r\n    const 
+handleSubmitFeedback = async 
+(e?: React.FormEvent, 
+submitRating?: number) => {\r\n  
+      if (e) 
+e.preventDefault();\r\n        
+const activeRating = 
+submitRating || rating;\r\n      
+  if (!activeRating) return;\r\n 
+       
+setFeedbackLoading(true);\r\n    
+    await 
+submitFeedback(params.tokenId, 
+activeRating, feedbackText);\r\n 
+       
+setFeedbackLoading(false);\r\n   
+     
+setFeedbackSubmitted(true);\r\n  
+      if (activeRating >= 4) 
+{\r\n            setTimeout(() 
+=> 
+window.open(GOOGLE_REVIEW_URL, 
+\"_blank\"), 800);\r\n        
+}\r\n    };\r\n\r\n    const 
+handleCancel = async () => {\r\n 
+       if (!confirm(\"Are you 
+sure you want to cancel your 
+visit?\")) return;\r\n        
+setActionLoading(true);\r\n      
+  const res = await 
+cancelToken(params.clinicSlug, 
+params.tokenId);\r\n        if 
+(res.error) alert(\"Error: \" + 
+res.error);\r\n        else 
+fetchStatus();\r\n        
+setActionLoading(false);\r\n    
+};\r\n\r\n    const handleShare 
+= async () => {\r\n        if 
+(navigator.share) {\r\n          
+  try {\r\n                await 
+navigator.share({\r\n            
+        title: `QLink Token: ${fo
+rmatToken(tokenData.token_number,
+ tokenData.is_priority)}`,\r\n   
+                 text: `Track my 
+clinical queue position at 
+${params.clinicSlug}`,\r\n       
+             url: 
+window.location.href,\r\n        
+        });\r\n            } 
+catch { /* Fail silent */ }\r\n  
+      } else {\r\n            
+await navigator.clipboard.writeTe
+xt(window.location.href);\r\n    
+        alert(\"Tracking link 
+copied!\");\r\n        }\r\n    
+};\r\n\r\n    const isServing = 
+tokenData.status === 
+\"SERVING\";\r\n    const isDone 
+= tokenData.status === 
+\"SERVED\";\r\n    const 
+isCancelled = tokenData.status 
+=== \"CANCELLED\";\r\n    const 
+isSkipped = tokenData.status === 
+\"SKIPPED\";\r\n    const 
+isPriority = 
+tokenData.is_priority;\r\n\r\n   
+ const minMins = tokensAhead * 
+8;\r\n    const maxMins = 
+tokensAhead * 15;\r\n    let 
+etaText = \"\";\r\n    if 
+(tokensAhead === 0 && 
+!isServing) etaText = \"Next 
+Up\";\r\n    else if (isServing) 
+etaText = \"Inside Now\";\r\n    
+else if (minMins > 90) etaText = 
+`~${Math.round(minMins / 60)}h 
+${minMins % 60}m`;\r\n    else 
+etaText = 
+`${minMins}ΓÇô${maxMins} 
+min`;\r\n\r\n    // Visual 
+Config\r\n    let themeBg = 
+\"bg-indigo-600\";\r\n    let 
+statusLabel = \"In 
+Web-Queue\";\r\n    if 
+(isServing) { themeBg = 
+\"bg-emerald-600\"; statusLabel 
+= \"Now Serving\"; }\r\n    if 
+(isPriority) { themeBg = 
+\"bg-indigo-700\"; statusLabel = 
+\"Priority Case\"; }\r\n    if 
+(isDone) { themeBg = 
+\"bg-slate-900\"; statusLabel = 
+\"Visit Complete\"; }\r\n    if 
+(isCancelled) { themeBg = 
+\"bg-slate-500\"; statusLabel = 
+\"Cancelled\"; }\r\n\r\n    
+return (\r\n        <div 
+className=\"min-h-screen 
+bg-cloud-dancer 
+dark:bg-[#0B1120] font-sans 
+selection:bg-indigo-500/30 flex 
+flex-col items-center p-6 pt-12 
+sm:pt-20\">\r\n\r\n            
+{/* Real-time Status Banner 
+*/}\r\n            {isOffline && 
+(\r\n                <div 
+className=\"fixed top-0 left-0 
+w-full bg-red-600 text-white 
+text-[10px] font-black uppercase 
+tracking-[0.2em] py-2 
+text-center z-50\">\r\n          
+          Offline ΓÇó Sync 
+Suspended\r\n                
+</div>\r\n            )}\r\n\r\n 
+           {queueAlert && (\r\n  
+              <div\r\n           
+         className=\"fixed top-4 
+left-4 right-4 bg-white 
+dark:bg-slate-900 border 
+border-indigo-500/30 p-4 
+rounded-2xl shadow-2xl z-50 
+animate-in slide-in-from-top-10 
+duration-500 flex items-center 
+gap-4 cursor-pointer\"\r\n       
+             onClick={() => 
+setQueueAlert(null)}\r\n         
+       >\r\n                    
+<div className=\"w-10 h-10 
+bg-indigo-500 rounded-xl flex 
+items-center justify-center 
+text-white shrink-0 shadow-lg 
+shadow-indigo-500/20\">\r\n      
+                  <Info 
+className=\"w-6 h-6\" />\r\n     
+               </div>\r\n        
+            <div>\r\n            
+            <p 
+className=\"text-sm font-bold 
+text-slate-900 dark:text-white le
+ading-tight\">{queueAlert.msg}</p
+>\r\n                        <p 
+className=\"text-[10px] 
+text-slate-400 font-bold 
+uppercase tracking-widest 
+mt-1\">Tap to dismiss</p>\r\n    
+                </div>\r\n       
+         </div>\r\n            
+)}\r\n\r\n            {/* THE 
+TOKEN CARD */}\r\n            
+<div className={`w-full max-w-md 
+bg-white dark:bg-slate-900 
+rounded-[3rem] shadow-2xl 
+shadow-indigo-900/10 
+dark:shadow-black/50 
+overflow-hidden transition-all 
+duration-700 ${isServing ? 
+'ring-8 ring-emerald-500/20 
+scale-105' : 
+'scale-100'}`}>\r\n\r\n          
+      {/* Branding & Status 
+Header */}\r\n                
+<div className={`p-10 ${themeBg} 
+text-white transition-colors 
+duration-700 relative 
+overflow-hidden`}>\r\n           
+         <div 
+className=\"absolute -top-10 
+-right-10 w-40 h-40 bg-white/10 
+rounded-full 
+blur-3xl\"></div>\r\n            
+        <div className=\"flex 
+justify-between items-start 
+mb-10 relative z-10\">\r\n       
+                 <div 
+className=\"h-10 w-10 
+bg-white/20 backdrop-blur-md 
+rounded-xl flex items-center 
+justify-center font-black 
+text-xl border border-white/20 
+shadow-inner\">Q</div>\r\n       
+                 <div 
+className=\"flex items-center 
+gap-2 bg-black/20 
+backdrop-blur-md px-3 py-1.5 
+rounded-full text-[10px] 
+font-black uppercase 
+tracking-widest border 
+border-white/10\">\r\n           
+                 <span 
+className=\"w-1.5 h-1.5 
+bg-emerald-400 rounded-full 
+animate-pulse\"></span>\r\n      
+                      Live 
+Sync\r\n                        
+</div>\r\n                    
+</div>\r\n\r\n                   
+ <div className=\"text-center 
+space-y-2 relative z-10\">\r\n   
+                     <p 
+className=\"text-xs font-black 
+uppercase tracking-[0.4em] opacit
+y-60\">{statusLabel}</p>\r\n     
+                   <h1 
+className=\"text-[7rem] 
+font-black tracking-tighter 
+leading-none mb-2 drop-shadow-xl\
+">{formatToken(tokenData.token_nu
+mber, 
+tokenData.is_priority)}</h1>\r\n 
+                       <p 
+className=\"text-sm font-bold 
+opacity-80 backdrop-blur-sm 
+bg-white/10 inline-block px-4 
+py-1 rounded-full border border-w
+hite/10\">{params.clinicSlug}</p>
+\r\n                    
+</div>\r\n                
+</div>\r\n\r\n                
+<div className=\"p-10 bg-white 
+dark:bg-slate-900 
+space-y-10\">\r\n\r\n            
+        {/* Live Counter Info 
+*/}\r\n                    
+{!isDone && !isCancelled && 
+!isSkipped && (\r\n              
+          <div className=\"grid 
+grid-cols-2 gap-6\">\r\n         
+                   <div 
+className=\"text-center 
+group\">\r\n                     
+           <p 
+className=\"text-[10px] 
+font-bold text-slate-400 
+dark:text-slate-500 uppercase 
+tracking-widest 
+mb-2\">Progress</p>\r\n          
+                      <div 
+className=\"text-4xl font-black 
+text-slate-900 dark:text-white 
+tabular-nums 
+group-hover:scale-110 transition-
+transform\">{currentServingDispla
+y}</div>\r\n                     
+           <p 
+className=\"text-[9px] font-bold 
+text-slate-400 uppercase 
+mt-1\">Current</p>\r\n           
+                 </div>\r\n      
+                      <div 
+className=\"text-center 
+group\">\r\n                     
+           <p 
+className=\"text-[10px] 
+font-bold text-slate-400 
+dark:text-slate-500 uppercase 
+tracking-widest 
+mb-2\">Remaining</p>\r\n         
+                       <div 
+className=\"text-4xl font-black 
+text-indigo-600 tabular-nums 
+group-hover:scale-110 transition-
+transform\">{tokensAhead}</div>\r
+\n                               
+ <p className=\"text-[9px] 
+font-bold text-slate-400 
+uppercase mt-1\">{tokensAhead 
+=== 0 ? 'Next' : 
+'Ahead'}</p>\r\n                 
+           </div>\r\n            
+            </div>\r\n           
+         )}\r\n\r\n              
+      {/* Serving Destination 
+*/}\r\n                    
+{isServing && 
+tokenData.room_number && (\r\n   
+                     <div 
+className=\"bg-emerald-50 
+dark:bg-emerald-950/30 border-2 
+border-emerald-100 
+dark:border-emerald-900/50 p-8 
+rounded-[2rem] text-center 
+space-y-3 animate-in fade-in 
+zoom-in duration-500\">\r\n      
+                      
+<CheckCircle2 className=\"w-10 
+h-10 text-emerald-500 mx-auto\" 
+/>\r\n                           
+ <h3 className=\"text-xl 
+font-black text-emerald-900 
+dark:text-emerald-300\">Proceed 
+to Consultation</h3>\r\n         
+                   <div 
+className=\"text-5xl font-black 
+text-emerald-600 
+tracking-tighter uppercase\">{tok
+enData.room_number}</div>\r\n    
+                    </div>\r\n   
+                 )}\r\n\r\n      
+              {/* Wait Time 
+Indicator */}\r\n                
+    {!isDone && !isServing && 
+!isCancelled && (\r\n            
+            <div 
+className=\"bg-slate-50 
+dark:bg-slate-800/10 p-8 
+rounded-[2.5rem] border 
+border-slate-100 
+dark:border-white/5 
+space-y-6\">\r\n                 
+           <div className=\"flex 
+items-center 
+justify-between\">\r\n           
+                     <div 
+className=\"flex items-center 
+gap-3\">\r\n                     
+               <div 
+className=\"w-10 h-10 bg-white 
+dark:bg-slate-800 rounded-full 
+flex items-center justify-center 
+shadow-inner border 
+border-slate-100 
+dark:border-white/5\">\r\n       
+                                 
+<Clock className=\"w-5 h-5 
+text-indigo-500\" />\r\n         
+                           
+</div>\r\n                       
+             <span 
+className=\"text-lg font-black 
+text-slate-900 
+dark:text-white\">Est. Wait 
+Time</span>\r\n                  
+              </div>\r\n         
+                       <div 
+className=\"text-2xl font-black 
+text-indigo-600 tabular-nums\">{e
+taText}</div>\r\n                
+            </div>\r\n           
+                 <div 
+className=\"relative h-2 
+bg-slate-200 dark:bg-slate-800 
+rounded-full 
+overflow-hidden\">\r\n           
+                     <div\r\n    
+                                
+className=\"absolute top-0 
+left-0 h-full bg-indigo-500 
+transition-all 
+duration-1000\"\r\n              
+                      style={{ 
+width: `${Math.max(5, 100 - 
+(tokensAhead * 10))}%` }}\r\n    
+                            
+></div>\r\n                      
+      </div>\r\n                 
+           <p 
+className=\"text-[11px] 
+font-medium text-slate-500 
+dark:text-slate-400 text-center 
+leading-relaxed\">\r\n           
+                     Please stay 
+within clinic vicinity when 
+&quot;Tokens Ahead&quot; is 
+under 5. We will notify you via 
+WhatsApp if the queue moves 
+rapidly.\r\n                     
+       </p>\r\n                  
+      </div>\r\n                 
+   )}\r\n\r\n                    
+{/* COMPLETED: Patient Survey 
+*/}\r\n                    
+{isDone && (\r\n                 
+       <div 
+className=\"text-center 
+space-y-8 py-4\">\r\n            
+                
+{!feedbackSubmitted ? (\r\n      
+                          <>\r\n 
+                                 
+  <div 
+className=\"space-y-2\">\r\n     
+                                 
+  <div className=\"w-20 h-20 
+bg-emerald-50 
+dark:bg-emerald-900/20 
+rounded-full flex items-center 
+justify-center mx-auto 
+mb-6\">\r\n                      
+                      
+<CheckCircle2 className=\"w-10 
+h-10 text-emerald-500\" />\r\n   
+                                 
+    </div>\r\n                   
+                     <h2 
+className=\"text-2xl font-black 
+text-slate-900 
+dark:text-white\">Visit 
+Completed</h2>\r\n               
+                         <p 
+className=\"text-sm font-medium 
+text-slate-500\">How was your 
+experience today?</p>\r\n        
+                            
+</div>\r\n                       
+             <div 
+className=\"flex justify-center 
+gap-2\">\r\n                     
+                   {[1, 2, 3, 4, 
+5].map(s => (\r\n                
+                            
+<button\r\n                      
+                          
+key={s}\r\n                      
+                          
+onClick={() => {\r\n             
+                                 
+      setRating(s);\r\n          
+                                 
+         if (s >= 4) 
+setTimeout(() => 
+handleSubmitFeedback(undefined, 
+s), 400);\r\n                    
+                            
+}}\r\n                           
+                     
+onMouseEnter={() => 
+setHoverRating(s)}\r\n           
+                                 
+    onMouseLeave={() => 
+setHoverRating(0)}\r\n           
+                                 
+    className=\"p-1 
+transition-all active:scale-90 
+hover:scale-125 
+focus:outline-none\"\r\n         
+                                 
+  >\r\n                          
+                      <Star 
+className={`w-10 h-10 ${s <= 
+(hoverRating || rating) ? 
+'fill-yellow-400 
+text-yellow-400' : 
+'text-slate-200 
+dark:text-slate-700'}`} />\r\n   
+                                 
+        </button>\r\n            
+                            
+))}\r\n                          
+          </div>\r\n             
+                       {rating > 
+0 && rating <= 3 && (\r\n        
+                                
+<div className=\"space-y-4 
+animate-in 
+slide-in-from-top-4\">\r\n       
+                                 
+    <textarea\r\n                
+                                
+value={feedbackText}\r\n         
+                                 
+      onChange={e => setFeedbackT
+ext(e.target.value)}\r\n         
+                                 
+      placeholder=\"What can we 
+improve? (Optional)\"\r\n        
+                                 
+       className=\"w-full p-4 
+rounded-2xl bg-slate-50 
+dark:bg-slate-800 border-2 
+border-slate-100 
+dark:border-white/5 text-sm 
+font-medium outline-none 
+focus:border-indigo-500 
+transition-all h-24\"\r\n        
+                                 
+   />\r\n                        
+                    <Button 
+onClick={() => 
+handleSubmitFeedback()} 
+disabled={feedbackLoading} 
+className=\"w-full h-14 
+rounded-2xl bg-slate-900 
+dark:bg-white 
+dark:text-slate-900 
+font-bold\">\r\n                 
+                               
+{feedbackLoading ? <Loader2 
+className=\"animate-spin\" /> : 
+\"Submit Review\"}\r\n           
+                                 
+</Button>\r\n                    
+                    </div>\r\n   
+                                 
+)}\r\n                           
+     </>\r\n                     
+       ) : (\r\n                 
+               <div 
+className=\"space-y-4 animate-in 
+zoom-in\">\r\n                   
+                 <div 
+className=\"text-6xl 
+text-emerald-500\">Γ£¿</div>\r\n 
+                                 
+  <h3 className=\"text-2xl 
+font-black text-slate-900 
+dark:text-white\">Feedback 
+Received!</h3>\r\n               
+                     <p 
+className=\"text-sm font-medium 
+text-slate-500\">Your input 
+helps us improve clinical 
+efficiency.</p>\r\n              
+                  </div>\r\n     
+                       )}\r\n    
+                    </div>\r\n   
+                 )}\r\n\r\n      
+              {/* Primary 
+Actions */}\r\n                  
+  <div className=\"grid 
+grid-cols-2 gap-4\">\r\n         
+               {!isDone && 
+!isCancelled && (\r\n            
+                <Button\r\n      
+                          
+variant=\"outline\"\r\n          
+                      
+onClick={handleCancel}\r\n       
+                         
+disabled={actionLoading}\r\n     
+                           
+className=\"h-14 rounded-2xl 
+border-slate-200 
+dark:border-white/10 
+text-slate-600 
+dark:text-slate-400 font-bold 
+hover:bg-red-50 
+hover:text-red-600 
+hover:border-red-100 
+transition-all\"\r\n             
+               >\r\n             
+                   
+{actionLoading ? <Loader2 
+className=\"animate-spin\" /> : 
+<><XCircle className=\"w-4 h-4 
+mr-2\" /> Cancel</>}\r\n         
+                   </Button>\r\n 
+                       )}\r\n    
+                    <Button\r\n  
+                          
+onClick={handleShare}\r\n        
+                    
+className={`h-14 rounded-2xl 
+font-bold transition-all 
+shadow-xl ${isDone || 
+isCancelled ? 'col-span-2 
+bg-slate-900 dark:bg-white 
+text-white dark:text-slate-900' 
+: 'bg-slate-900 dark:bg-white 
+text-white dark:text-slate-900 
+shadow-slate-900/10'}`}\r\n      
+                  >\r\n          
+                  <Share2 
+className=\"w-4 h-4 mr-2\" /> 
+Share Status\r\n                 
+       </Button>\r\n             
+       </div>\r\n                
+</div>\r\n\r\n                
+{/* Footer Badges */}\r\n        
+        <div className=\"px-10 
+py-6 bg-slate-50 
+dark:bg-slate-950 flex 
+items-center justify-between 
+border-t border-slate-100 
+dark:border-white/5\">\r\n       
+             <div 
+className=\"flex items-center 
+gap-2 text-slate-400 uppercase 
+text-[9px] font-black 
+tracking-widest\">\r\n           
+             <ShieldCheck 
+className=\"w-3 h-3 
+text-emerald-500\" />\r\n        
+                HIPAA 
+Compliant\r\n                    
+</div>\r\n                    
+<div className=\"text-[9px] 
+font-black text-slate-300 
+tracking-[0.2em] 
+uppercase\">Powered by QLink 
+Engine</div>\r\n                
+</div>\r\n            
+</div>\r\n\r\n            {/* 
+Support Attribution */}\r\n      
+      <p className=\"mt-10 
+text-[10px] font-bold 
+text-slate-400 
+dark:text-slate-600 uppercase 
+tracking-[0.5em]\">2026 
+Enterprise Healthcare 
+Solutions</p>\r\n        
+</div>\r\n    );\r\n}\r\n","usedD
+eprecatedRules":[]},{"filePath":"
+C:\\Users\\ASUS\\OneDrive\\Deskto
+p\\qless\\app\\(marketing)\\compa
+re\\virtuaq\\page.tsx","messages"
+:[{"ruleId":"@typescript-eslint/n
+o-unused-vars","severity":2,"mess
+age":"'Zap' is defined but never 
+used.","line":2,"column":33,"node
+Type":"Identifier","messageId":"u
+nusedVar","endLine":2,"endColumn"
+:36,"suggestions":[{"messageId":"
+removeUnusedVar","data":{"varName
+":"Zap"},"fix":{"range":[79,84],"
+text":""},"desc":"Remove unused 
+variable \"Zap\"."}]},{"ruleId":"
+@typescript-eslint/no-unused-vars
+","severity":2,"message":"'Shield
+Check' is defined but never used.
+","line":2,"column":38,"nodeType"
+:"Identifier","messageId":"unused
+Var","endLine":2,"endColumn":49,"
+suggestions":[{"messageId":"remov
+eUnusedVar","data":{"varName":"Sh
+ieldCheck"},"fix":{"range":[84,97
+],"text":""},"desc":"Remove 
+unused variable \"ShieldCheck\"."
+}]}],"suppressedMessages":[],"err
+orCount":2,"fatalErrorCount":0,"w
+arningCount":0,"fixableErrorCount
+":0,"fixableWarningCount":0,"sour
+ce":"/* eslint-disable 
+react/no-unescaped-entities 
+*/\nimport { CheckCircle2, 
+XCircle, Zap, ShieldCheck } from 
+\"lucide-react\";\n\nexport 
+default function 
+CompareVirtuaqPage() {\n    
+return (\n        <div 
+className=\"min-h-screen 
+bg-cloud-dancer 
+dark:bg-[#0B1120] font-sans selec
+tion:bg-electric-cyan/30\">\n    
+        {/* Hero Section */}\n   
+         <section 
+className=\"pt-32 pb-20 px-6 
+text-center max-w-5xl 
+mx-auto\">\n                <div 
+className=\"inline-flex 
+items-center gap-2 px-4 py-2 
+rounded-full bg-slate-50 
+dark:bg-slate-900/30 
+text-slate-700 
+dark:text-slate-400 font-bold 
+text-xs tracking-widest 
+uppercase mb-8\">\n              
+      QLink vs. VirtuaQ\n        
+        </div>\n                
+<h1 className=\"text-5xl 
+md:text-7xl font-black 
+tracking-tighter text-slate-900 
+dark:text-white mb-6 
+leading-[0.95]\">\n              
+      The End of <br />\n        
+            <span className=\"tex
+t-indigo-600\">Hardware 
+Kiosks.</span>\n                
+</h1>\n                <p 
+className=\"text-xl 
+text-slate-600 
+dark:text-slate-400 font-medium 
+max-w-2xl mx-auto mb-10 
+leading-relaxed font-medium\">\n 
+                   VirtuaQ lives 
+in the physical world of kiosks 
+and printers. QLink lives in the 
+digital pocket of every patient. 
+Cut your TCO by 70% by moving to 
+a pure-PWA architecture.\n       
+         </p>\n            
+</section>\n\n            {/* 
+Comparison Highlights */}\n      
+      <section className=\"py-24 
+max-w-7xl mx-auto px-6 grid 
+grid-cols-1 md:grid-cols-2 
+gap-12\">\n                
+<ComparisonCard\n                
+    title=\"QLink\"\n            
+        isWinner\n               
+     features={[\n               
+         \"Hardware Agnostic 
+(Any Device)\",\n                
+        \"Native WhatsApp 
+Dispatch\",\n                    
+    \"Real-time Edge 
+Propagation\",\n                 
+       \"Zero-Maintenance 
+Cloud\"\n                    
+]}\n                />\n         
+       <ComparisonCard\n         
+           title=\"VirtuaQ\"\n   
+                 features={[\n   
+                     \"Hardware 
+Dependent\",\n                   
+     \"Legacy SMS / Local 
+Server\",\n                      
+  \"Slow Sync Speeds\",\n        
+                \"High 
+Maintenance Overhead\"\n         
+           ]}\n                
+/>\n            </section>\n     
+   </div>\n    );\n}\n\nfunction 
+ComparisonCard({ title, 
+features, isWinner }: { title: 
+string, features: string[], 
+isWinner?: boolean }) {\n    
+return (\n        <div 
+className={`p-10 
+rounded-[2.5rem] border 
+${isWinner ? 'bg-white 
+dark:bg-slate-900 
+border-indigo-500 shadow-2xl 
+skew-y-1' : 'bg-slate-100/50 
+dark:bg-slate-900/30 
+border-slate-200 
+dark:border-slate-800 
+-skew-y-1'}`}>\n            <h3 
+className={`text-3xl font-black 
+mb-8 ${isWinner ? 
+'text-indigo-600' : 'text-slate-4
+00'}`}>{title}</h3>\n            
+<ul className=\"space-y-4\">\n   
+             {features.map((f, 
+i) => (\n                    <li 
+key={i} className=\"flex 
+items-center gap-3\">\n          
+              {isWinner ? 
+<CheckCircle2 className=\"w-6 
+h-6 text-electric-cyan\" /> : 
+<XCircle className=\"w-5 h-5 
+text-slate-300\" />}\n           
+             <span 
+className={`font-bold ${isWinner 
+? 'text-slate-900 
+dark:text-white' : 
+'text-slate-500'}`}>{f}</span>\n 
+                   </li>\n       
+         ))}\n            
+</ul>\n        </div>\n    );\n}\
+n","usedDeprecatedRules":[]},{"fi
+lePath":"C:\\Users\\ASUS\\OneDriv
+e\\Desktop\\qless\\app\\(marketin
+g)\\compare\\waitwhile\\page.tsx"
+,"messages":[{"ruleId":"@typescri
+pt-eslint/no-unused-vars","severi
+ty":2,"message":"'ShieldAlert' 
+is defined but never used.","line
+":2,"column":33,"nodeType":"Ident
+ifier","messageId":"unusedVar","e
+ndLine":2,"endColumn":44,"suggest
+ions":[{"messageId":"removeUnused
+Var","data":{"varName":"ShieldAle
+rt"},"fix":{"range":[79,92],"text
+":""},"desc":"Remove unused 
+variable \"ShieldAlert\"."}]},{"r
+uleId":"@typescript-eslint/no-unu
+sed-vars","severity":2,"message":
+"'Globe' is defined but never use
+d.","line":2,"column":46,"nodeTyp
+e":"Identifier","messageId":"unus
+edVar","endLine":2,"endColumn":51
+,"suggestions":[{"messageId":"rem
+oveUnusedVar","data":{"varName":"
+Globe"},"fix":{"range":[92,99],"t
+ext":""},"desc":"Remove unused 
+variable \"Globe\"."}]}],"suppres
+sedMessages":[],"errorCount":2,"f
+atalErrorCount":0,"warningCount":
+0,"fixableErrorCount":0,"fixableW
+arningCount":0,"source":"/* 
+eslint-disable 
+react/no-unescaped-entities 
+*/\nimport { CheckCircle2, 
+XCircle, ShieldAlert, Globe } 
+from \"lucide-react\";\n\nexport 
+default function 
+CompareWaitwhilePage() {\n    
+return (\n        <div 
+className=\"min-h-screen 
+bg-cloud-dancer 
+dark:bg-[#0B1120] font-sans selec
+tion:bg-electric-cyan/30\">\n    
+        {/* Hero Section */}\n   
+         <section 
+className=\"pt-32 pb-20 px-6 
+text-center max-w-5xl 
+mx-auto\">\n                <div 
+className=\"inline-flex 
+items-center gap-2 px-4 py-2 
+rounded-full bg-amber-50 
+dark:bg-amber-900/30 
+text-amber-700 
+dark:text-amber-400 font-bold 
+text-xs tracking-widest 
+uppercase mb-8\">\n              
+      QLink vs. Waitwhile\n      
+          </div>\n               
+ <h1 className=\"text-5xl 
+md:text-7xl font-black 
+tracking-tighter text-slate-900 
+dark:text-white mb-6 
+leading-[0.95]\">\n              
+      Global SaaS vs. <br />\n   
+                 <span className=
+\"text-indigo-600\">Clinical 
+Orchestration.</span>\n          
+      </h1>\n                <p 
+className=\"text-xl 
+text-slate-600 
+dark:text-slate-400 font-medium 
+max-w-2xl mx-auto mb-10 
+leading-relaxed font-medium\">\n 
+                   Waitwhile is 
+great for barbershops. QLink is 
+built for hospital-scale 
+clinical governance. HIPAA, HL7, 
+and DPDP compliance aren&apos;t 
+afterthoughts hereΓÇöthey are 
+the foundation.\n                
+</p>\n            </section>\n\n 
+           {/* Comparison Matrix 
+*/}\n            <section 
+className=\"py-24 max-w-7xl 
+mx-auto px-6 grid grid-cols-1 
+md:grid-cols-2 gap-12\">\n       
+         <ComparisonCard\n       
+             title=\"QLink\"\n   
+                 isWinner\n      
+              features={[\n      
+                  
+\"Medical-Grade Data 
+Residency\",\n                   
+     \"Doctor-Specialization 
+Routing\",\n                     
+   \"No-Show Probability 
+Scorer\",\n                      
+  \"DPDP & HIPAA Hardened\"\n    
+                ]}\n             
+   />\n                
+<ComparisonCard\n                
+    title=\"Waitwhile\"\n        
+            features={[\n        
+                \"General Retail 
+Focus\",\n                       
+ \"Basic Queue Management\",\n   
+                     \"Limited 
+Clinical Metadata\",\n           
+             \"General 
+Compliance Only\"\n              
+      ]}\n                />\n   
+         </section>\n        
+</div>\n    );\n}\n\nfunction 
+ComparisonCard({ title, 
+features, isWinner }: { title: 
+string, features: string[], 
+isWinner?: boolean }) {\n    
+return (\n        <div 
+className={`p-10 
+rounded-[2.5rem] border 
+${isWinner ? 'bg-white 
+dark:bg-slate-900 
+border-indigo-500 shadow-2xl 
+relative' : 'bg-slate-100/50 
+dark:bg-slate-900/30 
+border-slate-200 
+dark:border-slate-800'}`}>\n     
+       {isWinner && <div 
+className=\"absolute -top-4 
+right-10 bg-electric-cyan 
+text-slate-900 px-4 py-1 
+rounded-full text-xs font-black 
+uppercase 
+tracking-widest\">Recommended 
+for Healthcare</div>}\n          
+  <h3 className={`text-3xl 
+font-black mb-8 ${isWinner ? 
+'text-indigo-600' : 'text-slate-4
+00'}`}>{title}</h3>\n            
+<ul className=\"space-y-4\">\n   
+             {features.map((f, 
+i) => (\n                    <li 
+key={i} className=\"flex 
+items-center gap-3\">\n          
+              {isWinner ? 
+<CheckCircle2 className=\"w-6 
+h-6 text-electric-cyan\" /> : 
+<XCircle className=\"w-5 h-5 
+text-slate-300\" />}\n           
+             <span 
+className={`font-bold ${isWinner 
+? 'text-slate-900 
+dark:text-white' : 
+'text-slate-500'}`}>{f}</span>\n 
+                   </li>\n       
+         ))}\n            
+</ul>\n        </div>\n    );\n}\
+n","usedDeprecatedRules":[]},{"fi
+lePath":"C:\\Users\\ASUS\\OneDriv
+e\\Desktop\\qless\\app\\(marketin
+g)\\features\\security\\page.tsx"
+,"messages":[{"ruleId":"@typescri
+pt-eslint/no-unused-vars","severi
+ty":2,"message":"'Link' is 
+defined but never used.","line":2
+,"column":8,"nodeType":"Identifie
+r","messageId":"unusedVar","endLi
+ne":2,"endColumn":12,"suggestions
+":[{"messageId":"removeUnusedImpo
+rtDeclaration","data":{"varName":
+"Link"},"fix":{"range":[49,78],"t
+ext":""},"desc":"Remove unused 
+import declaration."}]},{"ruleId"
+:"@typescript-eslint/no-unused-va
+rs","severity":2,"message":"'Butt
+on' is defined but never used.","
+line":3,"column":10,"nodeType":"I
+dentifier","messageId":"unusedVar
+","endLine":3,"endColumn":16,"sug
+gestions":[{"messageId":"removeUn
+usedImportDeclaration","data":{"v
+arName":"Button"},"fix":{"range":
+[80,128],"text":""},"desc":"Remov
+e unused import declaration."}]},
+{"ruleId":"@typescript-eslint/no-
+unused-vars","severity":2,"messag
+e":"'FileText' is defined but 
+never used.","line":4,"column":29
+,"nodeType":"Identifier","message
+Id":"unusedVar","endLine":4,"endC
+olumn":37,"suggestions":[{"messag
+eId":"removeUnusedVar","data":{"v
+arName":"FileText"},"fix":{"range
+":[156,166],"text":""},"desc":"Re
+move unused variable \"FileText\"
+."}]}],"suppressedMessages":[],"e
+rrorCount":3,"fatalErrorCount":0,
+"warningCount":0,"fixableErrorCou
+nt":0,"fixableWarningCount":0,"so
+urce":"/* eslint-disable 
+react/no-unescaped-entities 
+*/\nimport Link from 
+\"next/link\";\r\nimport { 
+Button } from \"@/components/ui/b
+utton\";\r\nimport { 
+ShieldCheck, Lock, FileText, 
+Database, Key } from 
+\"lucide-react\";\r\n\r\nexport 
+default function SecurityPage() 
+{\r\n    return (\r\n        
+<div className=\"min-h-screen 
+bg-cloud-dancer 
+dark:bg-[#0B1120] font-sans selec
+tion:bg-electric-cyan/30\">\r\n  
+          {/* Hero Section 
+*/}\r\n            <section 
+className=\"pt-32 pb-20 px-6 
+max-w-7xl mx-auto 
+text-center\">\r\n               
+ <div className=\"inline-flex 
+items-center gap-2 px-4 py-2 
+rounded-full bg-slate-900 
+text-white font-bold text-xs 
+uppercase tracking-widest 
+mb-8\">\r\n                    
+<ShieldCheck className=\"w-4 h-4 
+text-electric-cyan\" /> 
+Enterprise-Grade Security\r\n    
+            </div>\r\n           
+     <h1 className=\"text-5xl 
+md:text-7xl font-black 
+tracking-tighter text-slate-900 
+dark:text-white mb-6 
+leading-[0.95]\">\r\n            
+        Clinical Data <br />\r\n 
+                   <span classNam
+e=\"text-indigo-600\">Locked 
+Tight.</span>\r\n                
+</h1>\r\n                <p 
+className=\"text-xl 
+text-slate-600 
+dark:text-slate-400 max-w-3xl 
+mx-auto mb-10 leading-relaxed 
+font-medium\">\r\n               
+     QLink is built on a 
+foundation of zero-trust 
+architecture. We protect 
+sensitive patient health 
+information with multi-layer 
+encryption and rigorous clinical 
+compliance.\r\n                
+</p>\r\n            
+</section>\r\n\r\n            
+{/* Compliance Grid */}\r\n      
+      <section className=\"py-24 
+bg-white dark:bg-slate-900 
+text-center border-y 
+border-slate-200 
+dark:border-slate-800\">\r\n     
+           <div 
+className=\"max-w-7xl mx-auto 
+px-6 grid grid-cols-2 
+md:grid-cols-4 gap-8\">\r\n      
+              <div 
+className=\"p-8 rounded-3xl 
+border border-slate-100 
+dark:border-slate-800 shadow-sm 
+hover:shadow-lg 
+transition-shadow\">\r\n         
+               <h3 
+className=\"text-3xl font-black 
+text-slate-900 dark:text-white 
+mb-2\">SOC 2</h3>\r\n            
+            <p 
+className=\"text-xs font-bold 
+text-slate-400 uppercase 
+tracking-widest 
+leading-relaxed\">Type II 
+Certified</p>\r\n                
+    </div>\r\n                   
+ <div className=\"p-8 
+rounded-3xl border 
+border-slate-100 
+dark:border-slate-800 shadow-sm 
+hover:shadow-lg 
+transition-shadow\">\r\n         
+               <h3 
+className=\"text-3xl font-black 
+text-slate-900 dark:text-white 
+mb-2\">HIPAA</h3>\r\n            
+            <p 
+className=\"text-xs font-bold 
+text-slate-400 uppercase 
+tracking-widest 
+leading-relaxed\">HITECH 
+Ready</p>\r\n                    
+</div>\r\n                    
+<div className=\"p-8 rounded-3xl 
+border border-slate-100 
+dark:border-slate-800 shadow-sm 
+hover:shadow-lg 
+transition-shadow\">\r\n         
+               <h3 
+className=\"text-3xl font-black 
+text-slate-900 dark:text-white 
+mb-2\">GDPR</h3>\r\n             
+           <p 
+className=\"text-xs font-bold 
+text-slate-400 uppercase 
+tracking-widest 
+leading-relaxed\">EU 
+Representative</p>\r\n           
+         </div>\r\n              
+      <div className=\"p-8 
+rounded-3xl border 
+border-slate-100 
+dark:border-slate-800 shadow-sm 
+hover:shadow-lg 
+transition-shadow\">\r\n         
+               <h3 
+className=\"text-3xl font-black 
+text-slate-900 dark:text-white 
+mb-2\">DPDP</h3>\r\n             
+           <p 
+className=\"text-xs font-bold 
+text-slate-400 uppercase 
+tracking-widest 
+leading-relaxed\">India 
+Compliance</p>\r\n               
+     </div>\r\n                
+</div>\r\n            
+</section>\r\n\r\n            
+{/* Technical Moats */}\r\n      
+      <section className=\"py-24 
+max-w-7xl mx-auto px-6 grid 
+grid-cols-1 md:grid-cols-3 
+gap-12\">\r\n                
+<MoatCard icon={<Lock />} 
+title=\"At-Rest Encryption\" 
+desc=\"All patient data is 
+encrypted using AES-256 with 
+rotation-enabled AWS KMS keys.\" 
+/>\r\n                <MoatCard 
+icon={<Database />} 
+title=\"Isolated Persistence\" 
+desc=\"Each tenant operates on a 
+logical row-level isolation, 
+ensuring zero data-cross 
+contagion.\" />\r\n              
+  <MoatCard icon={<Key />} 
+title=\"Advanced RBAC\" 
+desc=\"Granular roles ensure 
+that receptionists, doctors, and 
+auditors only see what they 
+need.\" />\r\n            
+</section>\r\n        </div>\r\n 
+   );\r\n}\r\n\r\nfunction 
+MoatCard({ icon, title, desc }: 
+{ icon: React.ReactNode, title: 
+string, desc: string }) {\r\n    
+return (\r\n        <div 
+className=\"space-y-4\">\r\n     
+       <div className=\"w-12 
+h-12 bg-indigo-50 
+dark:bg-indigo-900/30 
+text-indigo-600 rounded-xl flex 
+items-center justify-center 
+mb-6\">{icon}</div>\r\n          
+  <h3 className=\"text-2xl 
+font-black text-slate-900 dark:te
+xt-white\">{title}</h3>\r\n      
+      <p 
+className=\"text-slate-500 
+dark:text-slate-400 font-medium 
+leading-relaxed\">{desc}</p>\r\n 
+       </div>\r\n    );\r\n}\r\n"
+,"usedDeprecatedRules":[]},{"file
+Path":"C:\\Users\\ASUS\\OneDrive\
+\Desktop\\qless\\app\\(marketing)
+\\legal\\privacy-policy\\page.tsx
+","messages":[{"ruleId":"@typescr
+ipt-eslint/no-unused-vars","sever
+ity":2,"message":"'FileText' is 
+defined but never used.","line":2
+,"column":23,"nodeType":"Identifi
+er","messageId":"unusedVar","endL
+ine":2,"endColumn":31,"suggestion
+s":[{"messageId":"removeUnusedVar
+","data":{"varName":"FileText"},"
+fix":{"range":[69,79],"text":""},
+"desc":"Remove unused variable \"
+FileText\"."}]},{"ruleId":"@types
+cript-eslint/no-unused-vars","sev
+erity":2,"message":"'Lock' is 
+defined but never used.","line":2
+,"column":33,"nodeType":"Identifi
+er","messageId":"unusedVar","endL
+ine":2,"endColumn":37,"suggestion
+s":[{"messageId":"removeUnusedVar
+","data":{"varName":"Lock"},"fix"
+:{"range":[79,85],"text":""},"des
+c":"Remove unused variable \"Lock
+\"."}]}],"suppressedMessages":[],
+"errorCount":2,"fatalErrorCount":
+0,"warningCount":0,"fixableErrorC
+ount":0,"fixableWarningCount":0,"
+source":"/* eslint-disable 
+react/no-unescaped-entities 
+*/\nimport { ShieldCheck, 
+FileText, Lock } from 
+\"lucide-react\";\n\nexport 
+default function 
+PrivacyPolicyPage() {\n    
+return (\n        <div 
+className=\"min-h-screen 
+bg-cloud-dancer 
+dark:bg-[#0B1120] font-sans selec
+tion:bg-electric-cyan/30\">\n    
+        <section 
+className=\"pt-32 pb-20 px-6 
+max-w-4xl mx-auto\">\n           
+     <div className=\"flex 
+items-center gap-3 mb-8\">\n     
+               <div 
+className=\"w-10 h-10 
+bg-indigo-600 rounded-lg flex 
+items-center justify-center 
+text-white\"><ShieldCheck 
+className=\"w-6 h-6\" /></div>\n 
+                   <h1 
+className=\"text-4xl font-black 
+text-slate-900 dark:text-white 
+tracking-tight\">Privacy 
+Policy</h1>\n                
+</div>\n                <div 
+className=\"prose prose-slate 
+dark:prose-invert max-w-none 
+space-y-6 text-slate-600 
+dark:text-slate-400 
+font-medium\">\n                 
+   <p className=\"text-xl 
+text-slate-900 dark:text-white 
+font-bold\">Your privacy is our 
+clinical priority.</p>\n         
+           <p>At QLink, we 
+understand that we handle 
+sensitive health data. This 
+policy outlines how we collect, 
+protect, and use information 
+when you use our OPD 
+orchestration services.</p>\n    
+                <h2 
+className=\"text-2xl font-black 
+text-slate-900 dark:text-white 
+pt-8\">1. Data 
+Minimization</h2>\n              
+      <p>We only collect what is 
+strictly necessary to manage the 
+clinical queue. This includes 
+patient phone numbers for 
+WhatsApp notifications and 
+visit-specific 
+identifiers.</p>\n               
+     <h2 className=\"text-2xl 
+font-black text-slate-900 
+dark:text-white pt-8\">2. 
+Clinical Encryption</h2>\n       
+             <p>All data is 
+encrypted in transit via TLS 1.3 
+and at rest via AES-256. We 
+utilize AWS KMS for secure key 
+management.</p>\n                
+    <h2 className=\"text-2xl 
+font-black text-slate-900 
+dark:text-white pt-8\">3. DPDP & 
+HIPAA Compliance</h2>\n          
+          <p>We are fully 
+aligned with the Digital 
+Personal Data Protection (DPDP) 
+Act of India and maintain 
+HIPAA-ready infrastructure for 
+global healthcare 
+providers.</p>\n                
+</div>\n            </section>\n 
+       </div>\n    );\n}\n","used
+DeprecatedRules":[]},{"filePath":
+"C:\\Users\\ASUS\\OneDrive\\Deskt
+op\\qless\\app\\(marketing)\\lega
+l\\terms-of-service\\page.tsx","m
+essages":[{"ruleId":"@typescript-
+eslint/no-unused-vars","severity"
+:2,"message":"'FileText' is 
+defined but never used.","line":2
+,"column":10,"nodeType":"Identifi
+er","messageId":"unusedVar","endL
+ine":2,"endColumn":18,"suggestion
+s":[{"messageId":"removeUnusedVar
+","data":{"varName":"FileText"},"
+fix":{"range":[58,67],"text":""},
+"desc":"Remove unused variable \"
+FileText\"."}]},{"ruleId":"@types
+cript-eslint/no-unused-vars","sev
+erity":2,"message":"'Shield' is 
+defined but never used.","line":2
+,"column":20,"nodeType":"Identifi
+er","messageId":"unusedVar","endL
+ine":2,"endColumn":26,"suggestion
+s":[{"messageId":"removeUnusedVar
+","data":{"varName":"Shield"},"fi
+x":{"range":[66,74],"text":""},"d
+esc":"Remove unused variable \"Sh
+ield\"."}]}],"suppressedMessages"
+:[],"errorCount":2,"fatalErrorCou
+nt":0,"warningCount":0,"fixableEr
+rorCount":0,"fixableWarningCount"
+:0,"source":"/* eslint-disable 
+react/no-unescaped-entities 
+*/\nimport { FileText, Shield, 
+Scale } from 
+\"lucide-react\";\n\nexport 
+default function 
+TermsOfServicePage() {\n    
+return (\n        <div 
+className=\"min-h-screen 
+bg-cloud-dancer 
+dark:bg-[#0B1120] font-sans selec
+tion:bg-electric-cyan/30\">\n    
+        <section 
+className=\"pt-32 pb-20 px-6 
+max-w-4xl mx-auto\">\n           
+     <div className=\"flex 
+items-center gap-3 mb-8\">\n     
+               <div 
+className=\"w-10 h-10 
+bg-indigo-600 rounded-lg flex 
+items-center justify-center 
+text-white\"><Scale 
+className=\"w-6 h-6\" /></div>\n 
+                   <h1 
+className=\"text-4xl font-black 
+text-slate-900 dark:text-white 
+tracking-tight\">Terms of 
+Service</h1>\n                
+</div>\n                <div 
+className=\"prose prose-slate 
+dark:prose-invert max-w-none 
+space-y-6 text-slate-600 
+dark:text-slate-400 font-medium 
+font-sans\">\n                   
+ <p className=\"text-lg 
+font-bold text-slate-900 
+dark:text-white 
+leading-relaxed\">By using 
+QLink, you agree to our clinical 
+orchestration standards.</p>\n   
+                 <p>These terms 
+govern your use of the QLink 
+platform, including the 
+Dashboard, WhatsApp bot 
+integration, and Digital Signage 
+modules.</p>\n                   
+ <h2 className=\"text-2xl 
+font-black text-slate-900 
+dark:text-white pt-8\">1. 
+Service Level Agreement</h2>\n   
+                 <p>We strive 
+for 99.9% uptime for our core 
+orchestration engine. 
+Maintenance windows are 
+typically scheduled during 
+low-traffic hours and 
+communicated 48 hours in 
+advance.</p>\n                   
+ <h2 className=\"text-2xl 
+font-black text-slate-900 
+dark:text-white pt-8\">2. Fair 
+Use Policy</h2>\n                
+    <p>WhatsApp message volumes 
+are subject to the specific plan 
+limits. Any misuse of the 
+messaging API for marketing 
+outside of clinical queue 
+updates may result in account 
+review.</p>\n                    
+<h2 className=\"text-2xl 
+font-black text-slate-900 
+dark:text-white pt-8\">3. Data 
+Residency</h2>\n                 
+   <p>Customer data is stored in 
+the region specified during 
+setup (defaulting to India-South 
+for local tenants) to ensure 
+compliance with local medical 
+record regulations.</p>\n        
+        </div>\n            
+</section>\n        </div>\n    )
+;\n}\n","usedDeprecatedRules":[]}
+,{"filePath":"C:\\Users\\ASUS\\On
+eDrive\\Desktop\\qless\\app\\(mar
+keting)\\resources\\case-studies\
+\page.tsx","messages":[{"ruleId":
+"@typescript-eslint/no-unused-var
+s","severity":2,"message":"'Trend
+ingUp' is defined but never used.
+","line":2,"column":10,"nodeType"
+:"Identifier","messageId":"unused
+Var","endLine":2,"endColumn":20,"
+suggestions":[{"messageId":"remov
+eUnusedVar","data":{"varName":"Tr
+endingUp"},"fix":{"range":[58,69]
+,"text":""},"desc":"Remove 
+unused variable \"TrendingUp\"."}
+]},{"ruleId":"@typescript-eslint/
+no-unused-vars","severity":2,"mes
+sage":"'Building2' is defined 
+but never used.","line":2,"column
+":22,"nodeType":"Identifier","mes
+sageId":"unusedVar","endLine":2,"
+endColumn":31,"suggestions":[{"me
+ssageId":"removeUnusedVar","data"
+:{"varName":"Building2"},"fix":{"
+range":[68,79],"text":""},"desc":
+"Remove unused variable \"Buildin
+g2\"."}]},{"ruleId":"@typescript-
+eslint/no-unused-vars","severity"
+:2,"message":"'Users' is defined 
+but never used.","line":2,"column
+":33,"nodeType":"Identifier","mes
+sageId":"unusedVar","endLine":2,"
+endColumn":38,"suggestions":[{"me
+ssageId":"removeUnusedImportDecla
+ration","data":{"varName":"Users"
+},"fix":{"range":[49,109],"text":
+""},"desc":"Remove unused import 
+declaration."}]}],"suppressedMess
+ages":[],"errorCount":3,"fatalErr
+orCount":0,"warningCount":0,"fixa
+bleErrorCount":0,"fixableWarningC
+ount":0,"source":"/* 
+eslint-disable 
+react/no-unescaped-entities 
+*/\nimport { TrendingUp, 
+Building2, Users } from 
+\"lucide-react\";\n\nexport 
+default function 
+CaseStudiesPage() {\n    return 
+(\n        <div 
+className=\"min-h-screen 
+bg-cloud-dancer 
+dark:bg-[#0B1120] font-sans selec
+tion:bg-electric-cyan/30\">\n    
+        {/* Hero Section */}\n   
+         <section 
+className=\"pt-32 pb-20 px-6 
+max-w-7xl mx-auto 
+text-center\">\n                
+<h1 className=\"text-5xl 
+md:text-7xl font-black 
+tracking-tighter text-slate-900 
+dark:text-white mb-6 
+leading-[0.95]\">\n              
+      Real Impact. <br />\n      
+              <span className=\"t
+ext-indigo-600\">Hard 
+Numbers.</span>\n                
+</h1>\n                <p 
+className=\"text-xl 
+text-slate-600 
+dark:text-slate-400 font-medium 
+max-w-2xl mx-auto mb-10 
+leading-relaxed\">\n             
+       Explore how leading 
+hospitals and clinics across the 
+globe transformed their patient 
+journey with QLink.\n            
+    </p>\n            
+</section>\n\n            {/* 
+Case Study Cards */}\n           
+ <section className=\"py-24 
+max-w-7xl mx-auto px-6 grid 
+grid-cols-1 md:grid-cols-2 
+gap-8\">\n                
+<CaseStudyCard\n                 
+   title=\"City Care 
+Super-Specialty\"\n              
+      metric=\"42% Reduction in 
+Wait Time\"\n                    
+desc=\"How a 300-bed hospital 
+eliminated lobby chaos by moving 
+95% of token generation to 
+WhatsApp.\"\n                
+/>\n                
+<CaseStudyCard\n                 
+   title=\"Green Valley Family 
+Clinic\"\n                    
+metric=\"Γé╣8.4L Reclaimed 
+Revenue\"\n                    
+desc=\"By reducing no-shows via 
+automated WhatsApp reminders, 
+this single-doctor clinic 
+maximized daily billing.\"\n     
+           />\n            
+</section>\n        </div>\n    
+);\n}\n\nfunction 
+CaseStudyCard({ title, metric, 
+desc }: { title: string, metric: 
+string, desc: string }) {\n    
+return (\n        <div 
+className=\"p-10 
+rounded-[2.5rem] bg-white 
+dark:bg-slate-900/50 border 
+border-slate-200 
+dark:border-slate-800 shadow-xl 
+shadow-indigo-500/5 
+hover:-translate-y-2 
+transition-transform\">\n        
+    <div className=\"inline-flex 
+items-center gap-2 px-3 py-1 
+rounded-full bg-emerald-50 
+dark:bg-emerald-900/30 
+text-emerald-700 
+dark:text-emerald-300 font-bold 
+text-xs uppercase mb-6\">\n      
+          Success Story\n        
+    </div>\n            <h3 
+className=\"text-2xl font-black 
+text-slate-900 dark:text-white 
+mb-2\">{title}</h3>\n            
+<p className=\"text-indigo-600 
+dark:text-indigo-400 font-black 
+text-xl mb-4 
+italic\">{metric}</p>\n          
+  <p className=\"text-slate-600 
+dark:text-slate-400 font-medium 
+leading-relaxed\">{desc}</p>\n   
+     </div>\n    );\n}\n","usedDe
+precatedRules":[]},{"filePath":"C
+:\\Users\\ASUS\\OneDrive\\Desktop
+\\qless\\app\\(tv)\\[clinicSlug]\
+\page.tsx","messages":[{"ruleId":
+"@typescript-eslint/no-unused-var
+s","severity":2,"message":"'_offl
+ineSeconds' is assigned a value 
+but never used.","line":14,"colum
+n":12,"nodeType":"Identifier","me
+ssageId":"unusedVar","endLine":14
+,"endColumn":27}],"suppressedMess
+ages":[],"errorCount":1,"fatalErr
+orCount":0,"warningCount":0,"fixa
+bleErrorCount":0,"fixableWarningC
+ount":0,"source":"\"use 
+client\";\r\n\r\nimport { 
+useClinicRealtime } from \"@/hook
+s/useRealtime\";\r\nimport { 
+Loader2, Clock, UserRound, 
+Maximize, Activity } from 
+\"lucide-react\";\r\nimport { 
+useMemo, useEffect, useState, 
+useRef, useCallback } from 
+\"react\";\r\n\r\n// Format 
+Helper\r\nconst formatToken = 
+(num: number, isPriority: 
+boolean) => isPriority ? 
+`E-${num}` : 
+`#${num}`;\r\n\r\nexport default 
+function TVDisplayPage({ params 
+}: { params: { clinicSlug: 
+string } }) {\r\n    const { 
+session, tokens, doctors, 
+departments, loading, 
+isConnected } = useClinicRealtime
+(params.clinicSlug);\r\n\r\n    
+// Auto-refresh logic on 
+prolonged disconnect\r\n    
+const [_offlineSeconds, 
+setOfflineSeconds] = 
+useState(0);\r\n    useEffect(() 
+=> {\r\n        if (!isConnected 
+&& !loading) {\r\n            
+const interval = setInterval(() 
+=> {\r\n                
+setOfflineSeconds(prev => {\r\n  
+                  if (prev >= 
+60) {\r\n                        
+window.location.reload();\r\n    
+                    return 
+0;\r\n                    }\r\n  
+                  return prev + 
+1;\r\n                });\r\n    
+        }, 1000);\r\n            
+return () => 
+clearInterval(interval);\r\n     
+   } else {\r\n            
+setOfflineSeconds(0);\r\n        
+}\r\n    }, [isConnected, 
+loading]);\r\n\r\n    // Force 
+Dark Mode context for TV\r\n    
+useEffect(() => {\r\n        docu
+ment.documentElement.classList.ad
+d('dark');\r\n        return () 
+=> document.documentElement.class
+List.remove('dark');\r\n    }, 
+[]);\r\n\r\n    const 
+lastServingRef = useRef<string | 
+null>(null);\r\n    const 
+servingToken = useMemo(() => 
+tokens.find(t => t.status === 
+'SERVING'), [tokens]);\r\n    
+const [callAnimation, 
+setCallAnimation] = 
+useState(false);\r\n\r\n    
+const playChime = useCallback(() 
+=> {\r\n        try {\r\n        
+    const ctx = new 
+AudioContext();\r\n            
+const playNote = (freq: number, 
+start: number, duration: number) 
+=> {\r\n                const 
+osc = 
+ctx.createOscillator();\r\n      
+          const gainNode = 
+ctx.createGain();\r\n            
+    osc.connect(gainNode);\r\n   
+             gainNode.connect(ctx
+.destination);\r\n               
+ osc.frequency.setValueAtTime(fre
+q, ctx.currentTime + start);\r\n 
+               gainNode.gain.setV
+alueAtTime(0.3, ctx.currentTime 
++ start);\r\n                gain
+Node.gain.exponentialRampToValueA
+tTime(0.001, ctx.currentTime + 
+start + duration);\r\n           
+     osc.start(ctx.currentTime + 
+start);\r\n                
+osc.stop(ctx.currentTime + start 
++ duration);\r\n            
+};\r\n            playNote(523, 
+0, 0.25); // C5\r\n            
+playNote(659, 0.25, 0.25); // 
+E5\r\n            playNote(784, 
+0.5, 0.5);  // G5\r\n        } 
+catch { /* Audio blocked */ 
+}\r\n    }, []);\r\n\r\n    
+useEffect(() => {\r\n        if 
+(!servingToken) return;\r\n      
+  if (lastServingRef.current !== 
+servingToken.id) {\r\n           
+ lastServingRef.current = 
+servingToken.id;\r\n            
+playChime();\r\n            
+setCallAnimation(true);\r\n      
+      setTimeout(() => 
+setCallAnimation(false), 
+3000);\r\n        }\r\n    }, 
+[servingToken, 
+playChime]);\r\n\r\n    // 
+Auto-hide cursor\r\n    
+useEffect(() => {\r\n        
+document.body.style.cursor = 
+'none';\r\n        return () => 
+{ document.body.style.cursor = 
+''; };\r\n    }, []);\r\n\r\n    
+const toggleFullscreen = 
+useCallback(() => {\r\n        
+if (!document.fullscreenElement) 
+{\r\n            document.documen
+tElement.requestFullscreen();\r\n
+        } else {\r\n            
+document.exitFullscreen();\r\n   
+     }\r\n    }, []);\r\n\r\n    
+const zones = useMemo(() => 
+{\r\n        if (!doctors || 
+doctors.length === 0) {\r\n      
+      const serving = 
+tokens.find(t => t.status === 
+'SERVING');\r\n            const 
+waiting = tokens.filter(t => 
+t.status === 'WAITING').sort((a, 
+b) => a.tokenNumber - 
+b.tokenNumber).slice(0, 5);\r\n  
+          return [{ id: 
+'generic', name: 'Main Queue', 
+subtitle: 'Reception Area', 
+serving, waiting }];\r\n        
+}\r\n\r\n        return 
+doctors.map(doc => {\r\n         
+   const dept = 
+departments.find(d => d.id === 
+doc.department_id);\r\n          
+  const docTokens = 
+tokens.filter(t => t.doctorId 
+=== doc.id || (t.departmentId 
+=== doc.department_id && 
+!t.doctorId));\r\n            
+const serving = docTokens.find(t 
+=> t.status === 'SERVING');\r\n  
+          const waiting = 
+docTokens.filter(t => t.status 
+=== 'WAITING').sort((a, b) => 
+{\r\n                if 
+(a.isPriority && !b.isPriority) 
+return -1;\r\n                if 
+(!a.isPriority && b.isPriority) 
+return 1;\r\n                
+return a.tokenNumber - 
+b.tokenNumber;\r\n            
+}).slice(0, 5);\r\n\r\n          
+  return { id: doc.id, name: 
+`Dr. ${doc.name}`, subtitle: 
+dept?.name || 'Specialist', 
+serving, waiting };\r\n        
+}).filter(z => z.serving || 
+z.waiting.length > 0);\r\n    }, 
+[tokens, doctors, 
+departments]);\r\n\r\n    if 
+(loading) return (\r\n        
+<div className=\"h-screen 
+bg-[#020617] flex flex-col 
+items-center justify-center 
+text-white font-sans\">\r\n      
+      <Loader2 
+className=\"animate-spin 
+text-indigo-500 w-24 h-24 mb-6 
+opacity-20\" />\r\n            
+<h1 className=\"text-xl 
+font-black tracking-[0.5em] 
+text-indigo-300 uppercase 
+animate-pulse\">Synchronizing 
+Grid</h1>\r\n        </div>\r\n  
+  );\r\n\r\n    return (\r\n     
+   <div className=\"h-screen 
+w-screen bg-[#020617] text-white 
+overflow-hidden flex flex-col 
+font-sans selection:bg-indigo-500
+/30\">\r\n            {/* 
+Dynamic Background Glows */}\r\n 
+           <div 
+className=\"absolute top-0 
+left-0 w-full h-full 
+overflow-hidden 
+pointer-events-none -z-10\">\r\n 
+               <div 
+className=\"absolute -top-[20%] 
+-left-[10%] w-[60%] h-[60%] 
+bg-indigo-600/10 blur-[150px] 
+rounded-full\"></div>\r\n        
+        <div 
+className=\"absolute 
+-bottom-[20%] -right-[10%] 
+w-[60%] h-[60%] 
+bg-emerald-600/10 blur-[150px] 
+rounded-full\"></div>\r\n        
+    </div>\r\n\r\n            
+{/* Header: High-End Minimalist 
+*/}\r\n            <header 
+className=\"p-10 flex 
+justify-between items-center 
+border-b border-white/5 
+bg-slate-950/20 
+backdrop-blur-md\">\r\n          
+      <div className=\"flex 
+items-center gap-8\">\r\n        
+            <div 
+className=\"h-20 w-20 
+bg-gradient-to-br 
+from-indigo-600 to-indigo-800 
+rounded-[2rem] flex items-center 
+justify-center font-black 
+text-5xl shadow-2xl 
+shadow-indigo-600/40 border 
+border-white/10\">\r\n           
+             Q\r\n               
+     </div>\r\n                  
+  <div>\r\n                      
+  <h1 className=\"text-5xl 
+font-black tracking-tighter 
+text-white leading-none mb-2\">{p
+arams.clinicSlug.toUpperCase()}</
+h1>\r\n                        
+<div className=\"flex 
+items-center gap-4\">\r\n        
+                    <span 
+className=\"text-indigo-400 
+font-bold tracking-[0.2em] 
+uppercase text-sm\">Live 
+Orchestration 
+Dashboard</span>\r\n             
+               <div 
+className=\"h-1.5 w-1.5 
+rounded-full bg-indigo-500 
+animate-pulse\"></div>\r\n       
+                     <span 
+className=\"text-slate-500 
+font-bold text-sm tabular-nums 
+tracking-widest\">{new Date().toL
+ocaleDateString('en-IN', { 
+weekday: 'long' })}</span>\r\n   
+                     </div>\r\n  
+                  </div>\r\n     
+           </div>\r\n\r\n        
+        <div className=\"flex 
+items-center gap-6\">\r\n        
+            <div 
+className={`px-8 py-3 
+rounded-full border 
+border-white/10 bg-white/5 
+backdrop-blur-3xl flex 
+items-center gap-4 
+transition-all 
+duration-500`}>\r\n              
+          <div className={`w-3 
+h-3 rounded-full 
+${session?.status === 'OPEN' ? 
+'bg-emerald-500 shadow-[0_0_15px_
+rgba(16,185,129,0.5)]' : 
+'bg-red-500 shadow-[0_0_15px_rgba
+(239,68,68,0.5)]'} 
+animate-pulse`} />\r\n           
+             <span 
+className=\"text-2xl font-black 
+tracking-tighter uppercase 
+tabular-nums\">\r\n              
+              {session?.status 
+|| 'OFFLINE'}\r\n                
+        </span>\r\n              
+      </div>\r\n                 
+   <button 
+onClick={toggleFullscreen} 
+className=\"p-4 rounded-2xl 
+bg-white/5 hover:bg-white/10 
+border border-white/10 
+transition-all 
+text-slate-400\">\r\n            
+            <Maximize 
+className=\"w-6 h-6\" />\r\n     
+               </button>\r\n     
+           </div>\r\n            
+</header>\r\n\r\n            {/* 
+Main Content Floor */}\r\n       
+     <div className=\"flex-1 
+flex overflow-hidden\">\r\n      
+          {/* QUEUE GRID */}\r\n 
+               <div 
+className=\"flex-1 p-10 
+overflow-y-auto\">\r\n           
+         {zones.length > 0 ? 
+(\r\n                        
+<div className={`grid gap-10 
+h-full ${zones.length === 1 ? 
+'grid-cols-1' : zones.length <= 
+4 ? 'grid-cols-2' : 
+'grid-cols-3'}`}>\r\n            
+                {zones.map(zone 
+=> (\r\n                         
+       <div key={zone.id} 
+className=\"relative group 
+rounded-[3rem] bg-white/[0.03] 
+border border-white/5 
+backdrop-blur-2xl shadow-2xl 
+overflow-hidden flex flex-col 
+transition-all duration-700 hover
+:border-indigo-500/30\">\r\n     
+                               
+{/* Zone Header Decor */}\r\n    
+                                
+<div className=\"absolute top-0 
+left-0 w-full h-1.5 
+bg-gradient-to-r 
+from-transparent 
+via-indigo-500/50 
+to-transparent\"></div>\r\n\r\n  
+                                 
+ {/* Doctor Identity */}\r\n     
+                               
+<div className=\"p-8 pb-4 flex 
+items-center 
+justify-between\">\r\n           
+                             
+<div className=\"flex 
+items-center gap-6\">\r\n        
+                                 
+   <div className=\"w-16 h-16 
+bg-white/5 rounded-2xl flex 
+items-center justify-center 
+border border-white/5 
+group-hover:scale-110 
+transition-transform 
+duration-500\">\r\n              
+                                 
+ <UserRound className=\"w-8 h-8 
+text-indigo-400\" />\r\n         
+                                 
+  </div>\r\n                     
+                       <div>\r\n 
+                                 
+              <h2 
+className=\"text-3xl font-black t
+racking-tight\">{zone.name}</h2>\
+r\n                              
+                  <p 
+className=\"text-indigo-400 
+font-bold tracking-widest 
+uppercase text-xs 
+mt-1\">{zone.subtitle}</p>\r\n   
+                                 
+        </div>\r\n               
+                         
+</div>\r\n                       
+                 {zone.serving 
+&& (\r\n                         
+                   <div 
+className=\"flex items-center 
+gap-2 px-3 py-1.5 rounded-full 
+bg-emerald-500/10 border 
+border-emerald-500/20 
+text-emerald-400 text-[10px] 
+font-black uppercase 
+tracking-widest\">\r\n           
+                                 
+    <Activity className=\"w-3 
+h-3 animate-pulse\" /> Active 
+Session\r\n                      
+                      </div>\r\n 
+                                 
+      )}\r\n                     
+               </div>\r\n\r\n    
+                                
+<div className=\"flex-1 p-10 
+pt-4 flex flex-col xl:flex-row 
+gap-10 items-center\">\r\n       
+                                 
+{/* Large Serving Display 
+*/}\r\n                          
+              <div 
+className=\"flex-1 text-center 
+w-full\">\r\n                    
+                        <div 
+className=\"text-slate-500 
+font-bold uppercase 
+tracking-[0.3em] text-xs 
+mb-6\">Currently 
+Serving</div>\r\n                
+                            
+{zone.serving ? (\r\n            
+                                 
+   <div 
+className={`transition-all 
+duration-1000 ${callAnimation && 
+zone.serving?.id === 
+servingToken?.id ? 'scale-110 
+blur-0' : 'scale-100'}`}>\r\n    
+                                 
+               <h3 
+className=\"text-[12rem] 
+xl:text-[14rem] leading-none 
+font-black tracking-tighter 
+text-white drop-shadow-[0_0_30px_
+rgba(255,255,255,0.1)]\">\r\n    
+                                 
+                   {formatToken(z
+one.serving.tokenNumber, 
+zone.serving.isPriority)}\r\n    
+                                 
+               </h3>\r\n         
+                                 
+          <div 
+className=\"text-4xl font-bold 
+text-indigo-300 mt-6 
+tracking-tight truncate px-4\">{z
+one.serving.customerName || 
+'Patient'}</div>\r\n             
+                                 
+  </div>\r\n                     
+                       ) : (\r\n 
+                                 
+              <div 
+className=\"opacity-10 
+py-10\">\r\n                     
+                               
+<div className=\"text-[10rem] 
+xl:text-[12rem] leading-none 
+font-black italic\">--</div>\r\n 
+                                 
+                  <p 
+className=\"text-2xl mt-4 
+tracking-[0.5em] uppercase 
+font-black\">IDLE</p>\r\n        
+                                 
+       </div>\r\n                
+                            
+)}\r\n                           
+             </div>\r\n\r\n      
+                                 
+ {/* Dynamic Next List */}\r\n   
+                                 
+    <div className=\"w-full 
+xl:w-[320px] bg-black/40 
+rounded-[2.5rem] p-8 border 
+border-white/5 flex 
+flex-col\">\r\n                  
+                          <h4 
+className=\"text-indigo-400 
+uppercase font-black 
+tracking-[0.2em] mb-6 flex 
+items-center gap-3 
+text-xs\">\r\n                   
+                             
+<Clock className=\"w-4 h-4\" /> 
+Queue Order\r\n                  
+                          
+</h4>\r\n                        
+                    <div 
+className=\"space-y-4\">\r\n     
+                                 
+          {zone.waiting.length > 
+0 ? zone.waiting.map(t => (\r\n  
+                                 
+                 <div key={t.id} 
+className=\"flex justify-between 
+items-center group/item\">\r\n   
+                                 
+                    <div 
+className=\"flex items-center 
+gap-4\">\r\n                     
+                                 
+      <div className={`w-2 h-2 
+rounded-full ${t.isPriority ? 
+'bg-rose-500 shadow-[0_0_10px_rgb
+a(244,63,94,0.5)]' : 
+'bg-slate-700'}`}></div>\r\n     
+                                 
+                      <span 
+className=\"text-slate-500 
+font-bold tabular-nums text-lg\">
+{t.tokenNumber}</span>\r\n       
+                                 
+                </div>\r\n       
+                                 
+                <span 
+className={`font-black 
+tracking-tight text-xl 
+${t.isPriority ? 'text-rose-400' 
+: 'text-slate-200'}`}>\r\n       
+                                 
+                    
+{t.customerName ? 
+t.customerName.split(' ')[0] : 
+'Patient'}\r\n                   
+                                 
+    </span>\r\n                  
+                                 
+ </div>\r\n                      
+                          )) : 
+(\r\n                            
+                        <div 
+className=\"text-center 
+text-slate-700 py-10 font-black 
+tracking-widest text-xs 
+uppercase italic\">No Patients 
+Pending</div>\r\n                
+                                
+)}\r\n                           
+                 </div>\r\n      
+                                 
+ </div>\r\n                      
+              </div>\r\n         
+                       
+</div>\r\n                       
+     ))}\r\n                     
+   </div>\r\n                    
+) : (\r\n                        
+<div className=\"h-full flex 
+flex-col items-center 
+justify-center text-indigo-400 
+opacity-20\">\r\n                
+            <Activity 
+className=\"w-48 h-48 mb-10 
+animate-pulse\" />\r\n           
+                 <h2 
+className=\"text-4xl font-black 
+tracking-[0.5em] 
+uppercase\">Service Mesh 
+Pending</h2>\r\n                 
+       </div>\r\n                
+    )}\r\n                
+</div>\r\n\r\n                
+{/* INFOTAINMENT & STATS */}\r\n 
+               <aside 
+className=\"w-[450px] 
+flex-shrink-0 bg-slate-950/40 
+backdrop-blur-3xl border-l 
+border-white/5 flex flex-col 
+p-10 gap-10\">\r\n               
+     {/* Live Clock Card */}\r\n 
+                   <div 
+className=\"p-10 rounded-[3rem] 
+bg-indigo-600/10 border 
+border-indigo-500/20 text-center 
+relative overflow-hidden 
+group\">\r\n                     
+   <div className=\"absolute 
+top-0 right-0 w-32 h-32 
+bg-indigo-500/10 blur-[50px] 
+-z-10 group-hover:scale-150 
+transition-transform 
+duration-1000\"></div>\r\n       
+                 <LiveClock 
+/>\r\n                    
+</div>\r\n\r\n                   
+ {/* Performance Metrics */}\r\n 
+                   <div 
+className=\"grid grid-cols-2 
+gap-6\">\r\n                     
+   <StatCard label=\"In-Queue\" 
+value={tokens.filter(t => 
+t.status === 'WAITING').length} 
+color=\"text-indigo-400\" />\r\n 
+                       <StatCard 
+label=\"Completed\" 
+value={tokens.filter(t => 
+t.status === 'SERVED').length} 
+color=\"text-emerald-400\" 
+/>\r\n                    
+</div>\r\n\r\n                   
+ {/* Infotainment Carousel 
+*/}\r\n                    <div 
+className=\"flex-1 
+rounded-[3rem] bg-white/[0.02] 
+border border-white/5 p-10 flex 
+flex-col items-center 
+justify-center text-center 
+relative\">\r\n                  
+      <div className=\"absolute 
+top-6 left-1/2 -translate-x-1/2 
+flex items-center gap-2 px-4 
+py-1.5 rounded-full bg-white/5 
+border border-white/5 
+text-[10px] font-black uppercase 
+tracking-widest 
+text-slate-500\">\r\n            
+                Patient 
+Education\r\n                    
+    </div>\r\n                   
+     <InfoCarousel />\r\n        
+            </div>\r\n           
+     </aside>\r\n            
+</div>\r\n\r\n            {/* 
+Global Footer Ribbon */}\r\n     
+       <footer className=\"p-6 
+bg-slate-950 border-t 
+border-white/5 text-center flex 
+justify-between items-center 
+px-12\">\r\n                <div 
+className=\"text-xs font-bold 
+tracking-[0.2em] text-slate-600 
+uppercase\">Mission-Critical 
+Hospital 
+Infrastructure</div>\r\n         
+       <div className=\"flex 
+items-center gap-6\">\r\n        
+            <div 
+className=\"flex items-center 
+gap-2 text-indigo-500/50 
+text-[10px] font-black uppercase 
+tracking-widest\">\r\n           
+             <div 
+className=\"w-1.5 h-1.5 
+rounded-full bg-indigo-500 
+animate-pulse\"></div> 
+End-to-End Encrypted Sync\r\n    
+                </div>\r\n       
+             <span 
+className=\"text-xs font-black te
+xt-white/20\">v2.0.26</span>\r\n 
+               </div>\r\n        
+    </footer>\r\n        
+</div>\r\n    
+);\r\n}\r\n\r\nfunction 
+LiveClock() {\r\n    const 
+[time, setTime] = 
+useState('');\r\n    const 
+[date, setDate] = 
+useState('');\r\n    
+useEffect(() => {\r\n        
+const update = () => {\r\n       
+     const now = new Date();\r\n 
+           setTime(now.toLocaleTi
+meString('en-IN', { hour: 
+'2-digit', minute: '2-digit', 
+second: '2-digit', hour12: true 
+}));\r\n            setDate(now.t
+oLocaleDateString('en-IN', { 
+weekday: 'long', day: 'numeric', 
+month: 'long' }));\r\n        
+};\r\n        update();\r\n      
+  const id = setInterval(update, 
+1000);\r\n        return () => 
+clearInterval(id);\r\n    }, 
+[]);\r\n    return (\r\n        
+<div>\r\n            <div 
+className=\"text-7xl font-black 
+tracking-tighter text-white 
+tabular-nums 
+mb-2\">{time}</div>\r\n          
+  <div 
+className=\"text-indigo-400 
+text-sm font-black uppercase trac
+king-[0.3em]\">{date}</div>\r\n  
+      </div>\r\n    
+);\r\n}\r\n\r\nfunction 
+StatCard({ label, value, color 
+}: { label: string, value: 
+number, color: string }) {\r\n   
+ return (\r\n        <div 
+className=\"bg-white/5 
+rounded-[2rem] p-8 border 
+border-white/5 
+text-center\">\r\n            
+<div className={`text-6xl 
+font-black tracking-tighter mb-2 
+tabular-nums 
+${color}`}>{value}</div>\r\n     
+       <div 
+className=\"text-slate-500 
+text-[10px] font-black uppercase 
+tracking-widest\">{label}</div>\r
+\n        </div>\r\n    
+);\r\n}\r\n\r\nconst TIPS = 
+[\r\n    { icon: '≡ƒ⌐║', title: 
+'Regular Screenings', body: 
+'Annual check-ups are the first 
+line of defense against chronic 
+conditions.' },\r\n    { icon: 
+'≡ƒÆº', title: 'Hydration IQ', 
+body: 'Drinking water improves 
+cognitive focus and renal 
+function in the clinical 
+environment.' },\r\n    { icon: 
+'≡ƒºÿ', title: 'Mental 
+Wellness', body: '5 minutes of 
+clinical mindfulness reduces 
+elevated cortisol levels 
+effectively.' },\r\n    { icon: 
+'≡ƒÑù', title: 'Nutrition 
+First', body: 'Focus on 
+high-fiber, low-sodium diets for 
+optimal cardiovascular 
+performance.' 
+},\r\n];\r\n\r\nfunction 
+InfoCarousel() {\r\n    const 
+[idx, setIdx] = useState(0);\r\n 
+   const [visible, setVisible] = 
+useState(true);\r\n    
+useEffect(() => {\r\n        
+const interval = setInterval(() 
+=> {\r\n            
+setVisible(false);\r\n           
+ setTimeout(() => {\r\n          
+      setIdx(prev => (prev + 1) 
+% TIPS.length);\r\n              
+  setVisible(true);\r\n          
+  }, 800);\r\n        }, 
+12000);\r\n        return () => 
+clearInterval(interval);\r\n    
+}, []);\r\n    const tip = 
+TIPS[idx];\r\n    return (\r\n   
+     <div 
+className={`transition-all 
+duration-1000 ${visible ? 
+'opacity-100 translate-y-0 
+blur-0' : 'opacity-0 
+translate-y-8 blur-lg'}`}>\r\n   
+         <div 
+className=\"text-[7rem] mb-10 dro
+p-shadow-2xl\">{tip.icon}</div>\r
+\n            <h3 
+className=\"text-3xl font-black 
+text-white mb-6 tracking-tight\">
+{tip.title}</h3>\r\n            
+<p className=\"text-slate-400 
+text-xl font-medium 
+leading-relaxed max-w-sm 
+mx-auto\">{tip.body}</p>\r\n     
+   </div>\r\n    );\r\n}\r\n\r\n"
+,"usedDeprecatedRules":[]},{"file
+Path":"C:\\Users\\ASUS\\OneDrive\
+\Desktop\\qless\\app\\actions\\qu
+eue.ts","messages":[{"ruleId":"@t
+ypescript-eslint/no-unused-vars",
+"severity":2,"message":"'queueWha
+tsAppMessage' is defined but 
+never used.","line":7,"column":10
+,"nodeType":"Identifier","message
+Id":"unusedVar","endLine":7,"endC
+olumn":30,"suggestions":[{"messag
+eId":"removeUnusedImportDeclarati
+on","data":{"varName":"queueWhats
+AppMessage"},"fix":{"range":[218,
+272],"text":""},"desc":"Remove 
+unused import declaration."}]},{"
+ruleId":"@typescript-eslint/no-un
+used-vars","severity":2,"message"
+:"'sendWhatsAppUtilityTemplate' 
+is defined but never used.","line
+":11,"column":10,"nodeType":"Iden
+tifier","messageId":"unusedVar","
+endLine":11,"endColumn":37,"sugge
+stions":[{"messageId":"removeUnus
+edImportDeclaration","data":{"var
+Name":"sendWhatsAppUtilityTemplat
+e"},"fix":{"range":[450,520],"tex
+t":""},"desc":"Remove unused 
+import declaration."}]}],"suppres
+sedMessages":[{"ruleId":"@typescr
+ipt-eslint/no-explicit-any","seve
+rity":2,"message":"Unexpected 
+any. Specify a different type.","
+line":83,"column":70,"nodeType":"
+TSAnyKeyword","messageId":"unexpe
+ctedAny","endLine":83,"endColumn"
+:73,"suggestions":[{"messageId":"
+suggestUnknown","fix":{"range":[2
+910,2913],"text":"unknown"},"desc
+":"Use `unknown` instead, this 
+will force you to explicitly, 
+and safely assert the type is cor
+rect."},{"messageId":"suggestNeve
+r","fix":{"range":[2910,2913],"te
+xt":"never"},"desc":"Use `never` 
+instead, this is useful when 
+instantiating generic type 
+parameters that you don't need 
+to know the type of."}],"suppress
+ions":[{"kind":"directive","justi
+fication":""}]}],"errorCount":2,"
+fatalErrorCount":0,"warningCount"
+:0,"fixableErrorCount":0,"fixable
+WarningCount":0,"source":"\"use 
+server\";\r\n\r\nimport { 
+createClient } from \"@/lib/supab
+ase/server\";\r\nimport { 
+createAdminClient } from \"@/lib/
+supabase/admin\";\r\nimport { 
+revalidatePath } from 
+\"next/cache\";\r\nimport { 
+headers } from 
+\"next/headers\";\r\nimport { 
+queueWhatsAppMessage } from 
+\"@/lib/whatsapp\";\r\nimport { 
+normalizeIndianPhone } from 
+\"@/lib/phone\";\r\nimport { 
+encryptPhone, hashPhone, 
+decryptPhone } from 
+\"@/lib/crypto\";\r\nimport { 
+checkRateLimit } from 
+\"@/lib/rate-limit\";\r\nimport 
+{ sendWhatsAppUtilityTemplate } 
+from \"@/lib/whatsapp-dispatch\";
+\r\n\r\n\r\n\r\n// --- HELPERS 
+---\r\n\r\nasync function 
+getAuthenticatedUser() {\r\n    
+const supabase = 
+createClient();\r\n    const { 
+data: { user } } = await 
+supabase.auth.getUser();\r\n    
+return user;\r\n}\r\n\r\n// DPDP 
+MULTI-TENANT ISOLATION FIX\r\n// 
+Exploit: Auth users could pass 
+any clinicSlug to modify queues 
+they don't own.\r\n// Fix: 
+Strictly verify that the 
+authenticated user belongs to 
+the target business_id\r\nasync 
+function 
+verifyClinicAccess(businessId: 
+string): Promise<boolean> {\r\n  
+  const user = await 
+getAuthenticatedUser();\r\n    
+if (!user) return false;\r\n\r\n 
+   // Super Admin bypass\r\n    
+if (user.email === 
+process.env.ADMIN_EMAIL) return 
+true;\r\n\r\n    const supabase 
+= createAdminClient();\r\n    
+const { data: staff } = await 
+supabase\r\n        
+.from('staff_users')\r\n        
+.select('id')\r\n        
+.eq('id', user.id)\r\n        
+.eq('business_id', 
+businessId)\r\n        
+.maybeSingle();\r\n\r\n    
+return 
+!!staff;\r\n}\r\n\r\nasync 
+function getBusinessBySlug(slug: 
+string) {\r\n    const supabase 
+= createAdminClient();\r\n    
+const { data, error } = await sup
+abase.from('businesses').select('
+id, name, settings, is_active, 
+deleted_at').eq('slug', 
+slug).single();\r\n    if (error 
+|| !data) return null;\r\n    if 
+(data.deleted_at) throw new 
+Error(\"Clinic not found\");\r\n 
+   // Billing bypass protection: 
+suspended clinics cannot perform 
+any queue operations\r\n    if 
+(!data.is_active) throw new 
+Error(\"Clinic temporarily 
+disabled\");\r\n    return 
+data;\r\n}\r\n\r\nexport async 
+function getBusinessId(slug: 
+string) {\r\n    const business 
+= await 
+getBusinessBySlug(slug);\r\n    
+return business?.id || 
+null;\r\n}\r\n\r\nimport { 
+getClinicDate } from 
+\"@/lib/date\";\r\n\r\n// 
+eslint-disable-next-line @typescr
+ipt-eslint/no-explicit-any\r\nasy
+nc function 
+getActiveSession(businessId: 
+string) {\r\n    const supabase 
+= createAdminClient();\r\n    
+const today = 
+getClinicDate();\r\n\r\n    
+const { data, error } = await 
+supabase\r\n        
+.from('sessions')\r\n        
+.select('*')\r\n        
+.eq('business_id', 
+businessId)\r\n        
+.eq('date', today)\r\n        
+.in('status', ['OPEN', 
+'PAUSED'])\r\n        
+.order('created_at', { 
+ascending: false })\r\n        
+.limit(1)\r\n        
+.maybeSingle();\r\n\r\n    if 
+(error) {\r\n        console.erro
+r('[getActiveSession] Supabase 
+error:', 
+JSON.stringify(error));\r\n    
+}\r\n    return 
+data;\r\n}\r\n\r\n// 
+eslint-disable-next-line @typescr
+ipt-eslint/no-explicit-any\r\nasy
+nc function logAudit(businessId: 
+string, action: string, details: 
+any = {}) {\r\n    try {\r\n     
+   const user = await 
+getAuthenticatedUser();\r\n      
+  // If no user (e.g. public QR 
+join), we log staff_id as 
+null\r\n        const supabase = 
+createAdminClient();\r\n        
+await supabase.from('audit_logs')
+.insert({\r\n            
+business_id: businessId,\r\n     
+       staff_id: user?.id || 
+null,\r\n            action,\r\n 
+           details\r\n        
+});\r\n    } catch (e) {\r\n     
+   console.error(\"Audit Log 
+Error:\", e);\r\n    
+}\r\n}\r\n\r\n// --- ACTIONS 
+---\r\n\r\n// 1. START SESSION 
+(New)\r\nexport async function 
+startSession(clinicSlug: string) 
+{\r\n    const supabase = 
+createAdminClient();\r\n    try 
+{\r\n        const user = await 
+getAuthenticatedUser();\r\n      
+  if (!user) return { error: 
+\"Unauthorized\" };\r\n\r\n      
+  const business = await getBusin
+essBySlug(clinicSlug);\r\n       
+ if (!business) return { error: 
+\"Clinic not found\" };\r\n\r\n  
+      // RBAC: Only staff from 
+this clinic can start its 
+session\r\n        if (!await 
+verifyClinicAccess(business.id)) 
+return { error: \"Unauthorized: 
+You do not have access to this 
+clinic.\" };\r\n\r\n        
+const today = 
+getClinicDate();\r\n\r\n        
+// Check if session exists\r\n   
+     const { data: existing } = 
+await supabase.from('sessions').s
+elect('id').eq('business_id', 
+business.id).eq('date', 
+today).maybeSingle();\r\n\r\n    
+    if (existing) {\r\n          
+  // Re-open if closed\r\n       
+     await supabase.from('session
+s').update({ status: 'OPEN' 
+}).eq('id', existing.id);\r\n    
+    } else {\r\n            // 
+Create new\r\n            const 
+{ error } = await supabase.from('
+sessions').insert({\r\n          
+      business_id: 
+business.id,\r\n                
+date: today,\r\n                
+status: 'OPEN'\r\n            
+});\r\n            if (error) 
+throw error;\r\n        
+}\r\n\r\n        // Use the new 
+standard security audit log\r\n  
+      await supabase.from('securi
+ty_audit_logs').insert({\r\n     
+       clinic_id: 
+business.id,\r\n            
+actor_id: user.id,\r\n           
+ action_type: 
+'SESSION_START',\r\n            
+table_name: 'sessions'\r\n       
+ });\r\n\r\n        revalidatePat
+h(`/${clinicSlug}`);\r\n        
+return { success: true };\r\n    
+} catch (e) {\r\n        return 
+{ error: (e as Error).message 
+};\r\n    }\r\n}\r\n\r\n// 2. 
+CREATE CLINICAL VISIT (NABH & 
+DPDP COMPLIANT)\r\nexport type 
+TokenResponse =\r\n    | { 
+success: true; token: { id: 
+string; token_number: number } 
+}\r\n    | { success: false; 
+error: string; is_duplicate?: 
+boolean; limit_reached?: 
+boolean; existing_token_id?: 
+string };\r\n\r\nexport async 
+function createToken(\r\n    
+clinicSlug: string,\r\n    
+phone: string,\r\n    name: 
+string = \"\",\r\n    
+isPriority: boolean = false,\r\n 
+   visitType: string = 
+'OPD',\r\n    departmentId: 
+string | null = null,\r\n    
+doctorId: string | null = 
+null\r\n): 
+Promise<TokenResponse> {\r\n    
+if (!clinicSlug) return { 
+success: false, error: \"Missing 
+clinic slug\" };\r\n\r\n    
+const supabase = 
+createAdminClient();\r\n    
+const user = await 
+getAuthenticatedUser();\r\n    
+const actualStaffId = user?.id 
+|| null;\r\n\r\n    if 
+(actualStaffId) {\r\n        
+const business = await getBusines
+sBySlug(clinicSlug);\r\n        
+if (business) {\r\n            
+const hasAccess = await verifyCli
+nicAccess(business.id);\r\n      
+      if (!hasAccess) return { 
+success: false, error: 
+\"Unauthorized: Missing 
+privilege for this clinic.\" 
+};\r\n        }\r\n    }\r\n\r\n 
+   // Rate Limiting for Public 
+Intake\r\n    if 
+(!actualStaffId) {\r\n        
+const ip = 
+headers().get('x-forwarded-for') 
+|| headers().get('x-real-ip') || 
+'unknown-ip';\r\n        const 
+rateLimit = checkRateLimit(ip, 
+5, 2 * 60 * 1000);\r\n        if 
+(!rateLimit.success) return { 
+success: false, error: \"Too 
+many requests. Please wait a 
+moment.\" };\r\n    }\r\n\r\n    
+if (!actualStaffId) isPriority = 
+false;\r\n\r\n    const safeName 
+= name.trim().substring(0, 
+50).replace(/<[^>]*>?/gm, 
+'');\r\n    const cleanPhone = no
+rmalizeIndianPhone(phone);\r\n\r\
+n    if (!cleanPhone && 
+!isPriority) return { success: 
+false, error: \"Valid 10-digit 
+Indian mobile number required\" 
+};\r\n\r\n    try {\r\n        
+const business = await getBusines
+sBySlug(clinicSlug);\r\n        
+if (!business) return { success: 
+false, error: \"Clinic not 
+found\" };\r\n\r\n        // 
+PHASE 5: USAGE CAP & 
+SUBSCRIPTION CHECK\r\n        
+const { data: usageCheck, error: 
+usageErr } = await supabase.rpc('
+rpc_check_usage_cap', {\r\n      
+      p_clinic_id: 
+business.id\r\n        
+});\r\n\r\n        if (usageErr) 
+{\r\n            
+console.error('[createToken] 
+Usage cap check error:', 
+usageErr);\r\n        } else if 
+(usageCheck && !(usageCheck as { 
+allowed: boolean }).allowed) 
+{\r\n            return {\r\n    
+            success: false,\r\n  
+              error: (usageCheck 
+as { reason?: string }).reason 
+|| \"Usage limit reached or 
+account suspended.\",\r\n        
+        limit_reached: true\r\n  
+          };\r\n        
+}\r\n\r\n        const session = 
+await getActiveSession(business.i
+d);\r\n        if (!session) 
+return { success: false, error: 
+\"Queue is CLOSED.\" };\r\n\r\n  
+      // Encryption path 
+(DPDP)\r\n        let 
+phoneEncrypted: string | null = 
+null;\r\n        let phoneHash: 
+string | null = null;\r\n        
+if (cleanPhone) {\r\n            
+try {\r\n                
+phoneEncrypted = 
+encryptPhone(cleanPhone);\r\n    
+            phoneHash = 
+hashPhone(cleanPhone);\r\n       
+     } catch (e) {\r\n           
+     
+console.error('[createToken] 
+Encryption fallback:', e);\r\n   
+         }\r\n        }\r\n\r\n  
+      // CALL CLINICAL RPC 
+(Phase 12)\r\n        const { 
+data, error } = await supabase.rp
+c('rpc_create_clinical_visit', 
+{\r\n            p_clinic_id: 
+business.id,\r\n            
+p_session_id: session.id,\r\n    
+        p_patient_name: safeName 
+|| \"Guest\",\r\n            
+p_patient_phone: phoneEncrypted 
+? null : cleanPhone,\r\n         
+   p_phone_encrypted: 
+phoneEncrypted,\r\n            
+p_phone_hash: phoneHash,\r\n     
+       p_department_id: 
+departmentId,\r\n            
+p_requested_doctor_id: 
+doctorId,\r\n            
+p_visit_type: visitType,\r\n     
+       p_is_priority: 
+isPriority,\r\n            
+p_staff_id: actualStaffId,\r\n   
+         p_source: actualStaffId 
+? 'RECEPTIONIST' : 'QR'\r\n      
+  });\r\n\r\n        if (error) 
+throw error;\r\n        const 
+result = data as {\r\n           
+ success: boolean;\r\n           
+ visit_id?: string;\r\n          
+  token_number?: number;\r\n     
+       error?: string;\r\n       
+     is_duplicate?: boolean;\r\n 
+           limit_reached?: 
+boolean\r\n        };\r\n\r\n    
+    if (!result.success) {\r\n   
+         return {\r\n            
+    success: false,\r\n          
+      error: result.error || 
+'Failed to create token',\r\n    
+            is_duplicate: 
+result.is_duplicate,\r\n         
+       limit_reached: 
+result.limit_reached,\r\n        
+        existing_token_id: 
+result.visit_id\r\n            
+};\r\n        }\r\n\r\n        
+const visit = { id: 
+result.visit_id!, token_number: 
+result.token_number! };\r\n\r\n  
+      // Async WhatsApp Alert 
+(Phase 13: Upgraded EWT-Aware 
+Dispatch)\r\n        if 
+(cleanPhone && typeof cleanPhone 
+=== 'string' && visit.id) {\r\n  
+          const { 
+sendTokenConfirmation } = await i
+mport(\"@/lib/whatsapp-dispatch\"
+);\r\n\r\n            // Get 
+patients ahead for EWT 
+calculation\r\n            const 
+{ count: aheadCount } = await 
+supabase\r\n                
+.from('clinical_visits')\r\n     
+           .select('*', { count: 
+'exact', head: true })\r\n       
+         .eq('session_id', 
+session.id)\r\n                
+.eq('status', 'WAITING')\r\n     
+           .lt('token_number', 
+visit.token_number);\r\n\r\n     
+       // Fetch department avg 
+consultation time for EWT 
+samples\r\n            const { 
+data: dept } = await 
+supabase\r\n                
+.from('departments')\r\n         
+       .select('avg_consultation_
+time_seconds')\r\n               
+ .eq('id', departmentId || 
+'')\r\n                
+.maybeSingle();\r\n\r\n          
+  sendTokenConfirmation({\r\n    
+            patientName: 
+safeName || \"Guest\",\r\n       
+         tokenNumber: 
+(isPriority ? 
+`E-${visit.token_number}` : 
+`#${visit.token_number}`),\r\n   
+             doctorName: 
+\"Doctor\", // This would 
+ideally come from the doctor 
+object if selected\r\n           
+     departmentName: \"OPD\", // 
+This would ideally come from the 
+department object if 
+selected\r\n                
+clinicName: business.name,\r\n   
+             clinicId: 
+business.id,\r\n                
+visitId: visit.id,\r\n           
+     phone: cleanPhone,\r\n      
+          patientsAhead: 
+aheadCount || 0,\r\n             
+   avgConsultationSeconds: dept?.
+avg_consultation_time_seconds || 
+600, // default 10 mins\r\n      
+          mapsQuery: 
+business.name // placeholder for 
+maps\r\n            }).catch(err 
+=> console.error(\"Async 
+WhatsApp Dispatch Error:\", 
+err));\r\n        }\r\n\r\n      
+  revalidatePath(`/${clinicSlug}`
+);\r\n        return { success: 
+true, token: visit };\r\n    } 
+catch (e) {\r\n        
+console.error(\"Clinical Intake 
+Error:\", e);\r\n        return 
+{ success: false, error: (e as 
+Error).message };\r\n    
+}\r\n}\r\n\r\n// SUBMIT 
+FEEDBACK\r\nexport async 
+function submitFeedback(visitId: 
+string, rating: number, 
+feedbackText: string = \"\") 
+{\r\n    if (!visitId || 
+!rating) return { error: 
+\"Missing data\" };\r\n    try 
+{\r\n        const supabase = 
+createAdminClient();\r\n        
+const { error } = await 
+supabase\r\n            
+.from('clinical_visits')\r\n     
+       .update({ rating: rating 
+as never, feedback: feedbackText 
+|| null } as never)\r\n          
+  .eq('id', visitId);\r\n        
+if (error) throw error;\r\n      
+  return { success: true };\r\n  
+  } catch (e) {\r\n        
+console.error(\"Feedback 
+Error:\", e);\r\n        return 
+{ error: (e as Error).message 
+};\r\n    }\r\n}\r\n\r\n// 
+PATIENT SELF-CANCEL\r\nexport 
+async function 
+patientCancelToken(clinicSlug: 
+string, visitId: string, phone: 
+string) {\r\n    if (!clinicSlug 
+|| !visitId || !phone) return { 
+error: \"Missing required 
+fields\" };\r\n\r\n    const 
+cleanPhone = 
+normalizeIndianPhone(phone);\r\n 
+   if (!cleanPhone) return { 
+error: \"Valid 10-digit Indian 
+mobile number required\" 
+};\r\n\r\n    try {\r\n        
+const supabase = 
+createAdminClient();\r\n        
+const business = await getBusines
+sBySlug(clinicSlug);\r\n        
+if (!business) return { error: 
+\"Clinic not found\" };\r\n\r\n  
+      const { data: visit, 
+error: visitErr } = await 
+supabase\r\n            
+.from('clinical_visits')\r\n     
+       .select('id, status, 
+patient_id, clinic_id')\r\n      
+      .eq('id', visitId)\r\n     
+       .eq('clinic_id', 
+business.id)\r\n            
+.maybeSingle();\r\n        if 
+(visitErr) throw 
+visitErr;\r\n\r\n        if 
+(!visit) return { error: \"Visit 
+not found\" };\r\n        if 
+(visit.status !== 'WAITING' && 
+visit.status !== 
+'TRIAGE_PENDING') return { 
+error: \"Cannot cancel an active 
+or completed visit.\" };\r\n\r\n 
+       const { data: patient } = 
+await supabase\r\n            
+.from('patients')\r\n            
+.select('phone_hash, phone')\r\n 
+           .eq('id', 
+visit.patient_id)\r\n            
+.single();\r\n\r\n        let 
+phoneMatches = false;\r\n        
+if (patient?.phone_hash) {\r\n   
+         phoneMatches = 
+hashPhone(cleanPhone) === 
+patient.phone_hash;\r\n        } 
+else if (patient?.phone) {\r\n   
+         phoneMatches = 
+patient.phone === 
+cleanPhone;\r\n        }\r\n\r\n 
+       if (!phoneMatches) return 
+{ error: \"Phone number does not 
+match this visit.\" };\r\n\r\n   
+     const { error: cancelError 
+} = await supabase\r\n           
+ .from('clinical_visits')\r\n    
+        .update({ status: 
+'CANCELLED', previous_status: 
+visit.status })\r\n            
+.eq('id', visitId);\r\n\r\n      
+  if (cancelError) throw 
+cancelError;\r\n\r\n        
+await supabase.from('security_aud
+it_logs').insert({\r\n           
+ clinic_id: business.id,\r\n     
+       action_type: 
+'PATIENT_SELF_CANCEL',\r\n       
+     table_name: 
+'clinical_visits',\r\n           
+ record_id: visitId\r\n        
+});\r\n\r\n        return { 
+success: true };\r\n    } catch 
+(e) {\r\n        
+console.error(\"Patient Cancel 
+Error:\", e);\r\n        return 
+{ error: (e as Error).message 
+};\r\n    
+}\r\n}\r\n\r\n\r\n\r\n// B4 FIX: 
+Edit token patient name / phone 
+after creation\r\nexport async 
+function updateToken(clinicSlug: 
+string, tokenId: string, name: 
+string, phone: string) {\r\n    
+if (!tokenId || !clinicSlug) 
+return { error: \"Missing data\" 
+};\r\n\r\n    // Only strictly 
+validate if phone is provided as 
+this form might just be updating 
+name\r\n    const cleanPhone = 
+phone ? 
+normalizeIndianPhone(phone) : 
+null;\r\n    if (phone && 
+!cleanPhone) return { error: 
+\"Valid 10-digit Indian mobile 
+number required\" };\r\n\r\n    
+try {\r\n        const user = 
+await 
+getAuthenticatedUser();\r\n      
+  if (!user) return { error: 
+\"Unauthorized\" };\r\n\r\n      
+  const supabase = 
+createAdminClient();\r\n        
+const business = await getBusines
+sBySlug(clinicSlug);\r\n        
+if (!business) return { error: 
+\"Business not found\" 
+};\r\n\r\n        if (!await 
+verifyClinicAccess(business.id)) 
+return { error: \"Unauthorized: 
+You do not have access to this 
+clinic.\" };\r\n\r\n        
+const { error } = await 
+supabase\r\n            
+.from('tokens')\r\n            
+.update({ patient_name: name || 
+null, patient_phone: cleanPhone 
+|| null })\r\n            
+.eq('id', tokenId)\r\n           
+ .eq('business_id', business.id) 
+// C3 safety: verify 
+ownership\r\n            
+.in('status', ['WAITING', 
+'SERVING']); // only editable 
+while active\r\n\r\n        if 
+(error) throw error;\r\n        
+await logAudit(business.id, 
+'TOKEN_EDITED', { token_id: 
+tokenId });\r\n        revalidate
+Path(`/${clinicSlug}`);\r\n      
+  return { success: true };\r\n  
+  } catch (e) {\r\n        
+return { error: (e as 
+Error).message };\r\n    
+}\r\n}\r\n\r\n// SECURE MANUAL 
+CALL\r\nexport async function 
+triggerManualCall(clinicSlug: 
+string, visitId: string) {\r\n   
+ if (!visitId || !clinicSlug) 
+return { error: \"Missing data\" 
+};\r\n    try {\r\n        const 
+user = await 
+getAuthenticatedUser();\r\n      
+  if (!user) return { error: 
+\"Unauthorized\" };\r\n\r\n      
+  const supabase = 
+createAdminClient();\r\n        
+const business = await getBusines
+sBySlug(clinicSlug);\r\n        
+if (!business) return { error: 
+\"Clinic not found\" };\r\n\r\n  
+      if (!await 
+verifyClinicAccess(business.id)) 
+return { error: \"Unauthorized\" 
+};\r\n\r\n        const { data: 
+visit } = await supabase\r\n     
+       
+.from('clinical_visits')\r\n     
+       .select('id, 
+patient_id')\r\n            
+.eq('id', visitId)\r\n           
+ .eq('clinic_id', 
+business.id)\r\n            
+.single();\r\n\r\n        if 
+(!visit) return { error: \"Visit 
+not found\" };\r\n\r\n        
+const { data: patient } = await 
+supabase\r\n            
+.from('patients')\r\n            
+.select('phone, 
+phone_encrypted')\r\n            
+.eq('id', visit.patient_id)\r\n  
+          .single();\r\n\r\n     
+   let phone = 
+patient?.phone;\r\n        if 
+(patient?.phone_encrypted) {\r\n 
+           phone = decryptPhone(p
+atient.phone_encrypted);\r\n     
+   }\r\n\r\n        if (!phone) 
+return { error: \"No phone 
+number available\" };\r\n\r\n    
+    return { success: true, 
+phone };\r\n    } catch (e) 
+{\r\n        return { error: (e 
+as Error).message };\r\n    
+}\r\n}\r\n\r\n// 3. NEXT\r\n// 
+eslint-disable-next-line @typescr
+ipt-eslint/no-unused-vars\r\nexpo
+rt async function 
+nextPatient(clinicSlug: string, 
+tokenId?: string) {\r\n    
+return 
+processQueueAction(clinicSlug, 
+'NEXT', tokenId);\r\n}\r\n\r\n// 
+4. SKIP\r\nexport async function 
+skipToken(clinicSlug: string, 
+tokenId: string) {\r\n    return 
+processQueueAction(clinicSlug, 
+'SKIP', tokenId);\r\n}\r\n\r\n// 
+5. RECALL\r\nexport async 
+function recallToken(clinicSlug: 
+string, tokenId: string) {\r\n   
+ return 
+processQueueAction(clinicSlug, 
+'RECALL', 
+tokenId);\r\n}\r\n\r\n// 6. 
+CANCEL\r\nexport async function 
+cancelToken(clinicSlug: string, 
+tokenId: string) {\r\n    return 
+processQueueAction(clinicSlug, 
+'CANCEL', 
+tokenId);\r\n}\r\n\r\n\r\n\r\n// 
+8. PUBLIC TRACKING (NABH 
+Compliant)\r\nexport async 
+function 
+getPublicTokenStatus(visitId: 
+string) {\r\n    if (!visitId) 
+return { error: \"Invalid ID\" 
+};\r\n    try {\r\n        const 
+supabase = 
+createAdminClient();\r\n        
+const { data: visit, error: 
+visitError } = await 
+supabase\r\n            
+.from('clinical_visits')\r\n     
+       .select(`\r\n             
+   id, token_number, status, 
+is_priority,\r\n                
+created_at, rating, session_id, 
+clinic_id,\r\n                
+sessions!inner(status)\r\n       
+     `)\r\n            .eq('id', 
+visitId)\r\n            
+.maybeSingle();\r\n\r\n        
+if (visitError) throw 
+visitError;\r\n        if 
+(!visit) return { error: \"Visit 
+not found\" };\r\n\r\n        // 
+Compute tokens ahead (Acuity 
+Aware)\r\n        const { data: 
+waitingQueue } = await 
+supabase\r\n            
+.from('clinical_visits')\r\n     
+       .select('id')\r\n         
+   .eq('session_id', 
+visit.session_id)\r\n            
+.eq('status', 'WAITING')\r\n     
+       .order('is_priority', { 
+ascending: false })\r\n          
+  .order('token_number', { 
+ascending: true });\r\n\r\n      
+  const position = (waitingQueue 
+|| []).findIndex(v => v.id === 
+visit.id);\r\n        const 
+tokensAhead = position > 0 ? 
+position : 0;\r\n\r\n        
+const { data: servingVisit } = 
+await supabase\r\n            
+.from('clinical_visits')\r\n     
+       .select('token_number, 
+is_priority')\r\n            
+.eq('session_id', 
+visit.session_id)\r\n            
+.eq('status', 'SERVING')\r\n     
+       .maybeSingle();\r\n\r\n   
+     const currentServing = 
+servingVisit\r\n            ? 
+(servingVisit.is_priority ? 
+`E-${servingVisit.token_number}` 
+: `#${servingVisit.token_number}`
+)\r\n            : 
+\"--\";\r\n\r\n        return 
+{\r\n            success: 
+true,\r\n            data: {\r\n 
+               token: {\r\n      
+              id: visit.id,\r\n  
+                  token_number: 
+visit.token_number,\r\n          
+          status: 
+visit.status,\r\n                
+    is_priority: 
+visit.is_priority,\r\n           
+         session_status: ((visit 
+as unknown as { sessions: { 
+status: string } 
+}).sessions?.status) || 
+'CLOSED',\r\n                    
+rating: visit.rating,\r\n        
+        },\r\n                
+tokens_ahead: tokensAhead,\r\n   
+             current_serving: 
+currentServing,\r\n            
+}\r\n        };\r\n    } catch 
+(e) {\r\n        
+console.error(\"Public Status 
+Error:\", e);\r\n        return 
+{ error: (e as Error).message 
+};\r\n    }\r\n}\r\n\r\n// 9. 
+SESSION CONTROLS\r\nexport async 
+function pauseQueue(clinicSlug: 
+string) {\r\n    return 
+processQueueAction(clinicSlug, 
+'PAUSE_SESSION');\r\n}\r\nexport 
+async function 
+resumeQueue(clinicSlug: string) 
+{\r\n    return 
+processQueueAction(clinicSlug, 'R
+ESUME_SESSION');\r\n}\r\nexport 
+async function 
+closeQueue(clinicSlug: string) 
+{\r\n    return 
+updateSessionStatus(clinicSlug, 
+'CLOSED');\r\n}\r\n\r\n// 
+ADVANCED CLINICAL MUTATION RPC 
+WRAPPER\r\nasync function 
+processQueueAction(slug: string, 
+action: string, visitId?: 
+string) {\r\n    const supabase 
+= createAdminClient();\r\n    
+try {\r\n        const business 
+= await 
+getBusinessBySlug(slug);\r\n     
+   if (!business) return { 
+error: \"Business not found\" 
+};\r\n\r\n        const user = 
+await 
+getAuthenticatedUser();\r\n      
+  if (!user) return { error: 
+\"Unauthorized\" };\r\n\r\n      
+  if (!await 
+verifyClinicAccess(business.id)) 
+return { error: \"Unauthorized\" 
+};\r\n\r\n        const session 
+= await getActiveSession(business
+.id);\r\n        if (!session) 
+return { error: \"No active 
+session\" };\r\n\r\n        // 
+Call Phase 13 Clinical Mutation 
+RPC\r\n        const { data, 
+error } = await supabase.rpc('rpc
+_process_clinical_action', {\r\n 
+           p_clinic_id: 
+business.id,\r\n            
+p_session_id: session.id,\r\n    
+        p_staff_id: user.id,\r\n 
+           p_action: action,\r\n 
+           p_visit_id: visitId 
+|| null,\r\n        });\r\n\r\n  
+      if (error) throw 
+error;\r\n        const result = 
+data as { success: boolean; 
+error?: string };\r\n        if 
+(!result.success) return { 
+error: result.error || 'Action 
+failed' };\r\n\r\n        
+revalidatePath(`/${slug}`);\r\n  
+      return { success: true 
+};\r\n    } catch (e) {\r\n      
+  console.error(`[processQueueAct
+ion] ${action} error:`, e);\r\n  
+      return { error: (e as 
+Error).message };\r\n    
+}\r\n}\r\n\r\nasync function 
+updateSessionStatus(slug: 
+string, status: 'OPEN' | 
+'CLOSED' | 'PAUSED') {\r\n    
+const supabase = 
+createAdminClient();\r\n    try 
+{\r\n        const business = 
+await 
+getBusinessBySlug(slug);\r\n     
+   if (!business) throw new 
+Error(\"Business not 
+found\");\r\n\r\n        if 
+(!await 
+verifyClinicAccess(business.id)) 
+throw new Error(\"Unauthorized: 
+You do not have access to this 
+clinic.\");\r\n\r\n        const 
+today = getClinicDate();\r\n     
+   const { error } = await 
+supabase.from('sessions')\r\n    
+        .update({ status })\r\n  
+          .eq('business_id', 
+business.id)\r\n            
+.eq('date', today);\r\n\r\n      
+  if (error) throw 
+error;\r\n\r\n        await 
+logAudit(business.id, status === 
+'PAUSED' ? 'PAUSE' : status === 
+'OPEN' ? 'RESUME' : 
+'CLOSE');\r\n        
+revalidatePath(`/${slug}`);\r\n  
+      return { success: true 
+};\r\n    } catch (e) {\r\n      
+  return { error: (e as 
+Error).message };\r\n    
+}\r\n}\r\n\r\n\r\n// 8.5 Toggle 
+Arrival Status (NABH Audit 
+Compliant)\r\nexport async 
+function 
+toggleArrivalStatus(clinicSlug: 
+string, visitId: string, 
+isArrived: boolean) {\r\n    if 
+(!isArrived) return { error: 
+\"Cannot undo arrival via this 
+path\" };\r\n    return 
+processQueueAction(clinicSlug, 
+'ARRIVE', 
+visitId);\r\n}\r\n\r\n// 
+DASHBOARD DATA (CLINICAL 
+VERSION)\r\nexport async 
+function 
+getDashboardData(clinicSlug: 
+string) {\r\n    const supabase 
+= createAdminClient();\r\n    
+try {\r\n        const business 
+= await getBusinessBySlug(clinicS
+lug);\r\n        if (!business) 
+return { session: null, tokens: 
+[], dailyTokenLimit: null, 
+businessId: null, error: 
+\"Business not found\" 
+};\r\n\r\n        if (!await 
+verifyClinicAccess(business.id)) 
+return { session: null, tokens: 
+[], dailyTokenLimit: null, 
+businessId: null, error: 
+\"Unauthorized\" };\r\n\r\n      
+  const today = 
+getClinicDate();\r\n\r\n        
+const { data: businessData } = 
+await supabase.from('businesses')
+.select('daily_token_limit').eq('
+id', 
+business.id).single();\r\n\r\n   
+     const { data: session } = 
+await supabase\r\n            
+.from('sessions')\r\n            
+.select('*')\r\n            
+.eq('business_id', 
+business.id)\r\n            
+.eq('date', today)\r\n           
+ .order('created_at', { 
+ascending: false })\r\n          
+  .limit(1)\r\n            
+.maybeSingle();\r\n\r\n        
+// Fetch Departments and Doctors 
+for the frontend\r\n        
+const { data: departments } = 
+await supabase.from('departments'
+).select('*').eq('clinic_id', 
+business.id).eq('is_active', 
+true);\r\n        const { data: 
+doctors } = await supabase.from('
+doctors').select('*').in('departm
+ent_id', (departments || 
+[]).map(d => 
+d.id)).eq('is_active', 
+true);\r\n\r\n        if 
+(!session) return { session: 
+null, tokens: [], 
+dailyTokenLimit: 
+businessData?.daily_token_limit 
+|| null, businessId: 
+business.id, departments: 
+departments || [], doctors: 
+doctors || [] };\r\n\r\n        
+// JOIN Clinical Visits with 
+Patients\r\n        // PHASE 1 
+N+1 FIX: Only fetch ACTIVE 
+tokens to prevent memory 
+explosion.\r\n        const { 
+data: visits } = await 
+supabase\r\n            
+.from('clinical_visits')\r\n     
+       .select('*, 
+patients(name, phone, 
+phone_encrypted)')\r\n           
+ .eq('session_id', 
+session.id)\r\n            
+.in('status', ['WAITING', 
+'SERVING', 'SKIPPED'])\r\n       
+     .order('token_number', { 
+ascending: true });\r\n\r\n      
+  // Aggregate historical count 
+without hydrating full 
+objects\r\n        const { 
+count: servedCount } = await 
+supabase\r\n            
+.from('clinical_visits')\r\n     
+       .select('*', { count: 
+'exact', head: true })\r\n       
+     .eq('session_id', 
+session.id)\r\n            
+.eq('status', 'SERVED');\r\n\r\n 
+       const safeTokens = 
+(visits || []).map((v) => {\r\n  
+          const visit = v as 
+unknown as {\r\n                
+patients: { name?: string, 
+phone?: string, 
+phone_encrypted?: string },\r\n  
+              
+registration_complete_time?: 
+string,\r\n                
+source?: string,\r\n             
+   token_number: number,\r\n     
+           department_id?: 
+string,\r\n                
+doctor_id?: string\r\n           
+ };\r\n            const patient 
+= visit.patients;\r\n            
+let decryptedPhone = 
+patient?.phone;\r\n            
+if (patient?.phone_encrypted) 
+{\r\n                try { 
+decryptedPhone = decryptPhone(pat
+ient.phone_encrypted); } catch { 
+}\r\n            }\r\n\r\n       
+     // DPDP MASKING: Only 
+return first 2 and last 2 digits 
+for general dashboard 
+listing\r\n            const 
+maskedPhone = decryptedPhone && 
+decryptedPhone.length >= 10\r\n  
+              ? 
+`${decryptedPhone.substring(0, 2)
+}******${decryptedPhone.substring
+(decryptedPhone.length - 
+2)}`\r\n                : 
+decryptedPhone;\r\n\r\n          
+  const isLateGhost = v.status 
+=== 'WAITING' && !visit.registrat
+ion_complete_time && 
+visit.token_number < 
+(session?.nowServingNumber || 
+0);\r\n\r\n            return 
+{\r\n                ...v,\r\n   
+             patient_name: 
+patient?.name,\r\n               
+ patient_phone: maskedPhone,\r\n 
+               customerPhone: 
+maskedPhone,\r\n                
+customerName: patient?.name,\r\n 
+               status: 
+isLateGhost ? 'WAITING_LATE' : 
+v.status,\r\n                
+isArrived: !!visit.registration_c
+omplete_time,\r\n                
+source: visit.source || 
+'QR',\r\n                
+departmentId: 
+visit.department_id,\r\n         
+       doctorId: 
+visit.doctor_id\r\n            
+};\r\n        });\r\n\r\n        
+return { session, tokens: 
+safeTokens, dailyTokenLimit: 
+businessData?.daily_token_limit 
+|| null, businessId: 
+business.id, servedCount: 
+servedCount || 0, departments: 
+departments || [], doctors: 
+doctors || [] };\r\n    } catch 
+(e) {\r\n        
+console.error(\"Dashboard Data 
+Fetch Error:\", e);\r\n        
+return { session: null, tokens: 
+[], dailyTokenLimit: null, 
+businessId: null, error: (e as 
+Error).message };\r\n    
+}\r\n}\r\n\r\n// 9. HISTORY 
+(CLINICAL)\r\nexport async 
+function 
+getTokensForDate(clinicSlug: 
+string, date: string, limit: 
+number = 50, offset: number = 0) 
+{\r\n    const supabase = 
+createAdminClient();\r\n    try 
+{\r\n        const business = 
+await getBusinessBySlug(clinicSlu
+g);\r\n        if (!business) 
+return { error: \"Business not 
+found\" };\r\n\r\n        if 
+(!await 
+verifyClinicAccess(business.id)) 
+return { error: \"Unauthorized\" 
+};\r\n\r\n        const { data: 
+session } = await supabase.from('
+sessions').select('id').eq('busin
+ess_id', business.id).eq('date', 
+date).maybeSingle();\r\n        
+if (!session) return { tokens: 
+[], hasMore: false };\r\n\r\n    
+    const { data, count } = 
+await supabase\r\n            
+.from('clinical_visits')\r\n     
+       .select('id, 
+token_number, status, 
+is_priority, rating, feedback, 
+created_at, department_id, 
+doctor_id, patients(name, phone, 
+phone_encrypted)', { count: 
+'exact' })\r\n            
+.eq('session_id', 
+session.id)\r\n            
+.order('token_number', { 
+ascending: true })\r\n           
+ .range(offset, offset + limit - 
+1);\r\n\r\n        const hasMore 
+= count ? offset + (data?.length 
+|| 0) < count : false;\r\n\r\n   
+     const tokens = (data || 
+[]).map((v) => {\r\n            
+const visit = v as unknown as 
+{\r\n                id: 
+string,\r\n                
+token_number: number,\r\n        
+        status: string,\r\n      
+          department_id?: 
+string,\r\n                
+doctor_id?: string,\r\n          
+      patients?: { name?: 
+string, phone?: string, 
+phone_encrypted?: string }\r\n   
+         };\r\n            const 
+patient = visit.patients;\r\n    
+        let decryptedPhone = 
+patient?.phone;\r\n            
+if (patient?.phone_encrypted) 
+{\r\n                try { 
+decryptedPhone = decryptPhone(pat
+ient.phone_encrypted); } catch { 
+}\r\n            }\r\n\r\n       
+     const maskedPhone = 
+decryptedPhone && 
+decryptedPhone.length >= 10\r\n  
+              ? 
+`${decryptedPhone.substring(0, 2)
+}******${decryptedPhone.substring
+(decryptedPhone.length - 
+2)}`\r\n                : 
+decryptedPhone;\r\n\r\n          
+  return {\r\n                
+id: visit.id,\r\n                
+tokenNumber: 
+visit.token_number,\r\n          
+      customerName: 
+patient?.name,\r\n               
+ customerPhone: maskedPhone,\r\n 
+               status: 
+visit.status,\r\n                
+isPriority: v.is_priority,\r\n   
+             rating: 
+v.rating,\r\n                
+feedback: v.feedback,\r\n        
+        createdAt: 
+v.created_at,\r\n                
+departmentId: 
+visit.department_id,\r\n         
+       doctorId: 
+visit.doctor_id,\r\n            
+};\r\n        });\r\n\r\n        
+return { tokens, hasMore };\r\n  
+  } catch (e) {\r\n        
+return { error: (e as 
+Error).message };\r\n    }\r\n}\r
+\n","usedDeprecatedRules":[]}]
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" 
+"C:\Program Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~
+    + CategoryInfo          : No 
+   tSpecified: ([{"filePath":"C  
+  ...atedRules":[]}]:String) [   
+ ], RemoteException
+    + FullyQualifiedErrorId : Na 
+   tiveCommandError
+ 
+
+info  - Need to disable some 
+ESLint rules? Learn more here: ht
+tps://nextjs.org/docs/basic-featu
+res/eslint#disabling-rules

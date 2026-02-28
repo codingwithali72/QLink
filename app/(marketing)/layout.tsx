@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -5,13 +6,13 @@ import { ModeToggle } from "@/components/mode-toggle";
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
     return (
-        <div className="min-h-screen font-sans selection:bg-indigo-500/30 flex flex-col">
+        <div className="min-h-screen font-sans selection:bg-electric-cyan/30 flex flex-col bg-cloud-dancer">
             {/* GLOBAL HEADER */}
             <nav className="sticky top-0 z-50 w-full backdrop-blur-xl bg-white/80 dark:bg-[#0B1120]/80 border-b border-slate-200/50 dark:border-slate-800/50 transition-colors duration-300">
                 <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 md:h-20 flex items-center justify-between">
                     <div className="flex items-center gap-8">
-                        <Link href="/" className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-indigo-600/30">Q</div>
+                        <Link href="/" className="flex items-center gap-3 group">
+                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-indigo-600/30 group-hover:scale-110 transition-transform">Q</div>
                             <span className="font-extrabold text-2xl tracking-tighter text-slate-900 dark:text-white">QLink</span>
                         </Link>
                         {/* Intent-Driven Navigation */}
@@ -32,8 +33,8 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl p-2 flex flex-col gap-1">
                                         <Link href="/whatsapp" className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg flex items-center gap-2">WhatsApp Queue</Link>
                                         <Link href="/features/smart-tv" className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg">Smart TV Displays</Link>
-                                        <Link href="/features/analytics" className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg">Analytics Engine</Link>
-                                        <Link href="/features/omnichannel" className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg">Omnichannel Routing</Link>
+                                        <Link href="/features/analytics" className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg">Service Intelligence</Link>
+                                        <Link href="/features/security" className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg font-bold text-indigo-600">Security & Compliance</Link>
                                     </div>
                                 </div>
                             </div>
@@ -69,7 +70,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             </nav>
 
             {/* PAGE CONTENT */}
-            <main className="flex-1 bg-slate-50 dark:bg-[#0B1120]">
+            <main className="flex-1 bg-cloud-dancer dark:bg-[#0B1120]">
                 {children}
             </main>
 
@@ -112,8 +113,8 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                     </div>
                 </div>
                 <div className="max-w-7xl mx-auto px-6 pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center text-xs">
-                    <p>© 2026 QLink Healthcare SaaS. All rights reserved.</p>
-                    <p className="mt-4 md:mt-0">Independent WhatsApp API Partner. Not affiliated with Meta Inc.</p>
+                    <p>&copy; 2026 QLink: The Enterprise OPD Orchestration Engine. All rights reserved.</p>
+                    <p className="mt-4 md:mt-0 opacity-50 italic">Bridging the gap between clinical excellence and frictionless patient experience.</p>
                 </div>
             </footer>
         </div>

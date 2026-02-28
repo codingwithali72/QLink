@@ -4,7 +4,7 @@
 -- =================================================================================
 
 -- 1. TENANTS (Top Level Entity: e.g. "Apollo Hospitals Group", "Dr. Batra's")
-CREATE TABLE "public"."tenants" (
+CREATE TABLE IF NOT EXISTS "public"."tenants" (
     "id" uuid NOT NULL DEFAULT gen_random_uuid(),
     "name" text NOT NULL,
     "slug" text UNIQUE NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE "public"."tenants" (
 );
 
 -- 2. BRANCHES (Replaces old "businesses" table. Physical locations)
-CREATE TABLE "public"."branches" (
+CREATE TABLE IF NOT EXISTS "public"."branches" (
     "id" uuid NOT NULL DEFAULT gen_random_uuid(),
     "tenant_id" uuid NOT NULL REFERENCES "public"."tenants"("id") ON DELETE RESTRICT,
     "name" text NOT NULL,
@@ -35,14 +35,14 @@ CREATE TABLE "public"."branches" (
 );
 
 -- Index for fast tenant routing lookup
-CREATE INDEX "idx_branches_tenant" ON "public"."branches" ("tenant_id");
+CREATE INDEX IF NOT EXISTS "idx_branches_tenant" ON "public"."branches" ("tenant_id");
 
 -- 3. DEPARTMENTS (Logical units within a branch)
 -- If exist, we will migrate data. If not, this acts as the new source of truth.
 -- To allow smooth migration we use CREATE TABLE IF NOT EXISTS, then ALTER to link to branch.
 -- But since this is a destructive rewrite, we redefine the strict structure.
 
-CREATE TABLE "public"."departments_v2" (
+CREATE TABLE IF NOT EXISTS "public"."departments_v2" (
     "id" uuid NOT NULL DEFAULT gen_random_uuid(),
     "tenant_id" uuid NOT NULL REFERENCES "public"."tenants"("id") ON DELETE RESTRICT,
     "branch_id" uuid NOT NULL REFERENCES "public"."branches"("id") ON DELETE RESTRICT,
@@ -55,10 +55,10 @@ CREATE TABLE "public"."departments_v2" (
     UNIQUE ("branch_id", "name")
 );
 
-CREATE INDEX "idx_dept_v2_branch" ON "public"."departments_v2" ("branch_id");
+CREATE INDEX IF NOT EXISTS "idx_dept_v2_branch" ON "public"."departments_v2" ("branch_id");
 
 -- 4. DOCTORS (Assigned to Branches and Departments)
-CREATE TABLE "public"."doctors_v2" (
+CREATE TABLE IF NOT EXISTS "public"."doctors_v2" (
     "id" uuid NOT NULL DEFAULT gen_random_uuid(),
     "tenant_id" uuid NOT NULL REFERENCES "public"."tenants"("id") ON DELETE RESTRICT,
     "branch_id" uuid NOT NULL REFERENCES "public"."branches"("id") ON DELETE RESTRICT,
@@ -73,10 +73,10 @@ CREATE TABLE "public"."doctors_v2" (
     PRIMARY KEY ("id")
 );
 
-CREATE INDEX "idx_docs_v2_branch_dept" ON "public"."doctors_v2" ("branch_id", "department_id");
+CREATE INDEX IF NOT EXISTS "idx_docs_v2_branch_dept" ON "public"."doctors_v2" ("branch_id", "department_id");
 
 -- 5. SHIFTS (Time-bound availability for doctors, replacing simple open/close sessions)
-CREATE TABLE "public"."shifts" (
+CREATE TABLE IF NOT EXISTS "public"."shifts" (
     "id" uuid NOT NULL DEFAULT gen_random_uuid(),
     "tenant_id" uuid NOT NULL REFERENCES "public"."tenants"("id") ON DELETE RESTRICT,
     "branch_id" uuid NOT NULL REFERENCES "public"."branches"("id") ON DELETE RESTRICT,
@@ -106,11 +106,14 @@ ALTER TABLE "public"."shifts" ENABLE ROW LEVEL SECURITY;
 -- so these policies can dynamically filter. For now, we stub the Super Admin access.
 -- And allow public read on active branches for the QR code flow.
 
+DROP POLICY IF EXISTS "Public read active branches" ON "public"."branches";
 CREATE POLICY "Public read active branches" ON "public"."branches" 
 FOR SELECT USING (is_active = true);
 
+DROP POLICY IF EXISTS "Public read active departments" ON "public"."departments_v2";
 CREATE POLICY "Public read active departments" ON "public"."departments_v2" 
 FOR SELECT USING (is_active = true);
 
+DROP POLICY IF EXISTS "Public read active doctors" ON "public"."doctors_v2";
 CREATE POLICY "Public read active doctors" ON "public"."doctors_v2" 
 FOR SELECT USING (is_active = true AND status != 'OFF_DUTY');

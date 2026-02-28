@@ -230,31 +230,31 @@ export default function AdminPage() {
     if (!stats) return <div className="p-8 text-center text-red-500 font-bold">Access Denied</div>;
 
     return (
-        <div className="min-h-screen bg-background text-foreground p-4 sm:p-8 font-sans transition-colors duration-300">
-            <div className="max-w-7xl mx-auto space-y-10">
+        <div className="min-h-screen bg-cloud-dancer dark:bg-[#0B1120] text-foreground p-4 sm:p-8 font-sans transition-colors duration-300 relative overflow-x-hidden">
+            <div className="max-w-7xl mx-auto space-y-10 relative z-10">
 
-                <header className="flex flex-col md:flex-row md:items-center justify-between gap-8 pb-8 border-b border-border/60">
+                <header className="flex flex-col md:flex-row md:items-center justify-between gap-8 pb-10 border-b border-indigo-500/10">
                     <div className="space-y-1">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-primary-foreground font-black shadow-lg shadow-primary/20">Q</div>
-                            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">Command Center</h1>
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-indigo-600/30">Q</div>
+                            <h1 className="text-4xl font-black tracking-tighter text-slate-900 dark:text-white">Command Center</h1>
                         </div>
-                        <p className="text-muted-foreground font-medium pl-1">Platform visibility, tenant management, and core analytics.</p>
+                        <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px] pl-1 pt-2">SaaS Orchestration Engine v2026</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-4">
                         {[
-                            { value: stats.activeSessions, label: 'Clinics Live', icon: <Activity className="w-5 h-5" />, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-                            { value: stats.activeQueueTokens || 0, label: 'Queue Active', icon: <Users className="w-5 h-5" />, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-                            { value: stats.todayTokens, label: 'Tokens Today', icon: <TrendingUp className="w-5 h-5" />, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                            { value: stats.messagesToday ?? 0, label: 'Messages Today', icon: <MessageSquare className="w-5 h-5" />, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+                            { value: stats.activeSessions, label: 'Clinics Live', icon: <Activity className="w-5 h-5" />, color: 'text-emerald-500', bg: 'bg-emerald-500/5' },
+                            { value: stats.activeQueueTokens || 0, label: 'Queue Active', icon: <Users className="w-5 h-5" />, color: 'text-amber-500', bg: 'bg-amber-500/5' },
+                            { value: stats.todayTokens, label: 'Tokens Today', icon: <TrendingUp className="w-5 h-5" />, color: 'text-indigo-500', bg: 'bg-indigo-500/5' },
+                            { value: stats.messagesToday ?? 0, label: 'Messages Sent', icon: <MessageSquare className="w-5 h-5" />, color: 'text-sky-500', bg: 'bg-sky-500/5' },
                         ].map((item, idx) => (
-                            <Card key={idx} className="px-5 py-3 border-border shadow-soft flex items-center gap-4 bg-card/50 backdrop-blur-sm">
-                                <div className={cn("p-2 rounded-lg", item.bg, item.color)}>{item.icon}</div>
+                            <div key={idx} className="px-6 py-4 glass-panel flex items-center gap-5 border-white/40 shadow-xl shadow-indigo-900/5">
+                                <div className={cn("p-2.5 rounded-xl", item.bg, item.color)}>{item.icon}</div>
                                 <div>
-                                    <div className="text-2xl font-black leading-none">{item.value}</div>
-                                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mt-1">{item.label}</div>
+                                    <div className="text-3xl font-black leading-none tracking-tighter">{item.value}</div>
+                                    <div className="text-[9px] uppercase tracking-widest text-slate-400 font-black mt-1">{item.label}</div>
                                 </div>
-                            </Card>
+                            </div>
                         ))}
                     </div>
                 </header>

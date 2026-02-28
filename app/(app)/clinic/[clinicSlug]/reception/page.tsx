@@ -19,6 +19,7 @@ import { TokenItem } from "./_components/TokenItem";
 import { getClinicDate } from "@/lib/date";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { DoctorLoadPanel } from "@/components/DoctorLoadPanel";
+import { VisitTimeline } from "./_components/VisitTimeline";
 
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
@@ -65,6 +66,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     // Queue Controls
     const [isLogOpen, setIsLogOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
+    const [timelineTokenId, setTimelineTokenId] = useState<string | null>(null);
 
     // History State
     interface Token {
@@ -379,7 +381,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const isSessionActive = session?.status === 'OPEN' || session?.status === 'PAUSED';
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300 p-3 pb-20 md:p-6 lg:p-8 font-sans relative">
+        <div className="min-h-screen bg-cloud-dancer dark:bg-[#0B1120] transition-colors duration-300 p-3 pb-20 md:p-6 lg:p-8 font-sans relative overflow-x-hidden">
             {showOfflineError && (
                 <div className="fixed top-0 left-0 w-full bg-red-500 text-white text-center text-xs py-1 font-bold z-50 animate-in slide-in-from-top-full">
                     Reconnecting to live updates...
@@ -394,7 +396,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             )}
 
             {/* HEADER */}
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-card text-card-foreground p-3 md:p-4 rounded-2xl shadow-sm border border-border mb-6">
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-3 glass-panel p-4 rounded-[2rem] mb-8 border-white/40 shadow-xl shadow-slate-200/50 dark:shadow-black/20">
                 <div className="flex items-center gap-3 md:gap-4">
                     <div className="h-10 w-10 md:h-12 md:w-12 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-xl md:text-2xl shadow-lg shadow-blue-500/30">Q</div>
                     <div>
@@ -407,22 +409,22 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 md:gap-3">
-                    <div className={cn("px-2 md:px-3 py-1 md:py-1.5 rounded-full text-xs font-bold border flex items-center gap-2",
-                        session?.status === 'OPEN' ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800" :
-                            session?.status === 'PAUSED' ? "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800" :
-                                "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800"
+                <div className="flex items-center gap-3">
+                    <div className={cn("px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border flex items-center gap-2",
+                        session?.status === 'OPEN' ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800" :
+                            session?.status === 'PAUSED' ? "bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800" :
+                                "bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800"
                     )}>
-                        <div className={cn("w-1.5 h-1.5 md:w-2 md:h-2 rounded-full",
-                            session?.status === 'OPEN' ? "bg-green-600 animate-pulse" : session?.status === 'PAUSED' ? "bg-yellow-600" : "bg-red-600"
+                        <div className={cn("w-2 h-2 rounded-full",
+                            session?.status === 'OPEN' ? "bg-emerald-500 animate-pulse" : session?.status === 'PAUSED' ? "bg-amber-500" : "bg-rose-500"
                         )}></div>
                         {session?.status || "CLOSED"}
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => setDarkMode(!darkMode)} className="rounded-full h-8 w-8 text-slate-500 dark:text-slate-400">
+                    <Button variant="ghost" size="icon" onClick={() => setDarkMode(!darkMode)} className="rounded-full h-10 w-10 text-slate-400 bg-white/50 dark:bg-slate-800/50 border border-white/20 dark:border-white/5">
                         {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => logout()} className="text-slate-500 text-xs h-8">
-                        <LogOut className="w-3 h-3 mr-1" /> Logout
+                    <Button variant="ghost" onClick={() => logout()} className="text-slate-400 font-black text-[10px] uppercase tracking-widest h-10 px-4">
+                        <LogOut className="w-3.5 h-3.5 mr-2" /> Logout
                     </Button>
                 </div>
             </header>
@@ -432,7 +434,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 {/* LEFT: Controls (8 cols) */}
                 <div className="xl:col-span-8 space-y-6">
                     {/* SERVING CARD */}
-                    <Card className="relative overflow-hidden border shadow-xl shadow-blue-900/10 bg-[#0F172A] dark:bg-slate-900 text-white h-72 flex flex-col items-center justify-center p-8 rounded-3xl">
+                    <Card className="relative overflow-hidden border-white/20 shadow-2xl shadow-indigo-900/10 bg-[#0F172A] dark:bg-slate-900 text-white h-72 flex flex-col items-center justify-center p-8 rounded-[2.5rem] kinetic-hover">
                         <p className="text-blue-300 uppercase tracking-widest text-sm font-bold mb-4">Now Serving</p>
                         {servingToken ? (
                             <div className="text-center z-10 animate-in zoom-in-95 duration-500">
@@ -538,7 +540,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                     </div>
                                 )}
 
-                                {manualDepartmentId !== "any" && doctors && doctors.filter(d => d.department_id === manualDepartmentId).length > 0 && (
+                                {manualDepartmentId !== "any" && (
                                     <div className="space-y-2">
                                         <Label className="font-bold text-sm">Assigned Doctor (Optional)</Label>
                                         <select
@@ -547,10 +549,23 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                                         >
                                             <option value="any">Auto-Balance (Fastest Available)</option>
-                                            {doctors.filter(d => d.department_id === manualDepartmentId).map(d => (
-                                                <option key={d.id} value={d.id}>Dr. {d.name}</option>
-                                            ))}
+                                            {doctors
+                                                .filter(d => d.department_id === manualDepartmentId)
+                                                .map(d => {
+                                                    // Load calc for sorting
+                                                    const docTokens = tokens.filter(t => t.doctorId === d.id);
+                                                    const load = docTokens.filter(t => t.status === 'WAITING' || t.status === 'WAITING_LATE').length;
+                                                    return { ...d, load };
+                                                })
+                                                .sort((a, b) => a.load - b.load)
+                                                .map(d => (
+                                                    <option key={d.id} value={d.id}>
+                                                        Dr. {d.name} ({d.load} waiting) {d.load === 0 ? "★ Optimal" : ""}
+                                                    </option>
+                                                ))
+                                            }
                                         </select>
+                                        <p className="text-[10px] text-slate-500 italic mt-1 font-medium">Sorted by clinical load intelligence (least busy first)</p>
                                     </div>
                                 )}
 
@@ -562,7 +577,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     </Dialog>
 
                     {/* WAITING LIST */}
-                    <Card className="flex flex-col h-[500px] border-border rounded-2xl overflow-hidden shadow-sm bg-card">
+                    <Card className="flex flex-col h-[500px] glass-panel border-white/20 rounded-[2rem] overflow-hidden shadow-xl shadow-slate-200/50 dark:shadow-black/20">
                         <div className="p-4 bg-muted border-b flex justify-between items-center">
                             <h3 className="font-bold text-foreground">Queue</h3>
                             <Badge className="bg-blue-600 text-white">{waitingTokens.length}</Badge>
@@ -601,6 +616,13 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             </div>
                         </Card>
                     )}
+
+                    {/* DOCTOR LOAD PANEL (Strategic Addition) */}
+                    <DoctorLoadPanel
+                        doctors={doctors || []}
+                        tokens={tokens || []}
+                        className="shadow-sm border-slate-200 dark:border-slate-800"
+                    />
                 </div>
             </div>
 
@@ -703,14 +725,27 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                         <td className="px-6 py-4 max-w-xs truncate italic text-orange-600">
                                                             {t.feedback ? <>&ldquo;{t.feedback}&rdquo;</> : "—"}
                                                         </td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <Badge variant="outline" className={cn("text-[9px] border-0",
-                                                                t.status === 'SERVED' ? "bg-emerald-50 text-emerald-600" :
-                                                                    t.status === 'CANCELLED' ? "bg-rose-50 text-rose-600 line-through" :
-                                                                        "bg-slate-100 text-slate-600"
-                                                            )}>
-                                                                {t.status}
-                                                            </Badge>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center justify-end gap-2">
+                                                                <Badge variant="outline" className={cn("text-[9px] border-0",
+                                                                    t.status === 'SERVED' ? "bg-emerald-50 text-emerald-600" :
+                                                                        t.status === 'CANCELLED' ? "bg-rose-50 text-rose-600 line-through" :
+                                                                            "bg-slate-100 text-slate-600"
+                                                                )}>
+                                                                    {t.status}
+                                                                </Badge>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setTimelineTokenId(t.id);
+                                                                    }}
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" /></svg>
+                                                                </Button>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -741,7 +776,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 </Card>
             </div>
 
-            {/* EDIT MODAL */}
             {editingToken && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <Card className="w-full max-w-sm p-6 rounded-3xl shadow-2xl">
@@ -750,8 +784,16 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             <h3 className="text-xl font-bold">Edit Patient</h3>
                         </div>
                         <div className="space-y-4">
-                            <Input value={editingToken.name} onChange={e => setEditingToken({ ...editingToken, name: e.target.value })} placeholder="Name" />
-                            <Input value={editingToken.phone} onChange={e => setEditingToken({ ...editingToken, phone: e.target.value })} placeholder="Phone" />
+                            <Input
+                                value={editingToken.name}
+                                onChange={e => setEditingToken(prev => prev ? { ...prev, name: e.target.value } : null)}
+                                placeholder="Name"
+                            />
+                            <Input
+                                value={editingToken.phone}
+                                onChange={e => setEditingToken(prev => prev ? { ...prev, phone: e.target.value } : null)}
+                                placeholder="Phone"
+                            />
                             <div className="flex gap-2 pt-4">
                                 <Button variant="ghost" className="flex-1" onClick={() => setEditingToken(null)}>Cancel</Button>
                                 <Button className="flex-1 bg-blue-600" onClick={handleSaveEdit}>Save</Button>
@@ -761,7 +803,15 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 </div>
             )}
 
-            {/* TOAST */}
+            <Dialog open={!!timelineTokenId} onOpenChange={(open) => !open && setTimelineTokenId(null)}>
+                <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto rounded-3xl p-6">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black mb-2">Patient Timeline</DialogTitle>
+                    </DialogHeader>
+                    {timelineTokenId && <VisitTimeline visitId={timelineTokenId} />}
+                </DialogContent>
+            </Dialog>
+
             {toast && (
                 <div className={cn(
                     "fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl shadow-2xl z-[100] animate-in slide-in-from-bottom-5",
@@ -770,6 +820,6 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                     <span className="font-bold text-sm tracking-wide">{toast.message}</span>
                 </div>
             )}
-        </div>
+        </div >
     );
 }

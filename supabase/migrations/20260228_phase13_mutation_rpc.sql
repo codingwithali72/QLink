@@ -79,12 +79,15 @@ BEGIN
         RETURN json_build_object('success', true);
 
     -- ===============================================================
-    -- ACTION: CANCEL
+    -- ACTION: ARRIVE
     -- ===============================================================
-    ELSIF p_action = 'CANCEL' AND p_visit_id IS NOT NULL THEN
-        UPDATE public.clinical_visits SET previous_status = status, status = 'CANCELLED' WHERE id = p_visit_id;
+    ELSIF p_action = 'ARRIVE' AND p_visit_id IS NOT NULL THEN
+        UPDATE public.clinical_visits 
+        SET previous_status = status, status = 'WAITING', is_arrived = true, arrival_at_department_time = now() 
+        WHERE id = p_visit_id;
+
         INSERT INTO public.security_audit_logs (clinic_id, actor_id, action_type, table_name, record_id) 
-        VALUES (p_clinic_id, p_staff_id, 'VISIT_CANCELLED', 'clinical_visits', p_visit_id);
+        VALUES (p_clinic_id, p_staff_id, 'VISIT_ARRIVED', 'clinical_visits', p_visit_id);
         RETURN json_build_object('success', true);
 
     ELSE

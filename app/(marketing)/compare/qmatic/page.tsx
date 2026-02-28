@@ -1,10 +1,11 @@
+/* eslint-disable react/no-unescaped-entities */
 import Link from "next/link";
 import { CheckCircle2, XCircle, ArrowRight, ShieldCheck, Tv } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function CompareQmaticPage() {
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-[#0B1120] font-sans selection:bg-indigo-500/30">
+        <div className="min-h-screen bg-cloud-dancer dark:bg-[#0B1120] font-sans selection:bg-electric-cyan/30">
             {/* Global Header */}
 
 

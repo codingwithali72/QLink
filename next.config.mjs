@@ -7,6 +7,7 @@ const nextConfig = {
         formats: ['image/avif', 'image/webp'],
     },
     poweredByHeader: false,
+    transpilePackages: ['framer-motion'],
 
     // ── Security Headers (DPDP + OWASP hardening) ────────────────────────────
     // Applied to every response. Enforces HTTPS, prevents clickjacking,

@@ -23,11 +23,12 @@ export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArri
     return (
         <div className={cn(
             "p-3 rounded-xl flex items-center justify-between group transition-all duration-300 relative",
+            token.isArrived && !token.isPriority && "border-l-4 border-l-green-500 bg-green-50/50 dark:bg-green-900/10",
             token.isPriority
                 ? "bg-destructive/10 border border-destructive/20"
                 : isLate
                     ? "bg-amber-100 border border-amber-300 animate-pulse dark:bg-amber-900/30 dark:border-amber-800"
-                    : "bg-accent/50 hover:bg-accent border border-transparent"
+                    : !token.isArrived && "bg-accent/50 hover:bg-accent border border-transparent"
         )}>
             {isLate && (
                 <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm opacity-90 z-10">
@@ -64,8 +65,8 @@ export const TokenItem = memo(function TokenItem({ token, onCancel, onToggleArri
                         </div>
                         {(departmentName || doctorName) && (
                             <div className="flex items-center gap-1 mt-0.5">
-                                {departmentName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 leading-none">{departmentName}</span>}
-                                {doctorName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900 leading-none">Dr. {doctorName}</span>}
+                                {departmentName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 leading-none">{departmentName}</span>}
+                                {doctorName && <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-sm bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50 leading-none uppercase tracking-tight">Dr. {doctorName}</span>}
                             </div>
                         )}
                     </div>

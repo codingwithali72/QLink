@@ -4,13 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { queueWhatsAppMessage } from "@/lib/whatsapp";
+
 import { normalizeIndianPhone } from "@/lib/phone";
 import { encryptPhone, hashPhone, decryptPhone } from "@/lib/crypto";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { sendWhatsAppUtilityTemplate } from "@/lib/whatsapp-dispatch";
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+
+
 
 // --- HELPERS ---
 
@@ -190,6 +190,21 @@ export async function createToken(
         const business = await getBusinessBySlug(clinicSlug);
         if (!business) return { success: false, error: "Clinic not found" };
 
+        // PHASE 5: USAGE CAP & SUBSCRIPTION CHECK
+        const { data: usageCheck, error: usageErr } = await supabase.rpc('rpc_check_usage_cap', {
+            p_clinic_id: business.id
+        });
+
+        if (usageErr) {
+            console.error('[createToken] Usage cap check error:', usageErr);
+        } else if (usageCheck && !(usageCheck as { allowed: boolean }).allowed) {
+            return {
+                success: false,
+                error: (usageCheck as { reason?: string }).reason || "Usage limit reached or account suspended.",
+                limit_reached: true
+            };
+        }
+
         const session = await getActiveSession(business.id);
         if (!session) return { success: false, error: "Queue is CLOSED." };
 
@@ -243,24 +258,37 @@ export async function createToken(
 
         const visit = { id: result.visit_id!, token_number: result.token_number! };
 
-        // Async WhatsApp Alert (Phase 13: Utility Dispatch Engine)
+        // Async WhatsApp Alert (Phase 13: Upgraded EWT-Aware Dispatch)
         if (cleanPhone && typeof cleanPhone === 'string' && visit.id) {
+            const { sendTokenConfirmation } = await import("@/lib/whatsapp-dispatch");
 
-            // To be accurate, we need the active serving tokens count to estimate wait.
-            // But for speed, we can pass basic details or run a quick count query.
-            // As per implementation plan, using tokenNumber, "currentServing" (stubbed to #1 if unknown), and estimated wait
-            const estTime = isPriority ? 5 : 15; // static estimate for now, can be dynamic later
+            // Get patients ahead for EWT calculation
+            const { count: aheadCount } = await supabase
+                .from('clinical_visits')
+                .select('*', { count: 'exact', head: true })
+                .eq('session_id', session.id)
+                .eq('status', 'WAITING')
+                .lt('token_number', visit.token_number);
 
-            sendWhatsAppUtilityTemplate({
-                to: cleanPhone,
-                templateName: "token_confirmation_utility",
-                variables: [
-                    { type: "text", text: (isPriority ? `E-${visit.token_number}` : `#${visit.token_number}`) },
-                    { type: "text", text: "1" }, // Current serving (placeholder if not queried)
-                    { type: "text", text: estTime.toString() }
-                ],
+            // Fetch department avg consultation time for EWT samples
+            const { data: dept } = await supabase
+                .from('departments')
+                .select('avg_consultation_time_seconds')
+                .eq('id', departmentId || '')
+                .maybeSingle();
+
+            sendTokenConfirmation({
+                patientName: safeName || "Guest",
+                tokenNumber: (isPriority ? `E-${visit.token_number}` : `#${visit.token_number}`),
+                doctorName: "Doctor", // This would ideally come from the doctor object if selected
+                departmentName: "OPD", // This would ideally come from the department object if selected
+                clinicName: business.name,
                 clinicId: business.id,
-                tokenId: visit.id
+                visitId: visit.id,
+                phone: cleanPhone,
+                patientsAhead: aheadCount || 0,
+                avgConsultationSeconds: dept?.avg_consultation_time_seconds || 600, // default 10 mins
+                mapsQuery: business.name // placeholder for maps
             }).catch(err => console.error("Async WhatsApp Dispatch Error:", err));
         }
 
@@ -582,34 +610,10 @@ async function updateSessionStatus(slug: string, status: 'OPEN' | 'CLOSED' | 'PA
 }
 
 
-// 8.5 Toggle Arrival Status
+// 8.5 Toggle Arrival Status (NABH Audit Compliant)
 export async function toggleArrivalStatus(clinicSlug: string, visitId: string, isArrived: boolean) {
-    if (!visitId || !clinicSlug) return { error: "Missing data" };
-    try {
-        const user = await getAuthenticatedUser();
-        if (!user) return { error: "Unauthorized" };
-
-        const supabase = createAdminClient();
-        const business = await getBusinessBySlug(clinicSlug);
-        if (!business) return { error: "Business not found" };
-
-        if (!await verifyClinicAccess(business.id)) return { error: "Unauthorized" };
-
-        const { error } = await supabase
-            .from('clinical_visits')
-            .update({
-                registration_complete_time: isArrived ? new Date().toISOString() : null,
-                status: isArrived ? 'WAITING' : 'WAITING'
-            })
-            .eq('id', visitId)
-            .eq('clinic_id', business.id);
-
-        if (error) throw error;
-        revalidatePath(`/${clinicSlug}`);
-        return { success: true };
-    } catch (e) {
-        return { error: (e as Error).message };
-    }
+    if (!isArrived) return { error: "Cannot undo arrival via this path" };
+    return processQueueAction(clinicSlug, 'ARRIVE', visitId);
 }
 
 // DASHBOARD DATA (CLINICAL VERSION)
@@ -676,12 +680,15 @@ export async function getDashboardData(clinicSlug: string) {
                 ? `${decryptedPhone.substring(0, 2)}******${decryptedPhone.substring(decryptedPhone.length - 2)}`
                 : decryptedPhone;
 
+            const isLateGhost = v.status === 'WAITING' && !visit.registration_complete_time && visit.token_number < (session?.nowServingNumber || 0);
+
             return {
                 ...v,
                 patient_name: patient?.name,
                 patient_phone: maskedPhone,
                 customerPhone: maskedPhone,
                 customerName: patient?.name,
+                status: isLateGhost ? 'WAITING_LATE' : v.status,
                 isArrived: !!visit.registration_complete_time,
                 source: visit.source || 'QR',
                 departmentId: visit.department_id,

@@ -1,13 +1,14 @@
+/* eslint-disable react/no-unescaped-entities */
 import { CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function PricingPage() {
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-[#0B1120] font-sans">
+        <div className="min-h-screen bg-cloud-dancer dark:bg-[#0B1120] font-sans selection:bg-electric-cyan/30">
             {/* Header/Hero for Pricing */}
             <section className="pt-24 pb-16 px-6 text-center max-w-4xl mx-auto">
-                <h1 className="text-5xl md:text-6xl font-black tracking-tight text-slate-900 dark:text-white mb-6">
-                    Transparent Pricing. <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-cyan-400">No Hidden SMS Fees.</span>
+                <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter text-slate-900 dark:text-white mb-6">
+                    Transparent Pricing. <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-electric-cyan to-indigo-500 animate-gradient">No Hidden SMS Fees.</span>
                 </h1>
                 <p className="text-xl text-slate-600 dark:text-slate-400 font-medium mb-4">
                     Other platforms charge you a base fee and then quietly tax you $150+ a month on SMS usage. QLink bundles unlimited WhatsApp alerts into a single, predictable monthly subscription.
@@ -40,8 +41,8 @@ export default function PricingPage() {
                     </div>
 
                     {/* Professional Tier (Popular) */}
-                    <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border-2 border-indigo-500 relative flex flex-col shadow-2xl shadow-indigo-600/10 md:-mt-4 md:mb-4 z-10">
-                        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-500 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">
+                    <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border-2 border-electric-cyan relative flex flex-col shadow-2xl shadow-electric-cyan/10 md:-mt-4 md:mb-4 z-10">
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-electric-cyan text-slate-900 px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest shadow-lg">
                             Most Popular
                         </div>
                         <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Professional</h3>
@@ -58,7 +59,7 @@ export default function PricingPage() {
                             <FeatureItem included>Automated Feedback Surveys</FeatureItem>
                             <FeatureItem included>Basic Analytics Reports</FeatureItem>
                         </ul>
-                        <Button className="w-full h-12 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white">Start Free Trial</Button>
+                        <Button className="w-full h-14 rounded-xl font-black text-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-600/20">Book a Free Demo</Button>
                         <p className="text-[10px] text-center text-slate-400 mt-3">*Subject to Fair Use Policy (5,000 msgs/mo)</p>
                     </div>
 
@@ -107,7 +108,7 @@ export default function PricingPage() {
                 <div className="max-w-4xl mx-auto px-6 text-center">
                     <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white mb-6">Stop paying the &quot;Hidden SMS Tax&quot;.</h2>
                     <p className="text-lg text-slate-600 dark:text-slate-400 mb-12">
-                        Did you know that legacy queue systems advertise a low monthly fee, but force you to buy expensive SMS credit bundles that expire? With QLink, WhatsApp alerts are bundled directly into your subscription.
+                        Did you know that legacy queue systems advertise a low monthly fee, but force you to buy expensive SMS credit bundles that expire? With <span className="font-bold text-indigo-600 underline decoration-electric-cyan decoration-2">QLink</span>, WhatsApp alerts are bundled directly into your subscription.
                     </p>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
@@ -141,7 +142,7 @@ function FeatureItem({ children, included, excluded, textClass }: { children: Re
     return (
         <li className="flex items-start gap-3">
             {isIncluded ? (
-                <CheckCircle2 className="w-5 h-5 text-indigo-500 grow-0 shrink-0" />
+                <CheckCircle2 className="w-5 h-5 text-electric-cyan grow-0 shrink-0" />
             ) : (
                 <XCircle className="w-5 h-5 text-slate-300 dark:text-slate-700 grow-0 shrink-0" />
             )}

@@ -1,10 +1,11 @@
+/* eslint-disable react/no-unescaped-entities */
 import Link from "next/link";
 import { MessageSquare, QrCode, Smartphone, ArrowRight, ShieldCheck, Zap, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function WhatsAppLandingPage() {
     return (
-        <div className="min-h-screen bg-[#EFEAE2] dark:bg-[#0B141A] font-sans selection:bg-[#25D366]/30 relative overflow-hidden">
+        <div className="min-h-screen bg-cloud-dancer dark:bg-[#0B141A] font-sans selection:bg-[#25D366]/30 relative overflow-hidden">
             {/* WhatsApp Doodle Background Pattern */}
             <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.02] pointer-events-none" style={{ backgroundImage: "url('https://upload.wikimedia.org/wikipedia/commons/5/5e/WhatsApp_icon.png')", backgroundSize: '120px' }}></div>
 

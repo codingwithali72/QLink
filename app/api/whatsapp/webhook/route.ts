@@ -358,7 +358,7 @@ export async function POST(req: Request) {
 
             // Check if department has multiple doctors and non-pooled routing
             const { data: dept } = await supabase.from('departments').select('routing_strategy').eq('id', deptId).single();
-            const { data: doctors } = await supabase.from('doctors').select('id, name').eq('department_id', deptId).eq('is_active', true);
+            const { data: doctors } = await supabase.from('doctors').select('id, name, specialization').eq('department_id', deptId).eq('is_active', true);
 
             if (dept?.routing_strategy !== 'POOLED' && doctors && doctors.length > 1) {
                 // Ask to select a doctor
@@ -370,17 +370,22 @@ export async function POST(req: Request) {
 
                 await sendWhatsAppInteractiveList(
                     phoneNumber,
-                    "Please select your preferred doctor:",
+                    "Please select your preferred specialist:",
                     "Select Doctor",
                     [{
-                        title: "Available Doctors",
+                        title: "Available Specialists",
                         rows: doctors.map(d => ({
-                            id: `DOC_${deptId}_${d.id}`, // Encode both IDs to maintain state easily
-                            title: d.name
+                            id: `DOC_${deptId}_${d.id}`,
+                            title: d.name.startsWith("Dr.") ? d.name : `Dr. ${d.name}`,
+                            description: d.specialization || "OPD Specialist"
                         }))
                     }, {
-                        title: "Automated",
-                        rows: [{ id: `DOC_${deptId}_ANY`, title: "Any Available Doctor", description: "First available specialist" }]
+                        title: "Automated Routing",
+                        rows: [{
+                            id: `DOC_${deptId}_ANY`,
+                            title: "Smart Balance",
+                            description: "First available consultant (Fastest)"
+                        }]
                     }]
                 );
             } else {
@@ -436,8 +441,25 @@ export async function POST(req: Request) {
         } else if (interactiveResponseId === 'REJOIN_QUEUE') {
             await supabase.from('whatsapp_conversations').update({ state: 'AWAITING_JOIN_CONFIRM' }).eq('id', conv.id);
             await sendWhatsAppReply(phoneNumber, "Send JOIN to start a new token request.");
-        } else if (interactiveResponseId === 'IM_ON_THE_WAY' || interactiveResponseId === 'IM_HERE') {
-            await sendWhatsAppReply(phoneNumber, "Noted! Please wait at the reception area for your turn.");
+        } else if (interactiveResponseId === 'IM_HERE' && conv.active_visit_id) {
+            // Patient Self-Check-in (Phase 14)
+            const { data: vData } = await supabase.from('clinical_visits')
+                .select('clinic_id, session_id')
+                .eq('id', conv.active_visit_id)
+                .single();
+
+            if (vData) {
+                await supabase.rpc('rpc_process_clinical_action', {
+                    p_clinic_id: vData.clinic_id,
+                    p_session_id: vData.session_id,
+                    p_staff_id: null,
+                    p_action: 'ARRIVE',
+                    p_visit_id: conv.active_visit_id
+                });
+                await sendWhatsAppReply(phoneNumber, "✅ Check-in Successful! We've notified the reception of your arrival. Please take a seat.");
+            }
+        } else if (interactiveResponseId === 'IM_ON_THE_WAY') {
+            await sendWhatsAppReply(phoneNumber, "Safe travels! See you soon at the clinic.");
         }
 
     } else if (conv.state === 'AWAITING_CANCEL_CONFIRM') {

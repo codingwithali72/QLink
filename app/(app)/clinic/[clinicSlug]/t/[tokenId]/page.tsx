@@ -2,14 +2,14 @@
 
 import { cancelToken, getPublicTokenStatus, submitFeedback } from "@/app/actions/queue";
 import { Button } from "@/components/ui/button";
-import { Loader2, Share2, XCircle, Siren, Clock, RefreshCw, Star } from "lucide-react";
+import { Loader2, Share2, XCircle, Clock, Star, Info, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
 
-// ⭐ Google Reviews link for Prime Care Clinic Mumbai
-const GOOGLE_REVIEW_URL = "https://www.google.com/search?q=prime+care+clinic+mumbai+reviews&si=AL3DRZEsmMGCryMMFSHJ3StBhOdZ2-6yYkXd_doETEE1OR-qORKK79dNQGPzJCWBtNShoDO3RJOrdTxRMupkyX7oxtLsi0pnMJ46_2CI0Z_Ltmdq8kJdtHAOClECcnj3jhlcV8RW96Q--uAhpFqdNEiooHzKeQGM-g%3D%3D&sa=X";
+// ⭐ Google Reviews link
+const GOOGLE_REVIEW_URL = "https://www.google.com/search?q=prime+care+clinic+mumbai+reviews";
 
 export default function TicketPage({ params }: { params: { clinicSlug: string; tokenId: string } }) {
     const [actionLoading, setActionLoading] = useState(false);
@@ -28,7 +28,6 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
     const [loading, setLoading] = useState(true);
     const [syncError, setSyncError] = useState(false);
 
-    // SF2 + SF3: Queue movement alerts
     const prevTokensAheadRef = useRef<number | null>(null);
     const [queueAlert, setQueueAlert] = useState<{ type: 'fast' | 'next' | 'shifted'; msg: string } | null>(null);
 
@@ -43,15 +42,12 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
                 if (prev !== null && res.data.token.status === 'WAITING') {
                     const delta = prev - newAhead;
                     if (newAhead === 0) {
-                        // SF2: You are next!
                         setQueueAlert({ type: 'next', msg: '🔔 You are NEXT. Please come to the reception counter now.' });
                         if (navigator?.vibrate) navigator.vibrate([300, 100, 300]);
                     } else if (delta >= 3) {
-                        // SF2: Queue moved fast
-                        setQueueAlert({ type: 'fast', msg: `⚡ Queue moved faster than expected. You are now ${newAhead} ahead — please return to the clinic.` });
+                        setQueueAlert({ type: 'fast', msg: `⚡ Queue moved faster than expected. You are now ${newAhead} ahead.` });
                     } else if (delta < 0) {
-                        // SF3: Queue shifted (recall or emergency)
-                        setQueueAlert({ type: 'shifted', msg: 'ℹ️ A priority case was added. Your position shifted by 1.' });
+                        setQueueAlert({ type: 'shifted', msg: 'ℹ️ A priority case was added. Your position shifted.' });
                     }
                 }
                 prevTokensAheadRef.current = newAhead;
@@ -71,25 +67,13 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         }
     }, [params.tokenId, isOffline]);
 
-    // Setup Polling & Background Hydration
     useEffect(() => {
-        // 1. Initial Load
         fetchStatus();
-
-        // 2. Continuous Polling (Every 10s)
         const interval = setInterval(fetchStatus, 10000);
-
-        // 3. Indian SMB Survival Fix: The "Pocket Lock" Refresh
-        // Mobile browsers (iOS/Android) suspend JS intervals when the screen is locked.
-        // We must manually trigger a fetch the *exact. millisecond* the screen turns back on.
         const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                console.log("Phone unlocked/tab focused. Force hydrating queue state.");
-                fetchStatus();
-            }
+            if (document.visibilityState === 'visible') fetchStatus();
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
-
         return () => {
             clearInterval(interval);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -107,25 +91,17 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         };
     }, []);
 
-    // Breathing Animation State
-    const [breathe, setBreathe] = useState(false);
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setBreathe(prev => !prev);
-        }, 800);
-        return () => clearInterval(interval);
-    }, []);
-
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-50">
-                <Loader2 className="w-10 h-10 animate-spin text-slate-400" />
+            <div className="min-h-screen flex flex-col items-center justify-center bg-cloud-dancer dark:bg-[#0B1120]">
+                <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mb-4 opacity-20" />
+                <p className="text-sm font-black text-indigo-900/30 uppercase tracking-[0.3em]">Patient Concierge</p>
             </div>
         );
     }
 
     if (syncError || !tokenData) {
-        return <div className="p-8 text-center mt-10 text-slate-500">Ticket not found or session expired.</div>;
+        return <div className="p-8 text-center mt-10 text-slate-500 font-medium bg-cloud-dancer dark:bg-[#0B1120] min-h-screen">Ticket session expired or not found.</div>;
     }
 
     const handleSubmitFeedback = async (e?: React.FormEvent, submitRating?: number) => {
@@ -136,18 +112,17 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         await submitFeedback(params.tokenId, activeRating, feedbackText);
         setFeedbackLoading(false);
         setFeedbackSubmitted(true);
-        // 4 or 5 stars → redirect to Google review page
         if (activeRating >= 4) {
             setTimeout(() => window.open(GOOGLE_REVIEW_URL, "_blank"), 800);
         }
     };
 
     const handleCancel = async () => {
-        if (!confirm("Are you sure you want to cancel your ticket?")) return;
+        if (!confirm("Are you sure you want to cancel your visit?")) return;
         setActionLoading(true);
         const res = await cancelToken(params.clinicSlug, params.tokenId);
         if (res.error) alert("Error: " + res.error);
-        else fetchStatus(); // Refresh instantly
+        else fetchStatus();
         setActionLoading(false);
     };
 
@@ -155,273 +130,221 @@ export default function TicketPage({ params }: { params: { clinicSlug: string; t
         if (navigator.share) {
             try {
                 await navigator.share({
-                    title: `My Token ${formatToken(tokenData.token_number, tokenData.is_priority)}`,
-                    text: `Track my queue position for ${params.clinicSlug}`,
+                    title: `QLink Token: ${formatToken(tokenData.token_number, tokenData.is_priority)}`,
+                    text: `Track my clinical queue position at ${params.clinicSlug}`,
                     url: window.location.href,
                 });
-            } catch { console.error("Share failed"); }
+            } catch { /* Fail silent */ }
         } else {
-            try {
-                await navigator.clipboard.writeText(window.location.href);
-                alert("Link copied to clipboard!");
-            } catch { alert("Copy failed"); }
+            await navigator.clipboard.writeText(window.location.href);
+            alert("Tracking link copied!");
         }
     };
 
-    // --- LOGIC ---
     const isServing = tokenData.status === "SERVING";
     const isDone = tokenData.status === "SERVED";
     const isCancelled = tokenData.status === "CANCELLED";
     const isSkipped = tokenData.status === "SKIPPED";
-    const isEmergency = tokenData.is_priority;
+    const isPriority = tokenData.is_priority;
 
-    // SF4 FIX: ETA range 6–15 min/token (reflects real Indian GP avg of 10–15 min)
-    const minMins = tokensAhead * 6;
+    const minMins = tokensAhead * 8;
     const maxMins = tokensAhead * 15;
-
     let etaText = "";
-    if (tokensAhead === 0 && currentServingDisplay !== "--") etaText = "Next Up";
-    else if (tokensAhead === 0 && currentServingDisplay === "--") etaText = "Ready Now";
-    else if (minMins > 90) etaText = `> ${Math.round(minMins / 60)} hr`;
-    else etaText = `${minMins}–${maxMins} min (est.)`;
+    if (tokensAhead === 0 && !isServing) etaText = "Next Up";
+    else if (isServing) etaText = "Inside Now";
+    else if (minMins > 90) etaText = `~${Math.round(minMins / 60)}h ${minMins % 60}m`;
+    else etaText = `${minMins}–${maxMins} min`;
 
-    const isApproaching = !isServing && !isDone && !isEmergency && !isCancelled && !isSkipped && tokensAhead <= 2 && tokensAhead > 0;
-
-    // --- UI STATES ---
-    let statusText = "WAITING";
-    let statusBg = "bg-blue-600";
-    let pulse = "";
-
-    if (isApproaching) { statusText = "APPROACHING"; statusBg = "bg-blue-600"; pulse = "animate-pulse duration-700"; }
-    if (isEmergency) { statusText = "EMERGENCY"; statusBg = "bg-red-600"; pulse = "animate-pulse"; }
-    if (isServing) { statusText = "NOW SERVING"; statusBg = "bg-green-600"; pulse = "animate-bounce"; }
-    if (isDone) { statusText = "COMPLETED"; statusBg = "bg-blue-600"; pulse = ""; }
-    if (isCancelled) { statusText = "CANCELLED"; statusBg = "bg-slate-500"; pulse = ""; }
-    if (isSkipped) { statusText = "SKIPPED"; statusBg = "bg-yellow-600"; pulse = ""; }
-    if (tokenData.status === "PAUSED") { statusText = "QUEUE PAUSED"; statusBg = "bg-orange-500"; pulse = "animate-pulse"; }
+    // Visual Config
+    let themeBg = "bg-indigo-600";
+    let statusLabel = "In Web-Queue";
+    if (isServing) { themeBg = "bg-emerald-600"; statusLabel = "Now Serving"; }
+    if (isPriority) { themeBg = "bg-indigo-700"; statusLabel = "Priority Case"; }
+    if (isDone) { themeBg = "bg-slate-900"; statusLabel = "Visit Complete"; }
+    if (isCancelled) { themeBg = "bg-slate-500"; statusLabel = "Cancelled"; }
 
     return (
-        <div className="min-h-screen bg-slate-100 flex flex-col relative">
+        <div className="min-h-screen bg-cloud-dancer dark:bg-[#0B1120] font-sans selection:bg-indigo-500/30 flex flex-col items-center p-6 pt-12 sm:pt-20">
 
+            {/* Real-time Status Banner */}
             {isOffline && (
-                <div className="absolute top-0 left-0 w-full bg-red-500 text-white text-center text-xs py-2 font-bold z-50 animate-in slide-in-from-top-full">
-                    You are offline. Reconnecting...
+                <div className="fixed top-0 left-0 w-full bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.2em] py-2 text-center z-50">
+                    Offline • Sync Suspended
                 </div>
             )}
 
-            {/* SF2+SF3: Queue movement alert banner */}
             {queueAlert && (
                 <div
-                    className={`fixed top-0 left-0 w-full text-white text-center text-xs py-3 font-bold z-50 flex items-center justify-center gap-2 cursor-pointer ${queueAlert.type === 'next' ? 'bg-green-600 animate-pulse' :
-                        queueAlert.type === 'fast' ? 'bg-blue-600 animate-pulse' :
-                            'bg-slate-600'
-                        }`}
+                    className="fixed top-4 left-4 right-4 bg-white dark:bg-slate-900 border border-indigo-500/30 p-4 rounded-2xl shadow-2xl z-50 animate-in slide-in-from-top-10 duration-500 flex items-center gap-4 cursor-pointer"
                     onClick={() => setQueueAlert(null)}
                 >
-                    {queueAlert.msg}
-                    <span className="opacity-60 text-[10px]">(tap to dismiss)</span>
+                    <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-indigo-500/20">
+                        <Info className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{queueAlert.msg}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Tap to dismiss</p>
+                    </div>
                 </div>
             )}
 
+            {/* THE TOKEN CARD */}
+            <div className={`w-full max-w-md bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl shadow-indigo-900/10 dark:shadow-black/50 overflow-hidden transition-all duration-700 ${isServing ? 'ring-8 ring-emerald-500/20 scale-105' : 'scale-100'}`}>
 
-            <div className="flex-1 flex items-center justify-center p-4 relative">
-                <div className={`w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden relative z-10 transition-all duration-1000 ease-in-out ${isApproaching ? `shadow-[0_0_60px_-5px_rgba(34,211,238,0.7)] ring-4 ring-cyan-400 ${breathe ? "scale-[1.04]" : "scale-[1.01]"} ` : "scale-100"}`}>
-
-                    {/* HEADER */}
-                    <div className={`p-6 pb-8 text-white ${statusBg} transition-colors duration-500 relative overflow-hidden`}>
-                        {isEmergency && <Siren className="absolute -right-4 -top-4 w-32 h-32 text-white/10 rotate-12" />}
-
-                        <div className="flex justify-between items-start relative z-10">
-                            <div>
-                                <p className="opacity-80 text-xs font-semibold uppercase tracking-wider">Workspace</p>
-                                <h2 className="font-bold text-lg leading-tight truncate max-w-[200px]">{params.clinicSlug}</h2>
-                            </div>
-                            {/* Sync Indicator */}
-                            <div className="bg-black/20 backdrop-blur px-2 py-1 rounded-full text-[10px] uppercase font-bold tracking-widest flex items-center gap-1">
-                                <RefreshCw className="w-3 h-3 animate-spin duration-700" /> Synced
-                            </div>
-                        </div>
-
-                        <div className="mt-6 text-center relative z-10">
-                            <p className="opacity-80 text-sm uppercase tracking-widest font-medium">Your Token</p>
-                            <h1 className="text-8xl font-black tracking-tighter my-2">{formatToken(tokenData.token_number, tokenData.is_priority)}</h1>
-                            <span className={`inline-block px-4 py-1.5 rounded-full text-xs font-bold tracking-wide bg-white/20 backdrop-blur-sm ${pulse}`}>
-                                {statusText}
-                            </span>
+                {/* Branding & Status Header */}
+                <div className={`p-10 ${themeBg} text-white transition-colors duration-700 relative overflow-hidden`}>
+                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+                    <div className="flex justify-between items-start mb-10 relative z-10">
+                        <div className="h-10 w-10 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center font-black text-xl border border-white/20 shadow-inner">Q</div>
+                        <div className="flex items-center gap-2 bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10">
+                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+                            Live Sync
                         </div>
                     </div>
 
-                    <div className="relative h-6 bg-slate-50 flex items-center justify-between -mt-3 z-20 rounded-t-3xl">
-                        {/* Decorative Curve Overlap */}
-                    </div>
-
-                    {/* INFO BODY */}
-                    <div className="px-6 pb-8 bg-slate-50 space-y-6">
-
-                        {/* ALERT: Emergency */}
-                        {isEmergency && !isServing && !isDone && (
-                            <div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-center gap-3 animate-pulse">
-                                <Siren className="w-6 h-6 text-red-600 shrink-0" />
-                                <div>
-                                    <h4 className="font-bold text-red-800 text-sm">Priority Status</h4>
-                                    <p className="text-xs text-red-600 font-medium">You have been marked as urgent.</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {!isDone && !isCancelled && !isSkipped && !isServing && tokenData.status !== 'PAUSED' && (
-                            <>
-                                {/* GRID: Now Serving | Remaining */}
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="p-4 bg-white rounded-2xl text-center border border-slate-100 shadow-sm">
-                                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Now Serving</p>
-                                        <p className="text-3xl font-black text-slate-900 mt-1">{currentServingDisplay}</p>
-                                    </div>
-                                    <div className="p-4 bg-white rounded-2xl text-center border border-slate-100 shadow-sm">
-                                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Tokens Ahead</p>
-                                        <p className="text-3xl font-black text-slate-900 mt-1">{tokensAhead}</p>
-                                    </div>
-                                </div>
-
-                                {/* ETA & NOTE */}
-                                <div className="text-center space-y-2 py-2 mt-4">
-                                    <div className="flex items-center justify-center gap-2 text-slate-600">
-                                        <Clock className="w-5 h-5" />
-                                        <span className="text-lg font-bold">ETA: <span className="text-slate-900">{etaText}</span></span>
-                                    </div>
-                                    <div className="mt-4">
-                                        <p className="text-[13px] text-blue-900 font-bold bg-blue-100/80 inline-block px-4 py-2 rounded-xl">
-                                            Keep this page open. Check when tokens ahead ≤ 5.
-                                        </p>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-
-                        {/* B3 FIX: Show pause notice instead of misleading ETA */}
-                        {tokenData.status === 'PAUSED' && (
-                            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-6 text-center space-y-2">
-                                <div className="text-3xl">⏸️</div>
-                                <h4 className="font-bold text-orange-800">Queue Temporarily Paused</h4>
-                                <p className="text-sm text-orange-600">The doctor is attending to an emergency. Please stay seated — the queue will resume shortly.</p>
-                                <p className="text-xs text-orange-400 font-semibold uppercase tracking-wider mt-2">ETA unavailable during pause</p>
-                            </div>
-                        )}
-
-
-                        {/* Show Room Allocation if SERVING */}
-                        {isServing && tokenData.room_number && (
-                            <div className="p-6 bg-green-50 rounded-2xl text-center border-2 border-green-200 shadow-sm animate-in zoom-in">
-                                <p className="text-xs text-green-600 uppercase font-bold tracking-wider">Notice</p>
-                                <p className="text-2xl font-black text-green-900 mt-1">Please proceed to</p>
-                                <p className="text-5xl font-black text-green-700 mt-2">{tokenData.room_number}</p>
-                            </div>
-                        )}
-
-                        {/* COMPLETED: Rating Section */}
-                        {isDone && (
-                            <div className="p-6 space-y-5">
-                                {feedbackSubmitted ? (
-                                    <div className="text-center py-6 space-y-3 animate-in zoom-in duration-300">
-                                        <div className="text-4xl">🎉</div>
-                                        <h3 className="font-bold text-xl text-slate-900">Thank you!</h3>
-                                        <p className="text-slate-500 text-sm">Your feedback helps us improve.</p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <div className="text-center space-y-1">
-                                            <div className="bg-green-100 w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3">
-                                                <span className="text-2xl">✅</span>
-                                            </div>
-                                            <h3 className="font-bold text-xl text-slate-900">Visit Complete!</h3>
-                                            <p className="text-slate-500 text-sm">How was your experience today?</p>
-                                        </div>
-                                        <div className="flex justify-center gap-1 sm:gap-2">
-                                            {[1, 2, 3, 4, 5].map((star) => (
-                                                <button
-                                                    key={star}
-                                                    onClick={() => {
-                                                        setRating(star);
-                                                        // Auto-submit positive feedback
-                                                        if (star >= 4) {
-                                                            // Give a tiny UX delay so they see the star fill up before it submits
-                                                            setTimeout(() => {
-                                                                const fakeEvent = { preventDefault: () => { } } as React.FormEvent;
-                                                                handleSubmitFeedback(fakeEvent, star);
-                                                            }, 300);
-                                                        }
-                                                    }}
-                                                    onMouseEnter={() => setHoverRating(star)}
-                                                    onMouseLeave={() => setHoverRating(0)}
-                                                    className="p-1 transition-transform active:scale-90 hover:scale-110 focus:outline-none"
-                                                    disabled={feedbackLoading}
-                                                >
-                                                    <Star
-                                                        className={`w-10 h-10 sm:w-12 sm:h-12 transition-colors duration-200 ${star <= (hoverRating || rating)
-                                                            ? "fill-yellow-400 text-yellow-500"
-                                                            : "fill-transparent text-slate-300"
-                                                            }`}
-                                                    />
-                                                </button>
-                                            ))}
-                                        </div>
-                                        {rating > 0 && rating <= 3 && (
-                                            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                                <textarea
-                                                    value={feedbackText}
-                                                    onChange={e => setFeedbackText(e.target.value)}
-                                                    placeholder="Tell us what we can improve..."
-                                                    className="w-full p-4 text-sm border-2 border-slate-200 rounded-xl resize-none h-28 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-medium"
-                                                />
-                                            </div>
-                                        )}
-                                        {rating > 0 && rating <= 3 && (
-                                            <Button
-                                                onClick={(e) => handleSubmitFeedback(e, rating)}
-                                                disabled={feedbackLoading || !feedbackText.trim()}
-                                                className="w-full h-12 font-bold rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-lg shadow-blue-600/20"
-                                            >
-                                                {feedbackLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Submit Feedback"}
-                                            </Button>
-                                        )}
-                                        {rating >= 4 && feedbackLoading && (
-                                            <div className="flex items-center justify-center text-slate-500 gap-2 text-sm font-medium animate-pulse">
-                                                <Loader2 className="animate-spin w-4 h-4" /> Submitting rating...
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        )}
-
-                        {/* ACTIONS */}
-                        <div className="pt-2 flex gap-3">
-                            {!isCancelled && !isDone && !isServing && !isSkipped && (
-                                <Button
-                                    variant="destructive"
-                                    disabled={actionLoading}
-                                    className="flex-1 rounded-xl h-12 font-bold shadow-lg shadow-red-100 active:scale-95 transition-transform"
-                                    onClick={handleCancel}
-                                >
-                                    {actionLoading ? <Loader2 className="animate-spin" /> : <><XCircle className="w-4 h-4 mr-2" /> Cancel</>}
-                                </Button>
-                            )}
-                            <Button
-                                variant="outline"
-                                onClick={handleShare}
-                                className="flex-1 rounded-xl h-12 border-slate-200 font-bold bg-white text-slate-900 hover:bg-slate-50 hover:text-slate-900 active:scale-95 transition-transform shadow-sm"
-                            >
-                                <Share2 className="w-4 h-4 mr-2" /> Share Link
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* FOOTER */}
-                    <div className="bg-blue-600 p-3 text-center text-xs text-white/80 font-bold tracking-widest uppercase border-t border-blue-500">
-                        Powered by QLink
+                    <div className="text-center space-y-2 relative z-10">
+                        <p className="text-xs font-black uppercase tracking-[0.4em] opacity-60">{statusLabel}</p>
+                        <h1 className="text-[7rem] font-black tracking-tighter leading-none mb-2 drop-shadow-xl">{formatToken(tokenData.token_number, tokenData.is_priority)}</h1>
+                        <p className="text-sm font-bold opacity-80 backdrop-blur-sm bg-white/10 inline-block px-4 py-1 rounded-full border border-white/10">{params.clinicSlug}</p>
                     </div>
                 </div>
+
+                <div className="p-10 bg-white dark:bg-slate-900 space-y-10">
+
+                    {/* Live Counter Info */}
+                    {!isDone && !isCancelled && !isSkipped && (
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="text-center group">
+                                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Progress</p>
+                                <div className="text-4xl font-black text-slate-900 dark:text-white tabular-nums group-hover:scale-110 transition-transform">{currentServingDisplay}</div>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Current</p>
+                            </div>
+                            <div className="text-center group">
+                                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Remaining</p>
+                                <div className="text-4xl font-black text-indigo-600 tabular-nums group-hover:scale-110 transition-transform">{tokensAhead}</div>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{tokensAhead === 0 ? 'Next' : 'Ahead'}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Serving Destination */}
+                    {isServing && tokenData.room_number && (
+                        <div className="bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-100 dark:border-emerald-900/50 p-8 rounded-[2rem] text-center space-y-3 animate-in fade-in zoom-in duration-500">
+                            <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
+                            <h3 className="text-xl font-black text-emerald-900 dark:text-emerald-300">Proceed to Consultation</h3>
+                            <div className="text-5xl font-black text-emerald-600 tracking-tighter uppercase">{tokenData.room_number}</div>
+                        </div>
+                    )}
+
+                    {/* Wait Time Indicator */}
+                    {!isDone && !isServing && !isCancelled && (
+                        <div className="bg-slate-50 dark:bg-slate-800/10 p-8 rounded-[2.5rem] border border-slate-100 dark:border-white/5 space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center shadow-inner border border-slate-100 dark:border-white/5">
+                                        <Clock className="w-5 h-5 text-indigo-500" />
+                                    </div>
+                                    <span className="text-lg font-black text-slate-900 dark:text-white">Est. Wait Time</span>
+                                </div>
+                                <div className="text-2xl font-black text-indigo-600 tabular-nums">{etaText}</div>
+                            </div>
+                            <div className="relative h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                    className="absolute top-0 left-0 h-full bg-indigo-500 transition-all duration-1000"
+                                    style={{ width: `${Math.max(5, 100 - (tokensAhead * 10))}%` }}
+                                ></div>
+                            </div>
+                            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+                                Please stay within clinic vicinity when &quot;Tokens Ahead&quot; is under 5. We will notify you via WhatsApp if the queue moves rapidly.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* COMPLETED: Patient Survey */}
+                    {isDone && (
+                        <div className="text-center space-y-8 py-4">
+                            {!feedbackSubmitted ? (
+                                <>
+                                    <div className="space-y-2">
+                                        <div className="w-20 h-20 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                                            <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+                                        </div>
+                                        <h2 className="text-2xl font-black text-slate-900 dark:text-white">Visit Completed</h2>
+                                        <p className="text-sm font-medium text-slate-500">How was your experience today?</p>
+                                    </div>
+                                    <div className="flex justify-center gap-2">
+                                        {[1, 2, 3, 4, 5].map(s => (
+                                            <button
+                                                key={s}
+                                                onClick={() => {
+                                                    setRating(s);
+                                                    if (s >= 4) setTimeout(() => handleSubmitFeedback(undefined, s), 400);
+                                                }}
+                                                onMouseEnter={() => setHoverRating(s)}
+                                                onMouseLeave={() => setHoverRating(0)}
+                                                className="p-1 transition-all active:scale-90 hover:scale-125 focus:outline-none"
+                                            >
+                                                <Star className={`w-10 h-10 ${s <= (hoverRating || rating) ? 'fill-yellow-400 text-yellow-400' : 'text-slate-200 dark:text-slate-700'}`} />
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {rating > 0 && rating <= 3 && (
+                                        <div className="space-y-4 animate-in slide-in-from-top-4">
+                                            <textarea
+                                                value={feedbackText}
+                                                onChange={e => setFeedbackText(e.target.value)}
+                                                placeholder="What can we improve? (Optional)"
+                                                className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-white/5 text-sm font-medium outline-none focus:border-indigo-500 transition-all h-24"
+                                            />
+                                            <Button onClick={() => handleSubmitFeedback()} disabled={feedbackLoading} className="w-full h-14 rounded-2xl bg-slate-900 dark:bg-white dark:text-slate-900 font-bold">
+                                                {feedbackLoading ? <Loader2 className="animate-spin" /> : "Submit Review"}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="space-y-4 animate-in zoom-in">
+                                    <div className="text-6xl text-emerald-500">✨</div>
+                                    <h3 className="text-2xl font-black text-slate-900 dark:text-white">Feedback Received!</h3>
+                                    <p className="text-sm font-medium text-slate-500">Your input helps us improve clinical efficiency.</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Primary Actions */}
+                    <div className="grid grid-cols-2 gap-4">
+                        {!isDone && !isCancelled && (
+                            <Button
+                                variant="outline"
+                                onClick={handleCancel}
+                                disabled={actionLoading}
+                                className="h-14 rounded-2xl border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 font-bold hover:bg-red-50 hover:text-red-600 hover:border-red-100 transition-all"
+                            >
+                                {actionLoading ? <Loader2 className="animate-spin" /> : <><XCircle className="w-4 h-4 mr-2" /> Cancel</>}
+                            </Button>
+                        )}
+                        <Button
+                            onClick={handleShare}
+                            className={`h-14 rounded-2xl font-bold transition-all shadow-xl ${isDone || isCancelled ? 'col-span-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-slate-900/10'}`}
+                        >
+                            <Share2 className="w-4 h-4 mr-2" /> Share Status
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Footer Badges */}
+                <div className="px-10 py-6 bg-slate-50 dark:bg-slate-950 flex items-center justify-between border-t border-slate-100 dark:border-white/5">
+                    <div className="flex items-center gap-2 text-slate-400 uppercase text-[9px] font-black tracking-widest">
+                        <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                        HIPAA Compliant
+                    </div>
+                    <div className="text-[9px] font-black text-slate-300 tracking-[0.2em] uppercase">Powered by QLink Engine</div>
+                </div>
             </div>
+
+            {/* Support Attribution */}
+            <p className="mt-10 text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.5em]">2026 Enterprise Healthcare Solutions</p>
         </div>
     );
 }

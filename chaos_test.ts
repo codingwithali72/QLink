@@ -17,7 +17,7 @@ async function runChaosTest() {
         console.log("Setting up mock hospital data...");
 
         console.log("1. Finding ANY open session...");
-        let { data: sData } = await supabase.from('sessions').select('id, business_id').eq('status', 'OPEN').limit(1).single();
+        const { data: sData } = await supabase.from('sessions').select('id, business_id').eq('status', 'OPEN').limit(1).single();
         if (!sData) throw new Error("No open session found");
         const sessionId = sData.id;
         const clinicId = sData.business_id;
@@ -64,7 +64,7 @@ async function runChaosTest() {
         // 3. Validation
         let successes = 0;
         let errors = 0;
-        let tokens: number[] = [];
+        const tokens: number[] = [];
 
         for (const res of results) {
             if (res.error) {

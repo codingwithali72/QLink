@@ -136,6 +136,15 @@ export async function GET(req: Request) {
                             { id: 'CANCEL_START', title: 'Cancel My Token' }
                         ]
                     );
+                } else if (alert.event_type === 'ARRIVAL_PROMPT') {
+                    success = await sendWhatsAppInteractiveButtons(
+                        phoneNumber,
+                        "📍 Check-in Reminder\n\nYou are just 3 patients away. Have you arrived at the clinic yet?",
+                        [
+                            { id: 'IM_HERE', title: "I Am Here" },
+                            { id: 'VIEW_STATUS', title: "View Position" }
+                        ]
+                    );
                 } else if (alert.event_type === 'QUEUE_UPDATE') {
                     success = await sendWhatsAppFreeText(phoneNumber, "📢 Queue Update\n\nSomeone ahead was skipped. You are moving up faster!");
                 } else if (alert.event_type === 'FEEDBACK_REQUEST') {
