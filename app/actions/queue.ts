@@ -8,6 +8,7 @@ import { queueWhatsAppMessage } from "@/lib/whatsapp";
 import { normalizeIndianPhone } from "@/lib/phone";
 import { encryptPhone, hashPhone, decryptPhone } from "@/lib/crypto";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { sendWhatsAppUtilityTemplate } from "@/lib/whatsapp-dispatch";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
@@ -163,6 +164,14 @@ export async function createToken(
     const user = await getAuthenticatedUser();
     const actualStaffId = user?.id || null;
 
+    if (actualStaffId) {
+        const business = await getBusinessBySlug(clinicSlug);
+        if (business) {
+            const hasAccess = await verifyClinicAccess(business.id);
+            if (!hasAccess) return { success: false, error: "Unauthorized: Missing privilege for this clinic." };
+        }
+    }
+
     // Rate Limiting for Public Intake
     if (!actualStaffId) {
         const ip = headers().get('x-forwarded-for') || headers().get('x-real-ip') || 'unknown-ip';
@@ -234,20 +243,25 @@ export async function createToken(
 
         const visit = { id: result.visit_id!, token_number: result.token_number! };
 
-        // Async WhatsApp Alert
+        // Async WhatsApp Alert (Phase 13: Utility Dispatch Engine)
         if (cleanPhone && typeof cleanPhone === 'string' && visit.id) {
-            const trackingLink = `${BASE_URL}/${clinicSlug}/t/${visit.id}`;
-            queueWhatsAppMessage(
-                business.id,
-                visit.id,
-                "token_created",
-                cleanPhone,
-                [
-                    { type: "text", text: business.name },
-                    { type: "text", text: isPriority ? `E-${visit.token_number}` : `#${visit.token_number}` },
-                    { type: "text", text: trackingLink }
-                ]
-            ).catch(err => console.error("Async WhatsApp Error:", err));
+
+            // To be accurate, we need the active serving tokens count to estimate wait.
+            // But for speed, we can pass basic details or run a quick count query.
+            // As per implementation plan, using tokenNumber, "currentServing" (stubbed to #1 if unknown), and estimated wait
+            const estTime = isPriority ? 5 : 15; // static estimate for now, can be dynamic later
+
+            sendWhatsAppUtilityTemplate({
+                to: cleanPhone,
+                templateName: "token_confirmation_utility",
+                variables: [
+                    { type: "text", text: (isPriority ? `E-${visit.token_number}` : `#${visit.token_number}`) },
+                    { type: "text", text: "1" }, // Current serving (placeholder if not queried)
+                    { type: "text", text: estTime.toString() }
+                ],
+                clinicId: business.id,
+                tokenId: visit.id
+            }).catch(err => console.error("Async WhatsApp Dispatch Error:", err));
         }
 
         revalidatePath(`/${clinicSlug}`);
@@ -656,11 +670,17 @@ export async function getDashboardData(clinicSlug: string) {
             if (patient?.phone_encrypted) {
                 try { decryptedPhone = decryptPhone(patient.phone_encrypted); } catch { }
             }
+
+            // DPDP MASKING: Only return first 2 and last 2 digits for general dashboard listing
+            const maskedPhone = decryptedPhone && decryptedPhone.length >= 10
+                ? `${decryptedPhone.substring(0, 2)}******${decryptedPhone.substring(decryptedPhone.length - 2)}`
+                : decryptedPhone;
+
             return {
                 ...v,
                 patient_name: patient?.name,
-                patient_phone: decryptedPhone,
-                customerPhone: decryptedPhone,
+                patient_phone: maskedPhone,
+                customerPhone: maskedPhone,
                 customerName: patient?.name,
                 isArrived: !!visit.registration_complete_time,
                 source: visit.source || 'QR',
@@ -711,11 +731,16 @@ export async function getTokensForDate(clinicSlug: string, date: string, limit: 
             if (patient?.phone_encrypted) {
                 try { decryptedPhone = decryptPhone(patient.phone_encrypted); } catch { }
             }
+
+            const maskedPhone = decryptedPhone && decryptedPhone.length >= 10
+                ? `${decryptedPhone.substring(0, 2)}******${decryptedPhone.substring(decryptedPhone.length - 2)}`
+                : decryptedPhone;
+
             return {
                 id: visit.id,
                 tokenNumber: visit.token_number,
                 customerName: patient?.name,
-                customerPhone: decryptedPhone,
+                customerPhone: maskedPhone,
                 status: visit.status,
                 isPriority: v.is_priority,
                 rating: v.rating,

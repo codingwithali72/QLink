@@ -328,6 +328,16 @@ export async function getAdminStats() {
                 avgWaitMins: rpcData.avg_wait_time_live_mins || 0,
             };
         }
+
+        // Add direct pull for WhatsApp Delivery Fails (Phase 13 Utility Dispatch)
+        const istStart = new Date(`${todayStr}T00:00:00+05:30`).toISOString();
+        const { count: failedMsgs } = await supabase.from('whatsapp_logs')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'failed')
+            .gte('created_at', istStart);
+
+        execStats.messagesToday = execStats.messagesToday || 0; // The RPC tracks `whatsapp_messages` (inbound), this adds context.
+        Object.assign(execStats, { messagesFailedToday: failedMsgs || 0 });
     }
 
     return {

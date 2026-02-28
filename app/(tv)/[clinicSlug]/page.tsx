@@ -1,8 +1,8 @@
 "use client";
 
 import { useClinicRealtime } from "@/hooks/useRealtime";
-import { Loader2, AlertTriangle, Monitor, Clock, UserRound } from "lucide-react";
-import { useMemo, useEffect, useState } from "react";
+import { Loader2, AlertTriangle, Monitor, Clock, UserRound, Maximize } from "lucide-react";
+import { useMemo, useEffect, useState, useRef, useCallback } from "react";
 
 
 // Format Helper
@@ -34,6 +34,60 @@ export default function TVDisplayPage({ params }: { params: { clinicSlug: string
     useEffect(() => {
         document.documentElement.classList.add('dark');
         return () => document.documentElement.classList.remove('dark');
+    }, []);
+
+    // ── Audio Chime via Web Audio API (no file dependency) ─────────────────
+    // Plays a pleasant two-tone chime when a new token is called to serving.
+    const lastServingRef = useRef<string | null>(null);
+    const servingToken = useMemo(() => tokens.find(t => t.status === 'SERVING'), [tokens]);
+    const [callAnimation, setCallAnimation] = useState(false);
+
+    const playChime = useCallback(() => {
+        try {
+            const ctx = new AudioContext();
+            const playNote = (freq: number, start: number, duration: number) => {
+                const osc = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+                osc.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+                gainNode.gain.setValueAtTime(0.3, ctx.currentTime + start);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
+                osc.start(ctx.currentTime + start);
+                osc.stop(ctx.currentTime + start + duration);
+            };
+            playNote(523, 0, 0.25); // C5
+            playNote(659, 0.25, 0.25); // E5
+            playNote(784, 0.5, 0.5);  // G5
+        } catch { /* Audio blocked by browser policy */ }
+    }, []);
+
+    useEffect(() => {
+        if (!servingToken) return;
+        if (lastServingRef.current !== servingToken.id) {
+            lastServingRef.current = servingToken.id;
+            playChime();
+            setCallAnimation(true);
+            setTimeout(() => setCallAnimation(false), 2000);
+        }
+    }, [servingToken, playChime]);
+
+    // ── Auto-hide cursor for TV kiosk use ─────────────────────────────────
+    useEffect(() => {
+        document.body.style.cursor = 'none';
+        return () => { document.body.style.cursor = ''; };
+    }, []);
+
+    // ── Fullscreen Toggle ─────────────────────────────────────────────────
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const toggleFullscreen = useCallback(() => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+            setIsFullscreen(true);
+        } else {
+            document.exitFullscreen();
+            setIsFullscreen(false);
+        }
     }, []);
 
     // Grouping Logic for Hospital Zones
@@ -94,7 +148,7 @@ export default function TVDisplayPage({ params }: { params: { clinicSlug: string
                         </p>
                     </div>
                 </div>
-                <div className="flex flex-col items-end">
+                <div className="flex flex-col items-end gap-2">
                     <div className={`px-6 py-2 rounded-full border-2 text-xl font-bold uppercase tracking-widest flex items-center gap-3 ${session?.status === 'OPEN' ? 'border-green-500/50 text-green-400 bg-green-500/10' :
                         session?.status === 'PAUSED' ? 'border-amber-500/50 text-amber-400 bg-amber-500/10' :
                             'border-red-500/50 text-red-400 bg-red-500/10'
@@ -104,11 +158,21 @@ export default function TVDisplayPage({ params }: { params: { clinicSlug: string
                             }`} />
                         {session?.status || 'CLOSED'}
                     </div>
-                    {!isConnected && (
-                        <p className="text-red-400 text-sm font-bold mt-2 animate-pulse flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" /> Reconnecting ({offlineSeconds}s)
-                        </p>
-                    )}
+                    <div className="flex items-center gap-2">
+                        {!isConnected && (
+                            <p className="text-red-400 text-sm font-bold animate-pulse flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" /> Reconnecting ({offlineSeconds}s)
+                            </p>
+                        )}
+                        <button
+                            onClick={toggleFullscreen}
+                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 transition-colors"
+                            title="Toggle Fullscreen (for kiosk)"
+                            style={{ cursor: 'pointer' }}
+                        >
+                            <Maximize className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -134,7 +198,7 @@ export default function TVDisplayPage({ params }: { params: { clinicSlug: string
                                     <div className="flex-1 flex flex-col items-center justify-center text-center w-full">
                                         <div className="text-blue-400 font-bold uppercase tracking-[0.2em] mb-4">Now Serving</div>
                                         {zone.serving ? (
-                                            <div className="animate-in zoom-in-95 duration-700">
+                                            <div className={`transition-all duration-500 ${callAnimation && zone.serving?.id === servingToken?.id ? 'scale-110' : 'scale-100'}`}>
                                                 <h3 className="text-8xl lg:text-[10rem] leading-none font-black tracking-tighter text-white drop-shadow-lg">
                                                     {formatToken(zone.serving.tokenNumber, zone.serving.isPriority)}
                                                 </h3>

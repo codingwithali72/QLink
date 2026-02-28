@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { successResponse, errorResponse, generateRequestId } from '@/lib/api-response'
+import { sendWhatsAppUtilityTemplate } from '@/lib/whatsapp-dispatch'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'qlink_wa_token'
 const APP_SECRET = process.env.WHATSAPP_APP_SECRET || ''
@@ -81,8 +82,18 @@ export async function POST(req: Request) {
     const message = value.messages?.[0]
     const contact = value.contacts?.[0]
 
-    // Acknowledge read/delivery status updates immediately
+    // Phase 6: Delivery Status Webhook
     if (value.statuses) {
+        const statusObj = value.statuses[0];
+        const supabaseStatus = createAdminClient();
+        if (statusObj?.id && statusObj?.status) {
+            await supabaseStatus.from('whatsapp_logs')
+                .update({
+                    status: statusObj.status,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('meta_message_id', statusObj.id);
+        }
         return new NextResponse('Status processed', { status: 200 })
     }
 
@@ -646,12 +657,10 @@ async function createClinicalVisitFromWhatsApp(phoneNumber: string, conv: { id: 
         .single()
 
     if (!session) {
-        await sendWhatsAppReply(phoneNumber, "The session has closed. Cannot create token.");
         await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
         return;
     }
 
-    // Execute Clinical Visit Creation using the updated Phase 2.1 signature
     const { encryptPhone, hashPhone } = await import('@/lib/crypto');
     const phoneEncrypted = encryptPhone(phoneNumber);
     const phoneHash = hashPhone(phoneNumber);
@@ -671,12 +680,10 @@ async function createClinicalVisitFromWhatsApp(phoneNumber: string, conv: { id: 
     });
 
     if (rpcError || !result || !result.success) {
-        await sendWhatsAppReply(phoneNumber, rpcError?.message || result?.error || "System error while adding you to the queue.");
         await supabase.from('whatsapp_conversations').update({ state: 'IDLE' }).eq('id', conv.id);
         return;
     }
 
-    // Calculate people ahead strictly within same department
     const { count: aheadCount } = await supabase
         .from('clinical_visits')
         .select('id', { count: 'exact', head: true })
@@ -685,43 +692,28 @@ async function createClinicalVisitFromWhatsApp(phoneNumber: string, conv: { id: 
         .eq('department_id', deptId)
         .lt('token_number', result.token_number);
 
-    // Get current serving
-    const { data: servingVisit } = await supabase
-        .from('clinical_visits')
-        .select('token_number')
-        .eq('session_id', session.id)
-        .eq('status', 'SERVING')
-        .eq('department_id', deptId)
-        .maybeSingle();
-
-    // Get avg time
     const { data: bizData } = await supabase.from('businesses').select('settings').eq('id', businessId).single();
     const settings = bizData?.settings as { avg_wait_time?: number } | null;
     const avg = settings?.avg_wait_time || 12;
     const ewt = (aheadCount || 0) * avg;
 
-    // Confirm Response
     await supabase.from('whatsapp_conversations').update({
         state: 'ACTIVE_TOKEN',
         active_visit_id: result.visit_id,
         last_interaction: new Date().toISOString()
     }).eq('id', conv.id);
 
-    // If doctor assigned, fetch name
-    let docLine = '';
-    if (result.assigned_doctor_id) {
-        const { data: doc } = await supabase.from('doctors').select('name').eq('id', result.assigned_doctor_id).single();
-        if (doc) docLine = `\nDoctor: ${doc.name}`;
-    }
-
-    await sendWhatsAppInteractiveButtons(
-        phoneNumber,
-        `✅ Queue Confirmed\n\nYour token: #${result.token_number}${docLine}\nNow serving: #${servingVisit?.token_number || '--'}\nPeople ahead: ${aheadCount || 0}\nEst. wait: ${ewt} minutes\n\nYou will receive alerts as your turn approaches.`,
-        [
-            { id: 'VIEW_STATUS', title: 'View Live Status' },
-            { id: 'CANCEL_START', title: 'Cancel My Token' },
-            { id: 'CONTACT_INFO', title: 'Contact Reception' }
-        ]
-    );
+    // Dispatch DPDP-Compliant Utility Template instead of Conversational Free-form text
+    await sendWhatsAppUtilityTemplate({
+        to: phoneNumber,
+        templateName: "token_confirmation_utility",
+        variables: [
+            { type: "text", text: `#${result.token_number}` },
+            { type: "text", text: "1" }, // Current serving placeholder
+            { type: "text", text: ewt.toString() }
+        ],
+        clinicId: businessId,
+        tokenId: result.visit_id
+    });
 }
 // Debug log

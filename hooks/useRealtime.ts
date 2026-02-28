@@ -160,7 +160,7 @@ export function useClinicRealtime(clinicSlug: string) {
             )
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'tokens', filter: `business_id=eq.${businessId}` },
+                { event: '*', schema: 'public', table: 'clinical_visits', filter: `clinic_id=eq.${businessId}` },
                 () => { debouncedFetch(); }
             )
             .subscribe((status, err) => {
@@ -187,18 +187,18 @@ export function useClinicRealtime(clinicSlug: string) {
 
         let failCount = 0;
 
-        if (isConnected) {
-            if (pollingInterval.current) clearTimeout(pollingInterval.current);
-            return;
-        }
-
+        // Heartbeat logic: Even if connected, poll occasionally to recover from silent drops
+        const HEARTBEAT_INTERVAL = 45000; // 45s heartbeat while connected
         const BASE_INTERVAL = 3000;
         const MAX_INTERVAL = 30000;
 
         function scheduleNext() {
-            const delay = Math.min(BASE_INTERVAL * Math.pow(2, failCount), MAX_INTERVAL);
+            const delay = isConnected
+                ? HEARTBEAT_INTERVAL
+                : Math.min(BASE_INTERVAL * Math.pow(2, failCount), MAX_INTERVAL);
+
             pollingInterval.current = setTimeout(async () => {
-                if (document.visibilityState === 'hidden') {
+                if (document.visibilityState === 'hidden' && !isConnected) {
                     failCount = 0;
                     scheduleNext();
                     return;

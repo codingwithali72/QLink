@@ -17,6 +17,8 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { TokenItem } from "./_components/TokenItem";
 import { getClinicDate } from "@/lib/date";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { DoctorLoadPanel } from "@/components/DoctorLoadPanel";
 
 // Format Helper
 const formatToken = (num: number, isPriority: boolean) => isPriority ? `E-${num}` : `#${num}`;
@@ -234,6 +236,16 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     };
 
     const handleStartSession = () => performAction(() => startSession(params.clinicSlug), setPauseLoading);
+
+    // ── Keyboard Shortcuts ─────────────────────────────────────────────────────
+    // N = Next Patient | S = Skip | E = Emergency Token | P = Pause/Resume | R = Refresh
+    useKeyboardShortcuts({
+        'n': () => { if (session?.status === 'OPEN') handleNext(); },
+        's': () => { if (servingToken) handleSkip(); },
+        'e': handleEmergencyClick,
+        'p': handlePauseToggle,
+        'r': refresh,
+    });
 
     const handleRecall = (id: string) => {
         const snapshot = tokens;
