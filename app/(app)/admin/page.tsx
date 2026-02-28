@@ -257,51 +257,39 @@ export default function AdminPage() {
     if (!stats) return <div className="p-8 text-center text-red-500 font-bold">Access Denied</div>;
 
     return (
-        <div className="min-h-screen bg-cloud-dancer dark:bg-[#0B1120] text-foreground p-4 sm:p-8 font-sans transition-colors duration-300 relative overflow-x-hidden">
-            <div className="max-w-7xl mx-auto space-y-10 relative z-10">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-foreground font-sans">
+            <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
 
-                <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-8 lg:p-10 rounded-[3.5rem] mb-12 border border-white/40 dark:border-slate-800/50 shadow-2xl shadow-indigo-500/5">
-                    <div className="flex items-center gap-6 lg:gap-8">
-                        <div className="h-16 w-16 lg:h-20 lg:w-20 bg-indigo-600 rounded-[1.75rem] flex items-center justify-center text-white font-black text-3xl lg:text-4xl shadow-2xl shadow-indigo-500/40">Q</div>
+                <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <div className="h-11 w-11 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg">Q</div>
                         <div>
-                            <h1 className="text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-tight uppercase tracking-tighter">Strategic Command</h1>
-                            <div className="flex items-center gap-4 text-[10px] lg:text-[11px] font-black text-slate-400 uppercase tracking-[0.25em] mt-2">
-                                <span className="text-indigo-500 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> Platform Active</span>
-                                <span className="w-1.5 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800"></span>
-                                <span className="flex items-center gap-1.5 hover:text-indigo-400 transition-colors cursor-default"><Settings className="w-3.5 h-3.5" /> Orchestration v2026.4</span>
-                            </div>
+                            <h1 className="text-lg font-bold text-slate-900 dark:text-white">QLink Admin</h1>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Hospital Queue Management Platform</p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 lg:flex items-center gap-4 lg:gap-6">
+                    <div className="flex flex-wrap items-center gap-3">
                         {[
-                            { value: stats.activeSessions, label: 'Clinics Live', icon: <ActivitySquare className="w-5 h-5" />, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-                            { value: stats.activeQueueTokens || 0, label: 'Queue Active', icon: <Users className="w-5 h-5" />, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
-                            { value: stats.todayTokens, label: 'Total Intake', icon: <TrendingUp className="w-5 h-5" />, color: 'text-indigo-600', bg: 'bg-indigo-600/10' },
-                            { value: stats.messagesToday ?? 0, label: 'Meta Traffic', icon: <MessageSquare className="w-5 h-5" />, color: 'text-sky-500', bg: 'bg-sky-500/10' },
+                            { value: stats.activeSessions, label: 'Clinics Live', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' },
+                            { value: stats.activeQueueTokens || 0, label: 'In Queue', color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800' },
+                            { value: stats.todayTokens, label: "Today's Patients", color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' },
+                            { value: stats.messagesToday ?? 0, label: 'WhatsApp Sent', color: 'text-purple-600 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800' },
                         ].map((item, idx) => (
-                            <div key={idx} className="bg-white/50 dark:bg-slate-800/20 p-5 rounded-[1.5rem] border border-white/20 dark:border-slate-700/30 flex items-center gap-4 shadow-sm hover:shadow-indigo-500/5 transition-all group">
-                                <div className={cn("p-3 rounded-2xl group-hover:scale-110 transition-transform", item.bg, item.color)}>{item.icon}</div>
-                                <div>
-                                    <div className="text-2xl font-black leading-none tracking-tighter text-slate-900 dark:text-white">{item.value}</div>
-                                    <div className="text-[8px] uppercase tracking-widest text-slate-400 font-black mt-1.5 opacity-60 leading-tight">{item.label}</div>
-                                </div>
+                            <div key={idx} className={cn('flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold', item.color)}>
+                                <span className="text-xl font-black">{item.value}</span>
+                                <span className="text-xs font-medium opacity-80 hidden sm:block">{item.label}</span>
                             </div>
                         ))}
                     </div>
                 </header>
 
                 {/* ── ANALYTICS SECTION ── */}
-                <Card className="border-2 border-white/40 dark:border-slate-800/50 shadow-2xl shadow-indigo-500/5 p-10 space-y-10 bg-white/80 dark:bg-slate-950/80 backdrop-blur-2xl rounded-[3rem] relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/5 rounded-full blur-[100px] -mr-48 -mt-48 pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
-
-                    <div className="flex items-center justify-between flex-wrap gap-6 relative z-10">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 rounded-2xl shadow-sm"><BarChart2 className="w-6 h-6" /></div>
-                            <div>
-                                <h2 className="font-black text-2xl tracking-tighter text-slate-900 dark:text-white uppercase">Platform Performance</h2>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Cross-Tenant Operational Velocity</p>
-                            </div>
+                <Card className="border border-slate-200 dark:border-slate-800 shadow-sm p-6 sm:p-8 space-y-6 bg-white dark:bg-slate-900 rounded-2xl">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div>
+                            <h2 className="font-bold text-lg text-slate-900 dark:text-white">Platform Analytics</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Patient flow and service metrics</p>
                         </div>
                         <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1.5 rounded-2xl items-center gap-1.5 border border-slate-200 dark:border-slate-700/30">
                             {(['today', '7days', 'alltime'] as const).map((preset) => (
@@ -517,56 +505,55 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
                     {/* LEFT COL: Add Clinic Form */}
-                    <div className="lg:col-span-4 space-y-8">
-                        <Card className="border-2 border-white/40 dark:border-slate-800/50 shadow-2xl shadow-indigo-500/5 p-8 bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl rounded-[2.5rem] relative overflow-hidden group">
-                            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-600 via-sky-400 to-indigo-600 opacity-80" />
-                            <div className="flex items-center gap-5 pb-8 mb-8 border-b border-slate-100 dark:border-slate-800/50">
-                                <div className="p-4 bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 rounded-2xl group-hover:rotate-[15deg] transition-all duration-500 shadow-sm">
-                                    <Plus className="w-6 h-6 stroke-[3px]" />
+                    <div className="lg:col-span-4 space-y-6">
+                        <Card className="border border-slate-200 dark:border-slate-800 p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-sm">
+                            <div className="flex items-center gap-3 pb-5 mb-5 border-b border-slate-100 dark:border-slate-800">
+                                <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                                    <Plus className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h2 className="font-black text-xl text-slate-900 dark:text-white uppercase tracking-tight">Provision Tenant</h2>
-                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Automated Orchestration</p>
+                                    <h2 className="font-bold text-base text-slate-900 dark:text-white">Register New Clinic</h2>
+                                    <p className="text-xs text-slate-500">Add a hospital or OPD to the platform</p>
                                 </div>
                             </div>
 
-                            <form onSubmit={handleCreate} className="space-y-6">
-                                <div className="space-y-2">
-                                    <Label className="text-slate-400 text-[9px] uppercase tracking-[0.3em] font-black pl-1">Entity Name</Label>
+                            <form onSubmit={handleCreate} className="space-y-4">
+                                <div className="space-y-1.5">
+                                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Clinic / Hospital Name</Label>
                                     <Input
                                         value={name}
                                         onChange={e => setName(e.target.value)}
-                                        placeholder="e.g. Apollo Global Health"
+                                        placeholder="e.g. Apollo Hospitals"
                                         required
-                                        className="h-14 bg-slate-50 dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/60 focus-visible:ring-indigo-500 rounded-2xl font-bold text-sm px-5"
+                                        className="h-10 rounded-xl"
                                     />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label className="text-slate-400 text-[9px] uppercase tracking-[0.3em] font-black pl-1">Routing Slug</Label>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">URL Slug</Label>
                                         <Input
                                             value={slug}
                                             onChange={e => setSlug(e.target.value.toLowerCase())}
-                                            placeholder="apollo-hq"
+                                            placeholder="apollo-hospital"
                                             required
-                                            className="h-14 bg-slate-50 dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/60 focus-visible:ring-indigo-500 rounded-2xl font-mono text-xs px-5"
+                                            className="h-10 rounded-xl font-mono text-sm"
                                         />
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-slate-400 text-[9px] uppercase tracking-[0.3em] font-black pl-1">Support Line</Label>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Contact Phone</Label>
                                         <Input
                                             value={phone}
                                             onChange={e => setPhone(e.target.value)}
-                                            placeholder="+91..."
+                                            placeholder="+91 98765 43210"
                                             required
-                                            className="h-14 bg-slate-50 dark:bg-slate-950/50 border-slate-100 dark:border-slate-800/60 focus-visible:ring-indigo-500 rounded-2xl font-bold text-sm px-5"
+                                            className="h-10 rounded-xl"
                                         />
                                     </div>
                                 </div>
 
                                 {/* FACILITY TYPE SELECTOR */}
-                                <div className="space-y-3">
-                                    <Label className="text-slate-400 text-[9px] uppercase tracking-[0.3em] font-black pl-1">Facility Type</Label>
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Facility Type</Label>
                                     <div className="grid grid-cols-3 gap-3">
                                         {[
                                             { id: 'OPD', label: 'OPD Clinic', icon: '🏥', desc: 'Single-queue outpatient' },
@@ -662,20 +649,20 @@ export default function AdminPage() {
                                 <Button
                                     type="submit"
                                     disabled={actionLoading}
-                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black h-16 rounded-[1.5rem] mt-6 shadow-2xl shadow-indigo-600/30 transition-all hover:-translate-y-1 active:scale-95 text-xs uppercase tracking-[0.2em]"
+                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-11 rounded-xl mt-2"
                                 >
-                                    {actionLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Deploy Environment"}
+                                    {actionLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Register Clinic"}
                                 </Button>
                             </form>
                         </Card>
                     </div>
 
                     {/* RIGHT COL: Tenant List */}
-                    <div className="lg:col-span-8 space-y-8">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 px-4">
+                    <div className="lg:col-span-8 space-y-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div>
-                                <h2 className="font-black text-2xl text-slate-900 dark:text-white tracking-tighter uppercase">Active Environments</h2>
-                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Deployments: {filteredBusinesses.length} Verified Segments</p>
+                                <h2 className="font-bold text-base text-slate-900 dark:text-white">Active Clinics</h2>
+                                <p className="text-xs text-slate-500 mt-0.5">{filteredBusinesses.length} registered environments</p>
                             </div>
                             <div className="relative w-full sm:w-96 group">
                                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />

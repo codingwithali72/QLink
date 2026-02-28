@@ -411,7 +411,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 <div className="flex items-center gap-6 relative z-10">
                     <div className="h-16 w-16 bg-indigo-600 rounded-[1.5rem] flex items-center justify-center text-white font-black text-3xl shadow-2xl shadow-indigo-600/40 border-2 border-white/20 group-hover:rotate-6 transition-transform duration-500">Q</div>
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white leading-none uppercase tracking-tighter">Reception Command</h1>
+                        <h1 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white leading-none">Reception Desk</h1>
                         <div className="flex items-center gap-4 text-[10px] md:text-[11px] font-black text-slate-400 uppercase tracking-widest mt-2">
                             <span className="text-indigo-500 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> {params.clinicSlug}</span>
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800"></span>
@@ -466,13 +466,13 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
                         <div className="relative z-10 flex flex-col items-center w-full h-full">
                             <div className="flex items-center justify-between w-full mb-10">
-                                <p className="text-indigo-400 uppercase tracking-[0.4em] text-[10px] font-black flex items-center gap-3">
+                                <p className="text-indigo-400 uppercase tracking-[0.2em] text-[10px] font-bold flex items-center gap-3">
                                     <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)] animate-pulse" />
-                                    Active Processing Node
+                                    Now Serving
                                 </p>
                                 <div className="bg-slate-900/50 border border-white/5 px-4 py-2 rounded-2xl flex items-center gap-2 backdrop-blur-md">
                                     <ActivitySquare className="w-4 h-4 text-emerald-500" />
-                                    <span className="text-[9px] font-black tracking-[0.2em] text-slate-300 uppercase">Live Telemetry: Nominal</span>
+                                    <span className="text-[9px] font-bold tracking-wide text-slate-300 uppercase">Queue Live</span>
                                 </div>
                             </div>
 
@@ -496,8 +496,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                     </div>
 
                                     <div className="space-y-6">
-                                        <h3 className="text-5xl md:text-6xl font-black text-white tracking-tighter uppercase selection:bg-indigo-500">
-                                            {servingToken.customerName || 'Intake Patient'}
+                                        <h3 className="text-4xl md:text-5xl font-black text-white tracking-tight uppercase selection:bg-indigo-500">
+                                            {servingToken.customerName || 'Patient'}
                                         </h3>
                                         <div className="flex flex-wrap items-center justify-center gap-5">
                                             <div className="flex items-center gap-3 bg-white/5 border border-white/10 px-6 py-3 rounded-2xl backdrop-blur-xl">
@@ -522,10 +522,8 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                         <Users className="w-12 h-12 text-slate-700 animate-pulse" />
                                     </div>
                                     <p className="text-9xl font-black text-slate-800/40 tracking-tighter">STANDBY</p>
-                                    <p className="mt-6 text-[12px] font-black uppercase tracking-[0.4em] text-indigo-500/60 flex items-center gap-4">
-                                        <span className="w-8 h-px bg-indigo-500/20" />
-                                        Facility Awaiting Intake
-                                        <span className="w-8 h-px bg-indigo-500/20" />
+                                    <p className="mt-4 text-base font-semibold text-indigo-300">
+                                        Ready — Waiting for first patient
                                     </p>
                                 </div>
                             )}
@@ -560,7 +558,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             <div className="flex items-center gap-6 relative z-10">
                                 {nextLoading ? <Loader2 className="animate-spin w-12 h-12" /> : <PlayCircle className="w-12 h-12" />}
                                 <span className="uppercase tracking-tighter">
-                                    {waitingTokens.length === 0 && servingToken ? "FINALIZE UNIT" : "EXECUTE NEXT INTAKE"}
+                                    {waitingTokens.length === 0 && servingToken ? "Done — Close Consult" : "Call Next Patient"}
                                 </span>
                             </div>
                         </Button>
@@ -575,7 +573,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 <div className="p-5 bg-amber-500/10 rounded-2xl text-amber-500 group-hover:scale-110 transition-transform shadow-inner">
                                     {skipLoading ? <Loader2 className="animate-spin w-10 h-10" /> : <SkipForward className="w-10 h-10" />}
                                 </div>
-                                Bypass Unit
+                                Skip Patient
                             </Button>
                             <Button
                                 variant="destructive"
@@ -597,13 +595,13 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             <>
                                 <Button variant="outline" onClick={handlePauseToggle} className="h-20 font-black rounded-2xl border-2 uppercase tracking-[0.2em] text-[10px] hover:bg-white dark:hover:bg-slate-800 group shadow-sm transition-all">
                                     {session?.status === 'OPEN' ? (
-                                        <span className="flex flex-col items-center gap-1"><Moon className="w-5 h-5 text-amber-500 group-hover:scale-110" /> Pause Environment</span>
+                                        <span className="flex flex-col items-center gap-1"><Moon className="w-5 h-5 text-amber-500 group-hover:scale-110" /> Pause Queue</span>
                                     ) : (
-                                        <span className="flex flex-col items-center gap-1"><Sun className="w-5 h-5 text-indigo-500 group-hover:scale-110" /> Resume Environment</span>
+                                        <span className="flex flex-col items-center gap-1"><Sun className="w-5 h-5 text-indigo-500 group-hover:scale-110" /> Resume Queue</span>
                                     )}
                                 </Button>
                                 <Button variant="ghost" onClick={handleCloseQueue} className="h-20 font-black rounded-2xl text-rose-500 hover:bg-rose-500/10 uppercase tracking-[0.2em] text-[10px] border border-rose-500/30 group">
-                                    <span className="flex flex-col items-center gap-1"><XCircle className="w-5 h-5 group-hover:rotate-90 transition-transform" /> TERMINATE SESSION</span>
+                                    <span className="flex flex-col items-center gap-1"><XCircle className="w-5 h-5 group-hover:rotate-90 transition-transform" /> End Session</span>
                                 </Button>
                                 <div className="bg-slate-100 dark:bg-slate-900/50 rounded-2xl p-4 flex flex-col items-center justify-center border border-slate-200 dark:border-slate-800 shadow-inner group">
                                     <ActivitySquare className="w-5 h-5 text-indigo-500 mb-1 group-hover:animate-pulse" />
@@ -613,7 +611,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                             </>
                         ) : (
                             <Button onClick={handleStartSession} className="col-span-3 h-24 text-2xl font-black rounded-[3rem] bg-emerald-600 hover:bg-emerald-500 shadow-3xl shadow-emerald-600/40 uppercase tracking-[0.3em] text-white border-t-2 border-white/20 border-b-[12px] border-emerald-800">
-                                INITIALIZE GLOBAL ORCHESTRATION
+                                Start Today's Queue
                             </Button>
                         )}
                     </div>
@@ -781,7 +779,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                     <div className="w-20 h-20 bg-slate-50 dark:bg-slate-900 rounded-[2rem] flex items-center justify-center mb-6 border border-slate-100 dark:border-white/5 group-hover:scale-110 transition-transform duration-500">
                                         <Users className="w-10 h-10 opacity-20" />
                                     </div>
-                                    <p className="font-black uppercase tracking-[0.2em] text-[10px] opacity-40">Orchestration Buffer Empty</p>
+                                    <p className="font-semibold text-sm text-slate-400 mt-3">No patients waiting</p>
                                 </div>
                             )}
                         </div>
