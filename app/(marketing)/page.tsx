@@ -45,46 +45,118 @@ export default function Home() {
 
           {/* HERO VISUAL MOCKUP (Split Screen Layout) */}
           <div className="mt-20 relative max-w-5xl mx-auto rounded-3xl border border-slate-200/50 dark:border-slate-800/50 bg-white/40 dark:bg-slate-900/40 backdrop-blur-2xl shadow-2xl shadow-indigo-500/10 overflow-hidden p-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 h-min md:h-[500px] rounded-2xl overflow-hidden bg-slate-100/50 dark:bg-[#0B1120]/80">
-              {/* Left: Beautiful TV Display Mockup */}
-              <div className="p-6 md:p-10 flex flex-col h-full justify-between items-start border-r border-slate-200/50 dark:border-slate-800/50 relative overflow-hidden group">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-cyan-400"></div>
-                <div className="w-full flex justify-between items-center mb-10">
-                  <div className="flex items-center gap-2"><Icons.Tv className="text-indigo-600 dark:text-indigo-400" /><span className="font-bold text-slate-900 dark:text-white text-lg tracking-tight">Dr. Sharma&apos;s OPD</span></div>
-                  <Badge>Main Queue</Badge>
-                </div>
-                <div className="w-full text-center py-10">
-                  <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-2">Now Serving</p>
-                  <h2 className="text-7xl font-black text-slate-900 dark:text-white tracking-tighter drop-shadow-sm group-hover:scale-110 transition-transform duration-500">#42</h2>
-                  <p className="mt-4 text-xl font-bold text-slate-700 dark:text-slate-300">Rahul K.</p>
-                </div>
-                <div className="w-full bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 mt-auto flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-500 font-bold uppercase">Up Next</p>
-                    <p className="font-black text-slate-900 dark:text-white">#43 (Priya S.)</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 h-min md:h-[550px] rounded-2xl overflow-hidden bg-slate-100/50 dark:bg-[#020617]">
+              {/* Left: Beautiful TV Display Mockup (Production Grade) */}
+              <div className="p-6 md:p-10 flex flex-col h-full justify-between items-start border-r border-slate-200/50 dark:border-slate-800/50 relative overflow-hidden group bg-[#020617] text-white">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-cyan-400 to-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
+
+                {/* Dashboard Header */}
+                <div className="w-full flex justify-between items-start mb-10">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center font-black text-2xl shadow-lg border border-white/10">Q</div>
+                    <div>
+                      <div className="font-black text-white text-xl tracking-tighter uppercase leading-none mb-1">DR. ALI CLINIC</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-indigo-400 font-bold tracking-widest text-[9px] uppercase">Live Orchestration Dashboard</span>
+                        <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse"></div>
+                      </div>
+                    </div>
                   </div>
-                  <Icons.ScanLine className="w-8 h-8 text-indigo-400 opacity-50" />
+                  <div className="px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Open
+                  </div>
+                </div>
+
+                <div className="w-full text-center py-6">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mb-4">Currently Serving</p>
+                  <h2 className="text-[9rem] font-black text-white tracking-tighter leading-none drop-shadow-[0_0_30px_rgba(255,255,255,0.1)] group-hover:scale-110 transition-transform duration-500 tabular-nums">#42</h2>
+                  <div className="mt-6 text-2xl font-black text-indigo-300 tracking-tight">Rahul K.</div>
+                </div>
+
+                {/* Next List */}
+                <div className="w-full bg-white/5 dark:bg-black/40 rounded-[2rem] p-6 border border-white/5 mt-auto flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <p className="text-[9px] text-indigo-400 font-black uppercase tracking-widest mb-1 flex items-center gap-2">
+                      <Icons.Clock className="w-3 h-3" /> Queue Order
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <span className="text-slate-500 font-bold tabular-nums">43</span>
+                      <p className="font-black text-white tracking-tight">Priya S.</p>
+                    </div>
+                  </div>
+                  <Icons.Maximize className="w-6 h-6 text-slate-500 opacity-30" />
                 </div>
               </div>
 
-              {/* Right: WhatsApp Mockup */}
-              <div className="bg-[#EFEAE2] dark:bg-[#0c131d] p-6 relative flex items-center justify-center overflow-hidden">
+              {/* Right: WhatsApp Mockup (End-to-End Simulation) */}
+              <div className="bg-[#EFEAE2] dark:bg-[#0c131d] p-4 relative flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 opacity-[0.05] dark:opacity-[0.02]" style={{ backgroundImage: "url('https://upload.wikimedia.org/wikipedia/commons/5/5e/WhatsApp_icon.png')", backgroundSize: '100px' }}></div>
-                <div className="w-[300px] bg-[#EFEAE2] dark:bg-[#0B141A] rounded-[36px] shadow-2xl border-[8px] border-slate-800 dark:border-slate-950 flex flex-col h-full max-h-[450px] relative z-10 overflow-hidden transform hover:-translate-y-2 transition-transform duration-500">
+                <div className="w-full max-w-[320px] bg-[#EFEAE2] dark:bg-[#0B141A] rounded-[36px] shadow-2xl border-[8px] border-slate-800 dark:border-slate-950 flex flex-col h-full max-h-[500px] relative z-10 overflow-hidden transform hover:-translate-y-2 transition-transform duration-500">
+                  {/* WhatsApp Header */}
                   <div className="bg-[#008069] dark:bg-[#202C33] p-4 text-white flex items-center gap-3">
-                    <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0 animate-pulse"><Icons.Building2 className="w-4 h-4" /></div>
-                    <div><p className="font-bold text-sm leading-tight">City Hospital</p><p className="text-[10px] opacity-80">Verified Business</p></div>
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0 relative">
+                      <Icons.Building2 className="w-5 h-5" />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#25D366] rounded-full border-2 border-[#008069] dark:border-[#202C33] flex items-center justify-center">
+                        <Icons.Check className="w-2.5 h-2.5 text-white stroke-[4]" />
+                      </div>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm leading-tight truncate">City Hospital</p>
+                      <p className="text-[10px] opacity-80 leading-tight">Verified Business Account</p>
+                    </div>
                   </div>
-                  <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto">
+
+                  {/* Messages Context */}
+                  <div className="flex-1 p-3 flex flex-col gap-3 overflow-y-auto scrollbar-hide">
+                    <div className="text-center py-2">
+                      <span className="bg-[#D1E4F5] dark:bg-[#182229] dark:text-[#8696a0] text-[#54656f] text-[9px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-widest shadow-sm">Yesterday</span>
+                    </div>
+
                     <MessageBubble from="user">Hi, I want to join the queue.</MessageBubble>
-                    <MessageBubble from="bot">Welcome! Which department would you like to visit today?</MessageBubble>
+                    <MessageBubble from="bot">Welcome to City Hospital! 🏥 Which department would you like to visit today?</MessageBubble>
                     <MessageBubble from="user">Cardiology</MessageBubble>
+
                     <MessageBubble from="bot" highlight>
-                      <strong>Confirmed! Your Token is #45.</strong><br /><br />
-                      Estimated wait: 25 mins.<br />
-                      There are 2 people ahead of you.<br /><br />
-                      <em>We will notify you when it&apos;s your turn.</em>
+                      Welcome to City Hospital 🏥<br />
+                      Your visit has been successfully added to the live queue.<br /><br />
+                      🎟️ <strong>Token: A-15</strong><br />
+                      ⏳ <strong>Wait: ~20 mins</strong><br />
+                      🩺 <strong>Doctor: Dr. Ali</strong><br /><br />
+                      Sit back — you're in the system.
                     </MessageBubble>
+
+                    <MessageBubble from="bot">
+                      <strong>Almost There — Confirm Arrival</strong><br /><br />
+                      You’re now just 3 patients away. If you’ve reached the clinic, tap below so we can mark you present.<br /><br />
+                      📍 <em>Arrival keeps the queue aligned.</em>
+                    </MessageBubble>
+
+                    <MessageBubble from="user">✅ I'm Here</MessageBubble>
+
+                    <MessageBubble from="bot" highlight>
+                      <strong>It's Your Turn! 🩺</strong><br /><br />
+                      Dr. Ali is ready for you now in Cabin 4.<br /><br />
+                      Please proceed to the consultation area.
+                    </MessageBubble>
+
+                    <MessageBubble from="bot">
+                      Thank you for visiting City Hospital! 🏥<br /><br />
+                      How was your experience today?<br />
+                      ⭐ ⭐ ⭐ ⭐ ⭐
+                    </MessageBubble>
+
+                    <MessageBubble from="user">⭐ ⭐ ⭐ ⭐ ⭐</MessageBubble>
+
+                    <MessageBubble from="bot" highlight>
+                      We're glad to hear that! 😊 Could you please take 10 seconds to share your review on Google? It helps others find us.<br /><br />
+                      👉 <strong>[Google Review Button]</strong>
+                    </MessageBubble>
+                  </div>
+
+                  {/* Input Bar Placeholder */}
+                  <div className="p-2 bg-slate-50 dark:bg-[#202C33] border-t border-slate-200 dark:border-slate-800 flex items-center gap-2">
+                    <div className="flex-1 h-10 rounded-full bg-white dark:bg-[#2A3942] border border-slate-200 dark:border-slate-800 px-4 flex items-center text-slate-400 text-xs">Type a message...</div>
+                    <div className="w-10 h-10 bg-[#00A884] rounded-full flex items-center justify-center text-white"><Icons.Mic className="w-5 h-5" /></div>
                   </div>
                 </div>
               </div>
