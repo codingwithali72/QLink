@@ -203,7 +203,7 @@ export async function sendTokenConfirmation(data: TokenConfirmationData): Promis
 
     return sendWhatsAppUtilityTemplate({
         to: data.phone,
-        templateName: 'token_confirmed_utility',
+        templateName: 'qlink_token_confirmed',
         clinicId: data.clinicId,
         tokenId: data.visitId,
         variables: [
@@ -214,7 +214,6 @@ export async function sendTokenConfirmation(data: TokenConfirmationData): Promis
             { type: 'text', text: data.doctorName },              // {{5}} Doctor name
             { type: 'text', text: data.departmentName },          // {{6}} Department
             { type: 'text', text: trackingUrl },                  // {{7}} Live tracking URL
-            ...(mapsUrl ? [{ type: 'text' as const, text: mapsUrl }] : []), // {{8}} Maps (optional)
         ]
     });
 }

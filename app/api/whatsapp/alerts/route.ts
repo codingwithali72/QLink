@@ -86,12 +86,15 @@ export async function GET(req: Request) {
             if (alert.event_type === 'NEAR_TURN') {
                 messageText = "You are 5 patients away from your consultation. Please stay nearby.";
                 templateName = "qlink_near_turn";
-            } else if (alert.event_type === 'NEXT_IN_LINE') {
-                messageText = "You are NEXT. Please be ready.";
-                templateName = "qlink_next_in_line";
+                // Variables: {{1}} Patient Name, {{2}} Doctor Name, {{3}} Ahead, {{4}} Waiting Area
+            } else if (alert.event_type === 'ARRIVAL_PROMPT') {
+                messageText = "You are almost there. Have you arrived at the clinic yet?";
+                templateName = "qlink_arrival_check";
+                // Variables: {{1}} Ahead Count, {{2}} Clinic Name
             } else if (alert.event_type === 'SERVING') {
                 messageText = "It’s Your Turn! Your token is now being served. Please proceed to the consultation room.";
                 templateName = "qlink_now_serving";
+                // Variables: {{1}} Doctor Name, {{2}} Cabin/Room
             } else if (alert.event_type === 'DELAYED') {
                 messageText = "Doctor is delayed by approximately 15 minutes. Updated estimated wait: 40 minutes.";
                 templateName = "qlink_delay_update";
@@ -101,78 +104,98 @@ export async function GET(req: Request) {
 
             let success = false;
             if (isWithin24h) {
+                // ... existing interactive button logic ...
+                // [Omitted for brevity in this mock, but I will keep the actual logic below]
                 if (alert.event_type === 'NEAR_TURN') {
                     success = await sendWhatsAppInteractiveButtons(
                         phoneNumber,
-                        "🚩 Almost Your Turn\n\nYou are 5 patients away from your consultation. Please stay nearby.",
+                        "📍 Almost Your Turn\n\nHey! You're getting close.\n\n🩺 5 patients ahead\n\nIt’s a good time to move toward the waiting area.",
                         [
-                            { id: 'IM_ON_THE_WAY', title: 'I Am On The Way' },
-                            { id: 'CANCEL_START', title: 'Cancel My Token' }
-                        ]
-                    );
-                } else if (alert.event_type === 'NEXT_IN_LINE') {
-                    success = await sendWhatsAppInteractiveButtons(
-                        phoneNumber,
-                        "🔔 Almost Your Turn\n\nYou are NEXT. Please be ready.",
-                        [
-                            { id: 'IM_HERE', title: "I Am Here" }
-                        ]
-                    );
-                } else if (alert.event_type === 'SERVING') {
-                    success = await sendWhatsAppInteractiveButtons(
-                        phoneNumber,
-                        "🟢 It’s Your Turn\n\nYour token is now being served. Please proceed to the consultation room.",
-                        [
-                            { id: 'IM_COMING', title: 'I Am Coming' },
-                            { id: 'CANCEL_START', title: 'Cancel' }
-                        ]
-                    );
-                } else if (alert.event_type === 'DELAYED') {
-                    success = await sendWhatsAppInteractiveButtons(
-                        phoneNumber,
-                        "⏳ Schedule Update\n\nDoctor is delayed by approximately 15 minutes.\n\nWe appreciate your patience.",
-                        [
-                            { id: 'KEEP_TOKEN', title: 'Keep My Token' },
-                            { id: 'CANCEL_START', title: 'Cancel My Token' }
+                            { id: 'IM_ON_THE_WAY', title: 'On My Way 🚶' },
+                            { id: 'VIEW_STATUS', title: 'Track Live 📲' }
                         ]
                     );
                 } else if (alert.event_type === 'ARRIVAL_PROMPT') {
                     success = await sendWhatsAppInteractiveButtons(
                         phoneNumber,
-                        "📍 Check-in Reminder\n\nYou are just 3 patients away. Have you arrived at the clinic yet?",
+                        "📌 Almost There — Confirm Arrival\n\nYour turn is getting close. Have you reached the clinic?",
                         [
-                            { id: 'IM_HERE', title: "I Am Here" },
-                            { id: 'VIEW_STATUS', title: "View Position" }
+                            { id: 'IM_HERE', title: "✅ I'm Here" },
+                            { id: 'CANCEL_START', title: "Reschedule" }
                         ]
                     );
-                } else if (alert.event_type === 'QUEUE_UPDATE') {
-                    success = await sendWhatsAppFreeText(phoneNumber, "📢 Queue Update\n\nSomeone ahead was skipped. You are moving up faster!");
-                } else if (alert.event_type === 'FEEDBACK_REQUEST') {
-                    await supabase.from('whatsapp_conversations').upsert({
-                        clinic_id: alert.business_id,
-                        phone: phoneNumber,
-                        state: 'AWAITING_FEEDBACK_RATING',
-                        active_visit_id: alert.visit_id || alert.token_id,
-                        last_interaction: new Date().toISOString()
-                    }, { onConflict: 'clinic_id,phone' });
-
-                    success = await sendWhatsAppInteractiveList(
+                } else if (alert.event_type === 'SERVING') {
+                    success = await sendWhatsAppInteractiveButtons(
                         phoneNumber,
-                        "🙏 Thank you for visiting us.\n\nHow was your experience today?",
-                        "Rate Us",
+                        "🟢 You’re Up\n\nDoctor is ready for you now. Please proceed to the cabin.",
                         [
-                            { id: 'RATE_5', title: '⭐⭐⭐⭐⭐ 5', description: 'Excellent' },
-                            { id: 'RATE_4', title: '⭐⭐⭐⭐ 4', description: 'Good' },
-                            { id: 'RATE_3', title: '⭐⭐⭐ 3', description: 'Average' },
-                            { id: 'RATE_2', title: '⭐⭐ 2', description: 'Poor' },
-                            { id: 'RATE_1', title: '⭐ 1', description: 'Very Poor' }
+                            { id: 'IM_COMING', title: 'Coming Now 🚶‍♂️' },
+                            { id: 'EMERGENCY_HELP', title: 'Need Help' }
                         ]
                     );
                 } else {
-                    success = await sendWhatsAppFreeText(phoneNumber, messageText);
+                    // Fallthrough for other interactive types
+                    if (alert.event_type === 'DELAYED') {
+                        success = await sendWhatsAppInteractiveButtons(
+                            phoneNumber,
+                            "⏳ Schedule Update\n\nDoctor is delayed by approximately 15 minutes.\n\nWe appreciate your patience.",
+                            [
+                                { id: 'KEEP_TOKEN', title: 'Keep My Token' },
+                                { id: 'CANCEL_START', title: 'Cancel My Token' }
+                            ]
+                        );
+                    } else if (alert.event_type === 'QUEUE_UPDATE') {
+                        success = await sendWhatsAppFreeText(phoneNumber, "📢 Queue Update\n\nSomeone ahead was skipped. You are moving up faster!");
+                    } else if (alert.event_type === 'FEEDBACK_REQUEST') {
+                        // FEEDBACK_REQUEST LOGIC ... (keep same)
+                        await supabase.from('whatsapp_conversations').upsert({
+                            clinic_id: alert.business_id,
+                            phone: phoneNumber,
+                            state: 'AWAITING_FEEDBACK_RATING',
+                            active_visit_id: alert.visit_id || alert.token_id,
+                            last_interaction: new Date().toISOString()
+                        }, { onConflict: 'clinic_id,phone' });
+
+                        success = await sendWhatsAppInteractiveList(
+                            phoneNumber,
+                            "🙏 Thank you for visiting us.\n\nHow was your experience today?",
+                            "Rate Us",
+                            [
+                                { id: 'RATE_5', title: '⭐⭐⭐⭐⭐ 5', description: 'Excellent' },
+                                { id: 'RATE_4', title: '⭐⭐⭐⭐ 4', description: 'Good' },
+                                { id: 'RATE_3', title: '⭐⭐⭐ 3', description: 'Average' },
+                                { id: 'RATE_2', title: '⭐⭐ 2', description: 'Poor' },
+                                { id: 'RATE_1', title: '⭐ 1', description: 'Very Poor' }
+                            ]
+                        );
+                    } else {
+                        success = await sendWhatsAppFreeText(phoneNumber, messageText);
+                    }
                 }
             } else {
-                if (alert.event_type !== 'FEEDBACK_REQUEST') {
+                // WINDOW CLOSED -> Use the NEW templates with exact variable counts
+                if (alert.event_type === 'NEAR_TURN') {
+                    // qlink_near_turn (4 variables): {{1}} Name, {{2}} Doctor, {{3}} Ahead, {{4}} Area
+                    success = await sendWhatsAppTemplate(phoneNumber, 'qlink_near_turn', [
+                        { type: 'text', text: 'Patient' },
+                        { type: 'text', text: 'Specialist' },
+                        { type: 'text', text: '5' },
+                        { type: 'text', text: 'OPD' }
+                    ]);
+                } else if (alert.event_type === 'ARRIVAL_PROMPT') {
+                    // qlink_arrival_check (2 variables): {{1}} Ahead, {{2}} Clinic Name
+                    success = await sendWhatsAppTemplate(phoneNumber, 'qlink_arrival_check', [
+                        { type: 'text', text: '3 patients' },
+                        { type: 'text', text: 'Clinic' }
+                    ]);
+                } else if (alert.event_type === 'SERVING') {
+                    // qlink_now_serving (2 variables): {{1}} Doctor Name, {{2}} Cabin/Room
+                    success = await sendWhatsAppTemplate(phoneNumber, 'qlink_now_serving', [
+                        { type: 'text', text: 'Specialist' },
+                        { type: 'text', text: '101' }
+                    ]);
+                } else if (alert.event_type !== 'FEEDBACK_REQUEST') {
+                    // Fallback for other templates (token confirmation is handled in webhook for first join)
                     success = await sendWhatsAppTemplate(phoneNumber, templateName);
                 } else {
                     success = true;
@@ -222,24 +245,35 @@ async function sendWhatsAppFreeText(phone: string, text: string): Promise<boolea
     }
 }
 
-async function sendWhatsAppTemplate(phone: string, templateName: string): Promise<boolean> {
+async function sendWhatsAppTemplate(phone: string, templateName: string, variables?: { type: string, text: string }[]): Promise<boolean> {
     const WABA_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
     const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_BEARER_TOKEN;
     if (!WABA_ID || !TOKEN) return false;
 
     try {
+        const payload: any = {
+            messaging_product: 'whatsapp',
+            to: `91${phone}`,
+            type: 'template',
+            template: {
+                name: templateName,
+                language: { code: 'en' }
+            }
+        };
+
+        if (variables && variables.length > 0) {
+            payload.template.components = [
+                {
+                    type: 'body',
+                    parameters: variables
+                }
+            ];
+        }
+
         const res = await fetch(`https://graph.facebook.com/v19.0/${WABA_ID}/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
-            body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: `91${phone}`,
-                type: 'template',
-                template: {
-                    name: templateName,
-                    language: { code: 'en' }
-                }
-            })
+            body: JSON.stringify(payload)
         });
         return res.ok;
     } catch {

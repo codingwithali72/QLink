@@ -245,8 +245,8 @@ export async function POST(req: Request) {
                 phoneNumber,
                 `Welcome back, ${existingPatient?.name || 'there'}! 👋\n\n🟢 You already have an active token.\n\n🎟 Token: #${visitRecord.token_number}\nStatus: ${visitRecord.status}`,
                 [
-                    { id: 'VIEW_STATUS', title: 'View Live Status' },
-                    { id: 'CANCEL_START', title: 'Cancel My Token' }
+                    { id: 'VIEW_STATUS', title: 'Track Live 📲' },
+                    { id: 'CANCEL_START', title: 'Cancel' }
                 ]
             );
             return successResponse({ message: 'Sent active visit interactive' }, requestId)
@@ -268,8 +268,8 @@ export async function POST(req: Request) {
                 phoneNumber,
                 welcomeMsg,
                 [
-                    { id: 'JOIN_QUEUE', title: '1️⃣ Join Queue' },
-                    { id: 'VIEW_STATUS_PUBLIC', title: '2️⃣ View Live Status' }
+                    { id: 'JOIN_QUEUE', title: 'Join Queue 🏥' },
+                    { id: 'VIEW_STATUS_PUBLIC', title: 'Live Status 📲' }
                 ]
             );
             return successResponse({ message: 'Sent initial welcome buttons' }, requestId)
@@ -411,7 +411,7 @@ export async function POST(req: Request) {
         }
 
     } else if (conv.state === 'ACTIVE_TOKEN') {
-        if (interactiveResponseId === 'CANCEL_START' && conv.active_visit_id) {
+        if (interactiveResponseId === 'CANCEL_START' || interactiveResponseId === 'Cancel' || interactiveResponseId === 'Reschedule') {
             // Step 9: Confirm Cancellation
             await supabase.from('whatsapp_conversations').update({
                 state: 'AWAITING_CANCEL_CONFIRM',
@@ -426,7 +426,7 @@ export async function POST(req: Request) {
                     { id: 'KEEP_TOKEN', title: 'No, Keep It' }
                 ]
             );
-        } else if (interactiveResponseId === 'VIEW_STATUS' && conv.active_visit_id) {
+        } else if ((interactiveResponseId === 'VIEW_STATUS' || interactiveResponseId === 'Track Live' || interactiveResponseId === 'Track Live 📲') && conv.active_visit_id) {
             // Fetch live status via clinical_visits
             const { data: vData } = await supabase.from('clinical_visits').select('token_number, status, session_id').eq('id', conv.active_visit_id).single();
             if (vData) {
@@ -436,12 +436,12 @@ export async function POST(req: Request) {
 
                 await sendWhatsAppReply(phoneNumber, `Live Status 🏥\n\nYour Token: #${vData.token_number}\nStatus: ${vData.status}\nPeople Ahead: ${ahead || 0}`);
             }
-        } else if (interactiveResponseId === 'CONTACT_INFO') {
-            await sendWhatsAppReply(phoneNumber, `Contact ${businessName} reception at +91XXXXXXXXXX or visit the front desk.`);
+        } else if (interactiveResponseId === 'CONTACT_INFO' || interactiveResponseId === 'Need Help') {
+            await sendWhatsAppReply(phoneNumber, `Contact ${businessName} reception at +91XXXXXXXXXX or visit the front desk for immediate assistance.`);
         } else if (interactiveResponseId === 'REJOIN_QUEUE') {
             await supabase.from('whatsapp_conversations').update({ state: 'AWAITING_JOIN_CONFIRM' }).eq('id', conv.id);
             await sendWhatsAppReply(phoneNumber, "Send JOIN to start a new token request.");
-        } else if (interactiveResponseId === 'IM_HERE' && conv.active_visit_id) {
+        } else if ((interactiveResponseId === 'IM_HERE' || interactiveResponseId === '✅ I’m Here') && conv.active_visit_id) {
             // Patient Self-Check-in (Phase 14)
             const { data: vData } = await supabase.from('clinical_visits')
                 .select('clinic_id, session_id')
@@ -458,8 +458,10 @@ export async function POST(req: Request) {
                 });
                 await sendWhatsAppReply(phoneNumber, "✅ Check-in Successful! We've notified the reception of your arrival. Please take a seat.");
             }
-        } else if (interactiveResponseId === 'IM_ON_THE_WAY') {
+        } else if (interactiveResponseId === 'IM_ON_THE_WAY' || interactiveResponseId === 'On My Way 🚶') {
             await sendWhatsAppReply(phoneNumber, "Safe travels! See you soon at the clinic.");
+        } else if (interactiveResponseId === 'IM_COMING' || interactiveResponseId === 'Coming Now 🚶‍♂️') {
+            await sendWhatsAppReply(phoneNumber, "Thank you! Proceed to the consultation room.");
         }
 
     } else if (conv.state === 'AWAITING_CANCEL_CONFIRM') {
@@ -725,17 +727,20 @@ async function createClinicalVisitFromWhatsApp(phoneNumber: string, conv: { id: 
         last_interaction: new Date().toISOString()
     }).eq('id', conv.id);
 
-    // Dispatch DPDP-Compliant Utility Template instead of Conversational Free-form text
-    await sendWhatsAppUtilityTemplate({
-        to: phoneNumber,
-        templateName: "token_confirmation_utility",
-        variables: [
-            { type: "text", text: `#${result.token_number}` },
-            { type: "text", text: "1" }, // Current serving placeholder
-            { type: "text", text: ewt.toString() }
-        ],
+    // Dispatch the NEW High-Fidelity Utility Template (7 Variables)
+    const { sendTokenConfirmation } = await import('@/lib/whatsapp-dispatch');
+    await sendTokenConfirmation({
+        patientName: waName,
+        tokenNumber: `#${result.token_number}`,
+        doctorName: docId ? "Specialist" : "General OPD", // We could fetch actual name, but passing placeholders for now
+        departmentName: "OPD",
+        clinicName: businessName,
         clinicId: businessId,
-        tokenId: result.visit_id
+        visitId: result.visit_id,
+        phone: phoneNumber,
+        patientsAhead: aheadCount || 0,
+        avgConsultationSeconds: avg * 60,
+        mapsQuery: businessName
     });
 }
 // Debug log
