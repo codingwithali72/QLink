@@ -10,7 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, SkipForward, Users, AlertOctagon, LogOut, PlayCircle, RefreshCw, Moon, Sun, Calendar, ChevronDown, ChevronUp, Search, Pencil, AlertTriangle, Activity, ActivitySquare, Smartphone, Zap, UserPlus, UserCheck, Clock, XCircle } from "lucide-react";
+import {
+    Loader2, SkipForward, Users, AlertOctagon, LogOut, PlayCircle,
+    Moon, Sun, ChevronDown, ChevronUp, Search, Pencil,
+    Activity, Smartphone, UserPlus, UserCheck, Clock, XCircle
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -391,54 +395,51 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
     const isSessionActive = session?.status === 'OPEN' || session?.status === 'PAUSED';
 
     return (
-        <div className="min-h-screen bg-cloud-dancer dark:bg-[#0B1120] transition-colors duration-300 p-3 pb-20 md:p-6 lg:p-8 font-sans relative overflow-x-hidden">
+        <div className="min-h-screen bg-slate-50 dark:bg-[#0B1120] transition-colors duration-300 p-4 md:p-8 font-sans relative">
             {showOfflineError && (
-                <div className="fixed top-0 left-0 w-full bg-red-500 text-white text-center text-xs py-1 font-bold z-50 animate-in slide-in-from-top-full">
+                <div className="fixed top-0 left-0 w-full bg-rose-500 text-white text-center text-[10px] py-1.5 font-bold z-[100] animate-in slide-in-from-top-full">
                     Reconnecting to live updates...
                 </div>
             )}
 
             {stallMinutes >= 5 && servingToken && session?.status === 'OPEN' && (
                 <div className={`fixed top-0 left-0 w-full text-white text-center text-xs py-2 font-bold z-50 animate-pulse flex items-center justify-center gap-2 ${stallMinutes >= 10 ? 'bg-red-600' : 'bg-amber-500'}`}>
-                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <AlertOctagon className="w-3.5 h-3.5" />
                     Queue stalled — {stallMinutes} min since last advance
                 </div>
             )}
 
-            {/* HEADER */}
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl p-6 md:p-8 rounded-[3rem] mb-12 border border-white/40 dark:border-slate-800/50 shadow-2xl shadow-indigo-500/10 relative overflow-hidden group">
-                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-600 via-sky-400 to-indigo-600 opacity-80" />
-                <div className="flex items-center gap-6 relative z-10">
-                    <div className="h-16 w-16 bg-indigo-600 rounded-[1.5rem] flex items-center justify-center text-white font-black text-3xl shadow-2xl shadow-indigo-600/40 border-2 border-white/20 group-hover:rotate-6 transition-transform duration-500">Q</div>
+            {/* CLINICAL HEADER */}
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-900 px-8 py-6 rounded-3xl mb-8 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center gap-5">
+                    <div className="h-14 w-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-indigo-600/20">Q</div>
                     <div>
-                        <h1 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white leading-none">Reception Desk</h1>
-                        <div className="flex items-center gap-4 text-[10px] md:text-[11px] font-black text-slate-400 uppercase tracking-widest mt-2">
-                            <span className="text-indigo-500 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> {params.clinicSlug}</span>
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800"></span>
-                            <span className="flex items-center gap-1.5 text-slate-500"><Calendar className="w-3.5 h-3.5" /> {todayDate}</span>
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800"></span>
-                            <span className="flex items-center gap-1.5"><RefreshCw className={cn("w-3.5 h-3.5 text-indigo-400", loading && "animate-spin")} /> v2.4.0</span>
+                        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Reception Desk</h1>
+                        <div className="flex items-center gap-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">
+                            <span className="text-indigo-600">{params.clinicSlug}</span>
+                            <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+                            <span>{todayDate}</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3 relative z-10">
-                    <div className={cn("px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.25em] border-2 flex items-center gap-3 shadow-sm transition-all",
-                        session?.status === 'OPEN' ? "bg-emerald-500/5 text-emerald-600 border-emerald-500/20" :
-                            session?.status === 'PAUSED' ? "bg-amber-500/5 text-amber-600 border-amber-500/20" :
-                                "bg-rose-500/5 text-rose-600 border-rose-500/20"
+                <div className="flex items-center gap-4">
+                    <div className={cn("px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-2",
+                        session?.status === 'OPEN' ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                            session?.status === 'PAUSED' ? "bg-amber-50 text-amber-700 border-amber-200" :
+                                "bg-rose-50 text-rose-700 border-rose-200"
                     )}>
-                        <div className={cn("w-2.5 h-2.5 rounded-full shadow-[0_0_10px_currentColor]",
+                        <div className={cn("w-2 h-2 rounded-full",
                             session?.status === 'OPEN' ? "bg-emerald-500 animate-pulse" : session?.status === 'PAUSED' ? "bg-amber-500" : "bg-rose-500"
                         )}></div>
                         {session?.status || "OFFLINE"}
                     </div>
-                    <div className="h-12 w-[1px] bg-slate-200 dark:bg-slate-800 mx-3 hidden lg:block" />
-                    <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-2xl border border-slate-200 dark:border-slate-700/30">
-                        <Button variant="ghost" size="icon" onClick={() => setDarkMode(!darkMode)} className="rounded-xl h-10 w-10 text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-all">
-                            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                    <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 mx-1 hidden lg:block" />
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="icon" onClick={() => setDarkMode(!darkMode)} className="rounded-xl h-10 w-10 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
+                            {darkMode ? <Sun className="w-5 h-5 text-amber-500" /> : <Moon className="w-5 h-5 text-slate-500" />}
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => logout()} className="h-10 w-10 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all">
+                        <Button variant="outline" size="icon" onClick={() => logout()} className="h-10 w-10 rounded-xl border-slate-200 dark:border-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/20 hover:text-rose-600">
                             <LogOut className="w-5 h-5" />
                         </Button>
                     </div>
@@ -449,67 +450,49 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
                 {/* LEFT: Controls (8 cols) */}
                 <div className="xl:col-span-8 space-y-6">
-                    {/* SERVING UNIT CARD */}
-                    <Card className="relative overflow-hidden border-2 border-indigo-500/30 shadow-2xl bg-[#020617] dark:bg-slate-950 text-white min-h-[440px] flex flex-col items-center justify-center p-12 rounded-[3.5rem] group transition-all duration-700">
-                        {/* Strategic Atmospheric Effects */}
-                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/30 via-transparent to-emerald-600/20 opacity-50 group-hover:opacity-100 transition-opacity duration-1000" />
-                        <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/20 blur-[120px] rounded-full pointer-events-none group-hover:scale-110 transition-transform duration-1000" />
-                        <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-emerald-500/20 blur-[100px] rounded-full pointer-events-none group-hover:scale-110 transition-transform duration-1000" />
-
-                        {/* Glow Pulse */}
-                        {servingToken && (
-                            <div className="absolute inset-0 bg-indigo-500/5 animate-pulse rounded-[3.5rem] pointer-events-none shadow-[inset_0_0_50px_rgba(99,102,241,0.1)]" />
-                        )}
-
-                        {/* Scanning Line Animation */}
-                        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0%,rgba(99,102,241,0.08)_50%,transparent_100%)] bg-[length:100%_6px] animate-scan opacity-30 pointer-events-none" />
-
-                        <div className="relative z-10 flex flex-col items-center w-full h-full">
-                            <div className="flex items-center justify-between w-full mb-10">
-                                <p className="text-indigo-400 uppercase tracking-[0.2em] text-[10px] font-bold flex items-center gap-3">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)] animate-pulse" />
-                                    Now Serving
-                                </p>
-                                <div className="bg-slate-900/50 border border-white/5 px-4 py-2 rounded-2xl flex items-center gap-2 backdrop-blur-md">
-                                    <ActivitySquare className="w-4 h-4 text-emerald-500" />
-                                    <span className="text-[9px] font-bold tracking-wide text-slate-300 uppercase">Queue Live</span>
-                                </div>
+                    {/* NOW SERVING CARD */}
+                    <Card className="relative overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-[400px] flex flex-col p-10 rounded-3xl shadow-sm">
+                        <div className="flex items-center justify-between w-full mb-8">
+                            <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Active Session</p>
                             </div>
+                            {servingToken && (
+                                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 uppercase text-[9px] font-bold tracking-wider px-3 py-1">In Consult</Badge>
+                            )}
+                        </div>
 
+                        <div className="flex-1 flex flex-col items-center justify-center">
                             {servingToken ? (
                                 <motion.div
                                     key={servingToken.id}
-                                    initial={{ opacity: 0, y: 30, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    transition={{ type: "spring", stiffness: 100 }}
-                                    className="text-center w-full"
+                                    initial={{ opacity: 0, scale: 0.98 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="text-center"
                                 >
-                                    <div className="inline-block relative">
-                                        <h2 className="text-[150px] md:text-[200px] font-black tracking-tighter leading-none text-white drop-shadow-[0_0_60px_rgba(255,255,255,0.15)] mb-6 selection:bg-indigo-600">
+                                    <div className="relative inline-block mb-4">
+                                        <h2 className="text-8xl md:text-9xl font-black text-slate-900 dark:text-white tracking-tighter">
                                             {formatToken(servingToken.tokenNumber, servingToken.isPriority)}
                                         </h2>
                                         {servingToken.isPriority && (
-                                            <Badge className="absolute -top-6 -right-16 px-6 py-3 bg-rose-600 text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-2xl shadow-2xl shadow-rose-600/50 border-2 border-white/20 animate-bounce">
-                                                EMERGENCY
-                                            </Badge>
+                                            <div className="absolute -top-4 -right-8 bg-rose-600 text-white text-[9px] font-black px-3 py-1 rounded-full shadow-lg">EMERGENCY</div>
                                         )}
                                     </div>
 
-                                    <div className="space-y-6">
-                                        <h3 className="text-4xl md:text-5xl font-black text-white tracking-tight uppercase selection:bg-indigo-500">
-                                            {servingToken.customerName || 'Patient'}
+                                    <div className="space-y-4">
+                                        <h3 className="text-3xl font-bold text-slate-800 dark:text-slate-200">
+                                            {servingToken.customerName || 'Standard Patient'}
                                         </h3>
-                                        <div className="flex flex-wrap items-center justify-center gap-5">
-                                            <div className="flex items-center gap-3 bg-white/5 border border-white/10 px-6 py-3 rounded-2xl backdrop-blur-xl">
-                                                <Smartphone className="w-5 h-5 text-indigo-400" />
-                                                <span className="text-indigo-200 font-black text-sm uppercase tracking-widest font-mono">{servingToken.customerPhone}</span>
+                                        <div className="flex items-center justify-center gap-4">
+                                            <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                                                <Smartphone className="w-4 h-4 text-slate-400" />
+                                                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 font-mono tracking-tight">{servingToken.customerPhone}</span>
                                             </div>
-
                                             {servingToken.doctorId && (
-                                                <div className="flex items-center gap-3 bg-indigo-600 px-6 py-3 rounded-2xl shadow-3xl shadow-indigo-600/40 border border-white/10 group-hover:scale-105 transition-transform">
-                                                    <UserCheck className="w-5 h-5 text-white" />
-                                                    <span className="text-white text-[12px] font-black uppercase tracking-[0.15em]">
-                                                        DR. {doctors?.find(d => d.id === servingToken.doctorId)?.name?.toUpperCase()}
+                                                <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                                                    <UserCheck className="w-4 h-4 text-indigo-600" />
+                                                    <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wide">
+                                                        Dr. {doctors?.find(d => d.id === servingToken.doctorId)?.name}
                                                     </span>
                                                 </div>
                                             )}
@@ -517,100 +500,91 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                     </div>
                                 </motion.div>
                             ) : (
-                                <div className="text-center py-20 flex flex-col items-center">
-                                    <div className="w-32 h-32 bg-slate-900/50 rounded-[2.5rem] flex items-center justify-center mb-8 border border-white/5 shadow-inner">
-                                        <Users className="w-12 h-12 text-slate-700 animate-pulse" />
+                                <div className="text-center py-12">
+                                    <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-6 mx-auto border border-slate-100 dark:border-slate-700">
+                                        <Users className="w-8 h-8 text-slate-300" />
                                     </div>
-                                    <p className="text-9xl font-black text-slate-800/40 tracking-tighter">STANDBY</p>
-                                    <p className="mt-4 text-base font-semibold text-indigo-300">
-                                        Ready — Waiting for first patient
-                                    </p>
+                                    <p className="text-3xl font-bold text-slate-300 uppercase tracking-widest italic">Standby Mode</p>
+                                    <p className="text-sm text-slate-400 font-medium mt-2">Ready to process next patient</p>
                                 </div>
                             )}
                         </div>
 
-                        {/* Status Footer */}
-                        <div className="absolute bottom-10 left-12 right-12 flex items-center justify-between z-10 border-t border-white/5 pt-8">
-                            <div className="flex items-center gap-8">
-                                <div className="flex items-center gap-3 text-[10px] text-slate-500 font-black uppercase tracking-widest">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]" />
-                                    <span className="text-emerald-500/80">Stream Integrity: 100%</span>
-                                </div>
-                                <div className="flex items-center gap-3 text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                                    <Clock className="w-4 h-4 opacity-50" />
-                                    <span>Sync: {lastUpdated.toLocaleTimeString()}</span>
-                                </div>
+                        <div className="mt-8 pt-8 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                            <div className="flex items-center gap-5">
+                                <span className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live Connection
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                    Sync: {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
                             </div>
-                            <div className="bg-white/5 px-4 py-2 rounded-xl border border-white/10">
-                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Facility ID: {params.clinicSlug.toUpperCase()}-MASTER</span>
-                            </div>
+                            <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{params.clinicSlug.toUpperCase()}-01</span>
                         </div>
                     </Card>
 
-                    {/* CONTROL CONSOLE */}
+                    {/* ACTION CONSOLE */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                         <Button
                             onClick={() => handleNext()}
                             disabled={!isSessionActive || (waitingTokens.length === 0 && !servingToken)}
-                            className="md:col-span-2 h-36 text-3xl font-black rounded-[3rem] bg-indigo-600 hover:bg-indigo-500 text-white shadow-3xl shadow-indigo-600/40 active:scale-[0.98] transition-all group overflow-hidden relative border-t-2 border-white/20 border-b-[12px] border-indigo-800"
+                            className="md:col-span-2 h-32 text-2xl font-bold rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1"
                         >
-                            <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <div className="flex items-center gap-6 relative z-10">
-                                {nextLoading ? <Loader2 className="animate-spin w-12 h-12" /> : <PlayCircle className="w-12 h-12" />}
-                                <span className="uppercase tracking-tighter">
-                                    {waitingTokens.length === 0 && servingToken ? "Done — Close Consult" : "Call Next Patient"}
+                            <div className="flex items-center gap-4">
+                                {nextLoading ? <Loader2 className="animate-spin w-8 h-8" /> : <PlayCircle className="w-8 h-8" />}
+                                <span className="tracking-tight italic uppercase">
+                                    {waitingTokens.length === 0 && servingToken ? "Close Visit" : "Call Next Patient"}
                                 </span>
                             </div>
                         </Button>
 
-                        <div className="grid grid-cols-2 md:col-span-2 gap-6">
+                        <div className="grid grid-cols-2 md:col-span-2 gap-4">
                             <Button
                                 variant="outline"
                                 onClick={handleSkip}
                                 disabled={!servingToken || !isSessionActive}
-                                className="h-36 flex flex-col items-center justify-center gap-4 rounded-[3rem] border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 backdrop-blur-2xl text-slate-900 dark:text-white hover:border-amber-500/50 hover:bg-amber-500/5 active:scale-[0.98] transition-all shadow-xl font-black uppercase tracking-[0.2em] text-[11px] group"
+                                className="h-32 flex flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-white hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-200 transition-all group"
                             >
-                                <div className="p-5 bg-amber-500/10 rounded-2xl text-amber-500 group-hover:scale-110 transition-transform shadow-inner">
-                                    {skipLoading ? <Loader2 className="animate-spin w-10 h-10" /> : <SkipForward className="w-10 h-10" />}
+                                <div className="p-3 bg-amber-100 dark:bg-amber-900/40 rounded-xl text-amber-600 group-hover:scale-110 transition-transform">
+                                    {skipLoading ? <Loader2 className="animate-spin w-6 h-6" /> : <SkipForward className="w-6 h-6" />}
                                 </div>
-                                Skip Patient
+                                <span className="text-[10px] font-bold uppercase tracking-widest">Skip Patient</span>
                             </Button>
                             <Button
-                                variant="destructive"
+                                variant="outline"
                                 onClick={handleEmergencyClick}
                                 disabled={!isSessionActive}
-                                className="h-36 flex flex-col items-center justify-center gap-4 rounded-[3rem] bg-rose-600 hover:bg-rose-500 active:scale-[0.98] transition-all shadow-3xl shadow-rose-600/40 font-black uppercase tracking-[0.2em] text-[11px] border-t-2 border-white/10 border-b-[12px] border-rose-800"
+                                className="h-32 flex flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-white hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:border-rose-200 transition-all group"
                             >
-                                <div className="p-5 bg-white/10 rounded-2xl shadow-inner">
-                                    <AlertOctagon className="w-10 h-10" />
+                                <div className="p-3 bg-rose-100 dark:bg-rose-900/40 rounded-xl text-rose-600 group-hover:scale-110 transition-transform">
+                                    <AlertOctagon className="w-6 h-6" />
                                 </div>
-                                Emergency
+                                <span className="text-[10px] font-bold uppercase tracking-widest">Emergency</span>
                             </Button>
                         </div>
                     </div>
 
-                    {/* AUXILIARY INSTRUMENTS */}
+                    {/* SECONDARY CONTROLS */}
                     <div className="grid grid-cols-3 gap-6">
                         {isSessionActive ? (
                             <>
-                                <Button variant="outline" onClick={handlePauseToggle} className="h-20 font-black rounded-2xl border-2 uppercase tracking-[0.2em] text-[10px] hover:bg-white dark:hover:bg-slate-800 group shadow-sm transition-all">
+                                <Button variant="ghost" onClick={handlePauseToggle} className="h-20 font-bold rounded-2xl border border-slate-200 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-800 transition-all">
                                     {session?.status === 'OPEN' ? (
-                                        <span className="flex flex-col items-center gap-1"><Moon className="w-5 h-5 text-amber-500 group-hover:scale-110" /> Pause Queue</span>
+                                        <div className="flex flex-col items-center gap-1.5"><Moon className="w-5 h-5 text-amber-500" /><span className="text-[10px] uppercase tracking-wider text-slate-500">Pause Queue</span></div>
                                     ) : (
-                                        <span className="flex flex-col items-center gap-1"><Sun className="w-5 h-5 text-indigo-500 group-hover:scale-110" /> Resume Queue</span>
+                                        <div className="flex flex-col items-center gap-1.5"><Sun className="w-5 h-5 text-indigo-600" /><span className="text-[10px] uppercase tracking-wider text-slate-500">Resume Queue</span></div>
                                     )}
                                 </Button>
-                                <Button variant="ghost" onClick={handleCloseQueue} className="h-20 font-black rounded-2xl text-rose-500 hover:bg-rose-500/10 uppercase tracking-[0.2em] text-[10px] border border-rose-500/30 group">
-                                    <span className="flex flex-col items-center gap-1"><XCircle className="w-5 h-5 group-hover:rotate-90 transition-transform" /> End Session</span>
+                                <Button variant="ghost" onClick={handleCloseQueue} className="h-20 font-bold rounded-2xl border border-rose-200 dark:border-rose-900/40 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all">
+                                    <div className="flex flex-col items-center gap-1.5"><XCircle className="w-5 h-5" /><span className="text-[10px] uppercase tracking-wider">End Session</span></div>
                                 </Button>
-                                <div className="bg-slate-100 dark:bg-slate-900/50 rounded-2xl p-4 flex flex-col items-center justify-center border border-slate-200 dark:border-slate-800 shadow-inner group">
-                                    <ActivitySquare className="w-5 h-5 text-indigo-500 mb-1 group-hover:animate-pulse" />
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Clinic Throughput</span>
-                                    <span className="text-xl font-black text-slate-900 dark:text-white leading-none uppercase tracking-tighter">Normal-Load</span>
+                                <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 flex flex-col items-center justify-center border border-slate-200 dark:border-slate-800 shadow-sm">
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Clinic Load</span>
+                                    <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-none px-3 py-0.5 text-[10px] font-bold uppercase">Optimal</Badge>
                                 </div>
                             </>
                         ) : (
-                            <Button onClick={handleStartSession} className="col-span-3 h-24 text-2xl font-black rounded-[3rem] bg-emerald-600 hover:bg-emerald-500 shadow-3xl shadow-emerald-600/40 uppercase tracking-[0.3em] text-white border-t-2 border-white/20 border-b-[12px] border-emerald-800">
+                            <Button onClick={handleStartSession} className="col-span-3 h-20 text-xl font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 text-white uppercase tracking-widest border-b-4 border-emerald-800 active:border-b-0 active:translate-y-1">
                                 Start Today&apos;s Queue
                             </Button>
                         )}
@@ -621,21 +595,16 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 <div className="xl:col-span-4 space-y-6">
                     <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                         <DialogTrigger asChild>
-                            <Button disabled={!isSessionActive || isLimitReached} className="w-full h-20 bg-slate-900 border-t-2 border-white/10 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-3xl text-xl font-black shadow-2xl flex items-center justify-center gap-4 group transition-all active:scale-95 border-b-[6px] border-slate-950">
-                                <div className="p-2 bg-indigo-500 rounded-xl group-hover:rotate-12 transition-transform">
-                                    <UserPlus className="w-6 h-6" />
-                                </div>
-                                EXECUTE INTAKE
+                            <Button disabled={!isSessionActive || isLimitReached} className="w-full h-16 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-2xl text-lg font-bold shadow-lg flex items-center justify-center gap-3 transition-all active:scale-95 border-b-4 border-slate-950">
+                                <UserPlus className="w-5 h-5" />
+                                Add Patient
                             </Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden border-0 rounded-[2.5rem] bg-white dark:bg-slate-950 shadow-3xl">
-                            <div className="bg-indigo-600 p-8 text-white relative">
-                                <div className="absolute top-0 right-0 p-8 opacity-10">
-                                    <Zap className="w-24 h-24" />
-                                </div>
+                        <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden border-none rounded-3xl bg-white dark:bg-slate-950 shadow-2xl">
+                            <div className="bg-indigo-600 p-8 text-white">
                                 <DialogHeader>
-                                    <DialogTitle className="text-3xl font-black uppercase tracking-tighter">New Patient Intake</DialogTitle>
-                                    <p className="text-indigo-200 text-xs font-bold uppercase tracking-[0.2em] mt-1">Manual Provisioning Protocol</p>
+                                    <DialogTitle className="text-2xl font-bold">New Patient Entry</DialogTitle>
+                                    <p className="text-indigo-200 text-xs font-medium uppercase tracking-wider mt-1.5">Manual intake for clinic walk-ins</p>
                                 </DialogHeader>
                             </div>
 
@@ -735,32 +704,28 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                         </DialogContent>
                     </Dialog>
 
-                    {/* QUEUE ORCHESTRATION LIST */}
-                    <Card className="flex flex-col h-[600px] bg-white dark:bg-slate-900/50 backdrop-blur-xl border-2 border-slate-200 dark:border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl relative">
-                        <div className="p-6 bg-slate-50/50 dark:bg-slate-900 border-b-2 border-slate-100 dark:border-white/5 flex justify-between items-center relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500" />
+                    {/* PATIENT QUEUE LIST */}
+                    <Card className="flex flex-col h-[600px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900">
                             <div className="flex items-center gap-3">
-                                <Users className="w-5 h-5 text-indigo-500" />
-                                <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tighter text-lg">Unit Orchestration</h3>
-                                <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-800 mx-2" />
+                                <Users className="w-5 h-5 text-indigo-600" />
+                                <h3 className="font-bold text-slate-900 dark:text-white uppercase tracking-tight">Queue List</h3>
+                                <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
                                 <select
                                     value={filterDoctorId}
                                     onChange={(e) => setFilterDoctorId(e.target.value)}
-                                    className="bg-transparent text-[10px] font-black uppercase tracking-widest text-indigo-600 outline-none cursor-pointer"
+                                    className="bg-transparent text-[10px] font-bold uppercase tracking-widest text-indigo-600 outline-none cursor-pointer"
                                 >
-                                    <option value="all">Global Queue</option>
+                                    <option value="all">Consolidated Queue</option>
                                     {doctors?.map(d => (
                                         <option key={d.id} value={d.id}>Dr. {d.name.split(' ')[0]}</option>
                                     ))}
                                 </select>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <Badge className="bg-slate-900 dark:bg-indigo-500 text-white font-black px-3 py-1 rounded-xl shadow-lg">{waitingTokens.length} {filterDoctorId === 'all' ? 'TOTAL' : 'TARGET'} WAITING</Badge>
-                            </div>
+                            <Badge className="bg-slate-900 dark:bg-slate-800 text-white dark:text-slate-300 font-bold px-3 py-0.5 rounded-full text-[10px]">{waitingTokens.length} WAITING</Badge>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
                             {visibleWaitingTokens.map(t => {
-                                const deptName = departments?.find(d => d.id === t.departmentId)?.name;
                                 const docName = doctors?.find(d => d.id === t.doctorId)?.name;
                                 return (
                                     <TokenItem
@@ -769,17 +734,16 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                         onCancel={handleCancelToken}
                                         onToggleArrived={handleToggleArrived}
                                         isCallLoading={nextLoading || skipLoading}
-                                        departmentName={deptName}
                                         doctorName={docName}
                                     />
                                 );
                             })}
                             {visibleWaitingTokens.length === 0 && (
-                                <div className="flex flex-col items-center justify-center py-32 text-slate-400 group">
-                                    <div className="w-20 h-20 bg-slate-50 dark:bg-slate-900 rounded-[2rem] flex items-center justify-center mb-6 border border-slate-100 dark:border-white/5 group-hover:scale-110 transition-transform duration-500">
-                                        <Users className="w-10 h-10 opacity-20" />
+                                <div className="flex flex-col items-center justify-center py-24 text-slate-300">
+                                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-4 border border-slate-100 dark:border-slate-800">
+                                        <Users className="w-8 h-8 opacity-20" />
                                     </div>
-                                    <p className="font-semibold text-sm text-slate-400 mt-3">No patients waiting</p>
+                                    <p className="font-medium text-xs">No active tokens</p>
                                 </div>
                             )}
                         </div>
@@ -792,7 +756,7 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 <SkipForward className="w-12 h-12" />
                             </div>
                             <div className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2 px-2">
-                                <Zap className="w-3 h-3" /> Skipped Execution Log
+                                <Activity className="w-3 h-3" /> Skipped Execution Log
                             </div>
                             <div className="space-y-2">
                                 {skippedTokens.map(t => (
@@ -827,25 +791,24 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                 </div>
             </div>
 
-            {/* HISTORICAL AUDIT & PATIENT LOG */}
-            <div className="mt-12 group">
-                <Card className="border-2 border-slate-200 dark:border-white/5 rounded-[3rem] overflow-hidden shadow-2xl bg-white dark:bg-slate-900/50 backdrop-blur-2xl transition-all duration-500">
+            {/* PATIENT LOG & HISTORY */}
+            <div className="mt-12">
+                <Card className="border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm bg-white dark:bg-slate-900 transition-all duration-300">
                     <div
-                        className="p-8 flex justify-between items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors relative"
+                        className="p-6 flex justify-between items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                         onClick={() => setIsLogOpen(!isLogOpen)}
                     >
-                        <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500/20" />
-                        <div className="flex items-center gap-6">
-                            <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                                <Users className="w-7 h-7" />
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center text-indigo-600">
+                                <Clock className="w-5 h-5" />
                             </div>
                             <div>
-                                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Daily Operations Audit</h3>
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">Cross-Reference & Historical Interaction Log</p>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Patient Activity Log</h3>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">Review historical records and consult details</p>
                             </div>
-                            <Badge className="ml-4 bg-indigo-500 text-white font-black px-3 py-1 rounded-xl shadow-lg border-2 border-white/10">{displayedTokens.length} ENTRIES</Badge>
+                            <Badge className="ml-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold px-3 py-0.5 rounded-full text-[10px]">{displayedTokens.length} ENTRIES</Badge>
                         </div>
-                        {isLogOpen ? <ChevronUp className="w-6 h-6 text-slate-400" /> : <ChevronDown className="w-6 h-6 text-slate-400" />}
+                        {isLogOpen ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
                     </div>
 
                     <AnimatePresence>
@@ -856,15 +819,15 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                 exit={{ height: 0, opacity: 0 }}
                                 className="border-t-2 border-slate-100 dark:border-white/5 overflow-hidden"
                             >
-                                <div className="p-8 bg-slate-50 dark:bg-[#0B1120] flex flex-wrap gap-6 items-center justify-between">
+                                <div className="p-6 bg-slate-50/50 dark:bg-slate-900 flex flex-wrap gap-4 items-center justify-between border-b border-slate-100 dark:border-slate-800">
                                     <div className="flex flex-wrap gap-4 items-center flex-1">
-                                        <div className="relative flex-1 min-w-[300px]">
-                                            <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
+                                        <div className="relative flex-1 min-w-[280px]">
+                                            <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
                                             <Input
-                                                placeholder="SEARCH BY PATIENT IDENTITY OR IDENTIFIER..."
+                                                placeholder="Search by name or phone..."
                                                 value={searchTerm}
                                                 onChange={e => setSearchTerm(e.target.value)}
-                                                className="h-12 pl-12 rounded-2xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-white/5 font-black text-xs uppercase focus:border-indigo-500/50"
+                                                className="h-9 pl-10 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold"
                                             />
                                         </div>
                                         <Input
@@ -872,11 +835,11 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                             value={selectedDate}
                                             max={todayStr}
                                             onChange={e => setSelectedDate(e.target.value)}
-                                            className="w-48 h-12 rounded-2xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-white/5 font-black text-xs"
+                                            className="w-40 h-9 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[10px] font-bold"
                                         />
-                                        <Button variant="outline" className="h-12 px-6 rounded-2xl font-black uppercase tracking-widest text-[10px] border-2 border-indigo-500/20 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-md active:scale-95 flex gap-2 items-center" onClick={async () => {
+                                        <Button variant="outline" className="h-9 px-4 rounded-xl font-bold uppercase tracking-wider text-[9px] border-indigo-200 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex gap-2 items-center" onClick={async () => {
                                             // CSV Export
-                                            showToast("Compiling Encrypted Transfer...", "success");
+                                            showToast("Preparing Export...", "success");
                                             const res = await exportPatientList(params.clinicSlug, selectedDate, selectedDate);
                                             if (res.error) {
                                                 showToast(res.error, 'error');
@@ -894,14 +857,14 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                                 link.click();
                                                 document.body.removeChild(link);
                                                 URL.revokeObjectURL(url);
-                                                showToast("Audit Log Exported", "success");
+                                                showToast("Export Complete", "success");
                                             }
                                         }}>
-                                            <LogOut className="w-4 h-4 rotate-90" /> Export System Audit (CSV)
+                                            <LogOut className="w-3.5 h-3.5 rotate-90" /> Export CSV
                                         </Button>
                                     </div>
-                                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] flex items-center gap-3 bg-slate-200 dark:bg-slate-900 px-4 py-2 rounded-xl">
-                                        <div className="w-2 h-2 rounded-full bg-emerald-500" /> Served: {totalServedCount}
+                                    <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                        <span>Total Served: {totalServedCount}</span>
                                     </div>
                                 </div>
 
@@ -913,80 +876,66 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
                                         </div>
                                     ) : (
                                         <table className="w-full text-left text-sm border-collapse">
-                                            <thead className="bg-slate-50 dark:bg-slate-900 border-b-2 border-slate-100 dark:border-white/5 text-slate-400 uppercase text-[9px] font-black tracking-[0.2em] sticky top-0 z-10">
+                                            <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800 text-slate-400 uppercase text-[8px] font-bold tracking-widest sticky top-0 z-10">
                                                 <tr>
-                                                    <th className="px-8 py-5">Identifier</th>
-                                                    <th className="px-8 py-5">Subject Identity</th>
-                                                    <th className="px-8 py-5">Access Device</th>
-                                                    <th className="px-8 py-5">Operational Routing</th>
-                                                    <th className="px-8 py-5">Post-Intake Feedback</th>
-                                                    <th className="px-8 py-5 text-right">Unit Status</th>
+                                                    <th className="px-6 py-4">Token</th>
+                                                    <th className="px-6 py-4">Patient Name</th>
+                                                    <th className="px-6 py-4">Contact</th>
+                                                    <th className="px-6 py-4">Assignment</th>
+                                                    <th className="px-6 py-4">Feedback</th>
+                                                    <th className="px-6 py-4 text-right">Status</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y-2 divide-slate-50 dark:divide-white/5">
+                                            <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
                                                 {displayedTokens
                                                     .filter(t =>
                                                         (t.customerName?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
                                                         (t.customerPhone || "").includes(searchTerm)
                                                     )
                                                     .map(t => (
-                                                        <tr key={t.id} className="hover:bg-indigo-500/5 transition-colors group/row">
-                                                            <td className="px-8 py-6">
+                                                        <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group/row">
+                                                            <td className="px-6 py-4">
                                                                 <div className="flex flex-col">
-                                                                    <span className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-sm tracking-tighter">
+                                                                    <span className="font-bold text-indigo-600 dark:text-indigo-400 text-xs">
                                                                         {formatToken(t.tokenNumber, t.isPriority)}
                                                                     </span>
-                                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-0.5">INT-ID: {t.id.slice(0, 8)}</span>
+                                                                    <span className="text-[7px] font-bold text-slate-300 uppercase mt-0.5">#{t.id.slice(0, 6)}</span>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-8 py-6">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-xs font-black text-slate-500">
-                                                                        {t.customerName?.charAt(0).toUpperCase() || '?'}
-                                                                    </div>
-                                                                    <span className="font-black text-[13px] text-slate-900 dark:text-white uppercase tracking-tighter group-hover/row:translate-x-1 transition-transform">{t.customerName || '—'}</span>
-                                                                </div>
+                                                            <td className="px-6 py-4">
+                                                                <span className="font-bold text-xs text-slate-700 dark:text-slate-200 uppercase tracking-tight">{t.customerName || '—'}</span>
                                                             </td>
-                                                            <td className="px-8 py-6">
-                                                                <div className="flex items-center gap-2 text-slate-500 font-mono text-xs">
-                                                                    <Smartphone className="w-3.5 h-3.5 opacity-50" />
+                                                            <td className="px-6 py-4 pb-1">
+                                                                <div className="flex items-center gap-1.5 text-slate-500 font-mono text-[10px]">
                                                                     {t.customerPhone || '—'}
                                                                 </div>
                                                             </td>
-                                                            <td className="px-8 py-6">
-                                                                <div className="flex flex-col gap-1.5">
-                                                                    {t.departmentId ? <Badge variant="outline" className="w-fit text-[8px] font-black uppercase tracking-widest border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-950/50">{departments?.find(d => d.id === t.departmentId)?.name || 'General'}</Badge> : null}
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex flex-col gap-1">
+                                                                    {t.departmentId ? <span className="text-[9px] font-bold text-slate-500">{departments?.find(d => d.id === t.departmentId)?.name || 'General'}</span> : null}
                                                                     {t.doctorId ? (
-                                                                        <div className="flex items-center gap-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest">
-                                                                            <RefreshCw className="w-3 h-3" /> Dr. {doctors?.find(d => d.id === t.doctorId)?.name}
-                                                                        </div>
+                                                                        <span className="text-[9px] font-bold text-indigo-500">
+                                                                            Dr. {doctors?.find(d => d.id === t.doctorId)?.name}
+                                                                        </span>
                                                                     ) : null}
                                                                 </div>
                                                             </td>
-                                                            <td className="px-8 py-6 max-w-xs">
-                                                                <div className="text-xs italic text-slate-500 dark:text-slate-400 group-hover/row:text-slate-900 dark:group-hover/row:text-slate-200 transition-colors">
+                                                            <td className="px-6 py-4 max-w-xs">
+                                                                <div className="text-[10px] italic text-slate-400">
                                                                     {t.feedback ? <>&ldquo;{t.feedback}&rdquo;</> : "—"}
                                                                 </div>
                                                             </td>
-                                                            <td className="px-8 py-6">
-                                                                <div className="flex items-center justify-end gap-3 px-4">
-                                                                    <Badge className={cn("text-[9px] font-black uppercase tracking-[0.2em] px-4 py-1 rounded-lg border-2",
-                                                                        t.status === 'SERVED' ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
-                                                                            t.status === 'CANCELLED' ? "bg-rose-500/10 text-rose-600 border-rose-500/20 line-through" :
-                                                                                "bg-slate-100 text-slate-600 border-slate-200"
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center justify-end gap-2">
+                                                                    <Badge className={cn("text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shadow-none",
+                                                                        t.status === 'SERVED' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                                                                            t.status === 'CANCELLED' ? "bg-rose-50 text-rose-700 border-rose-100 line-through" :
+                                                                                "bg-slate-50 text-slate-600 border-slate-100"
                                                                     )}>
                                                                         {t.status}
                                                                     </Badge>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-10 w-10 text-slate-300 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-xl"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setTimelineTokenId(t.id);
-                                                                        }}
-                                                                    >
-                                                                        <Activity className="w-4 h-4" />
+                                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-indigo-600 hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); setTimelineTokenId(t.id); }}>
+                                                                        <Activity className="w-3.5 h-3.5" />
                                                                     </Button>
                                                                 </div>
                                                             </td>
@@ -1016,26 +965,34 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             </div>
 
             {editingToken && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <Card className="w-full max-w-sm p-6 rounded-3xl shadow-2xl">
-                        <div className="flex items-center gap-3 mb-6">
-                            <Pencil className="text-blue-600" />
-                            <h3 className="text-xl font-bold">Edit Patient</h3>
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-[100] flex items-center justify-center p-4">
+                    <Card className="w-full max-w-sm p-8 rounded-3xl shadow-2xl border-none">
+                        <div className="flex flex-col items-center mb-8">
+                            <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 mb-4">
+                                <Pencil className="w-6 h-6" />
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900">Edit Patient Info</h3>
                         </div>
                         <div className="space-y-4">
-                            <Input
-                                value={editingToken.name}
-                                onChange={e => setEditingToken(prev => prev ? { ...prev, name: e.target.value } : null)}
-                                placeholder="Name"
-                            />
-                            <Input
-                                value={editingToken.phone}
-                                onChange={e => setEditingToken(prev => prev ? { ...prev, phone: e.target.value } : null)}
-                                placeholder="Phone"
-                            />
-                            <div className="flex gap-2 pt-4">
-                                <Button variant="ghost" className="flex-1" onClick={() => setEditingToken(null)}>Cancel</Button>
-                                <Button className="flex-1 bg-blue-600" onClick={handleSaveEdit}>Save</Button>
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 ml-1">Patient Name</Label>
+                                <Input
+                                    value={editingToken.name}
+                                    onChange={e => setEditingToken(prev => prev ? { ...prev, name: e.target.value } : null)}
+                                    className="h-11 rounded-xl border-slate-200 text-sm font-bold"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 ml-1">Contact Number</Label>
+                                <Input
+                                    value={editingToken.phone}
+                                    onChange={e => setEditingToken(prev => prev ? { ...prev, phone: e.target.value } : null)}
+                                    className="h-11 rounded-xl border-slate-200 text-sm font-bold"
+                                />
+                            </div>
+                            <div className="flex gap-3 pt-6">
+                                <Button variant="ghost" className="flex-1 h-11 font-bold text-slate-500" onClick={() => setEditingToken(null)}>Cancel</Button>
+                                <Button className="flex-1 h-11 bg-indigo-600 hover:bg-indigo-700 font-bold" onClick={handleSaveEdit}>Save Changes</Button>
                             </div>
                         </div>
                     </Card>
@@ -1043,9 +1000,9 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
             )}
 
             <Dialog open={!!timelineTokenId} onOpenChange={(open) => !open && setTimelineTokenId(null)}>
-                <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto rounded-3xl p-6">
+                <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto rounded-3xl p-8 border-none shadow-2xl">
                     <DialogHeader>
-                        <DialogTitle className="text-xl font-black mb-2">Patient Timeline</DialogTitle>
+                        <DialogTitle className="text-xl font-bold mb-4">Visit Timeline</DialogTitle>
                     </DialogHeader>
                     {timelineTokenId && <VisitTimeline visitId={timelineTokenId} />}
                 </DialogContent>
@@ -1053,10 +1010,11 @@ export default function ReceptionPage({ params }: { params: { clinicSlug: string
 
             {toast && (
                 <div className={cn(
-                    "fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl shadow-2xl z-[100] animate-in slide-in-from-bottom-5",
-                    toast.type === 'success' ? "bg-slate-900 text-white" : "bg-red-600 text-white"
+                    "fixed bottom-8 left-1/2 -translate-x-1/2 px-5 py-2.5 rounded-full shadow-lg z-[200] animate-in slide-in-from-bottom-4 flex items-center gap-3",
+                    toast.type === 'success' ? "bg-slate-900 text-white" : "bg-rose-600 text-white"
                 )}>
-                    <span className="font-bold text-sm tracking-wide">{toast.message}</span>
+                    <div className={cn("w-1.5 h-1.5 rounded-full", toast.type === 'success' ? "bg-emerald-400" : "bg-white")}></div>
+                    <span className="font-bold text-xs tracking-tight">{toast.message}</span>
                 </div>
             )}
         </div >
