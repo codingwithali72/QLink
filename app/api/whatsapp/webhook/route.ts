@@ -730,7 +730,8 @@ async function createClinicalVisitFromWhatsApp(phoneNumber: string, conv: { id: 
         p_requested_doctor_id: docId,
         p_visit_type: 'OPD',
         p_is_priority: false,
-        p_source: 'WHATSAPP'
+        p_source: 'WHATSAPP',
+        p_appointment_time: null   // disambiguates from older overload (PGRST203 fix)
     });
 
     if (rpcError || !result || !result.success) {
