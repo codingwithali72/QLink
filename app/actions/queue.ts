@@ -233,7 +233,8 @@ export async function createToken(
             p_visit_type: visitType,
             p_is_priority: isPriority,
             p_staff_id: actualStaffId,
-            p_source: actualStaffId ? 'RECEPTIONIST' : 'QR'
+            p_source: actualStaffId ? 'RECEPTIONIST' : 'QR',
+            p_appointment_time: null   // disambiguates from older overload (PGRST203 fix)
         });
 
         if (error) throw error;
