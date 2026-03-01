@@ -48,3 +48,8 @@ functions.txt
 ts.txt
 chaos_results.json
 *.tsbuildinfo
+
+# scratch / local debug files
+/tmp/
+db_err.txt
+rpc_err.txt
